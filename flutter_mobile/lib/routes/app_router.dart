@@ -68,10 +68,6 @@ String? _authRedirect(Ref ref, GoRouterState state) {
   }
 
   if (auth.status == AuthStatus.authenticated) {
-    if (!ref.read(storageHelperProvider).isPermissionsSetupDone()) {
-      if (loc != RouteNames.permissionsSetup) return RouteNames.permissionsSetup;
-      return null;
-    }
     if (loc == RouteNames.login ||
         loc == RouteNames.signup ||
         loc == RouteNames.splash ||

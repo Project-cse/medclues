@@ -7,7 +7,10 @@ import 'package:intl/intl.dart';
 import '../../constants/app_colors.dart';
 import '../../constants/profile_options.dart';
 import '../../l10n/l10n_extension.dart';
+import 'package:permission_handler/permission_handler.dart';
+
 import '../../providers/patient_provider.dart';
+import '../../services/app_permissions_service.dart';
 import '../../providers/service_providers.dart';
 import '../../themes/theme_form_styles.dart';
 import '../../widgets/common/app_button.dart';
@@ -92,6 +95,12 @@ class _PersonalInfoScreenState extends ConsumerState<PersonalInfoScreen> {
 
   Future<void> _pickAndUploadPhoto() async {
     try {
+      final ok = await AppPermissionsService.ensurePhotos();
+      if (!ok && mounted) {
+        AppSnackbar.show(context, context.l10n.permissionsFiles);
+        await AppPermissionsService.openSettingsIfPermanentlyDenied(Permission.photos);
+        return;
+      }
       final picker = ImagePicker();
       final picked = await picker.pickImage(
         source: ImageSource.gallery,

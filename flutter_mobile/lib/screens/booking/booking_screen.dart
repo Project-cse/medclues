@@ -18,6 +18,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/booking_state_provider.dart';
 import '../../providers/doctor_provider.dart';
 import '../../providers/service_providers.dart';
+import '../../services/app_permissions_service.dart';
 import '../../services/payment_service.dart';
 import '../../services/razorpay_checkout_service.dart';
 import '../../routes/route_names.dart';
@@ -117,6 +118,11 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
   }
 
   Future<void> _pickReport() async {
+    final ok = await AppPermissionsService.ensurePhotos();
+    if (!ok && mounted) {
+      AppSnackbar.show(context, context.l10n.permissionsFiles);
+      return;
+    }
     final picked = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx'],

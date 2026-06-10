@@ -79,10 +79,12 @@ Set secrets on the **hosting platform** (Render/Railway/VPS), not in Git.
 Configure these in your deploy dashboard:
 
 ```
-JWT_SECRET=
+# CRITICAL: min 32 characters or Render deploy will exit (see validate_settings)
+JWT_SECRET=your-random-secret-at-least-32-characters-long
 DATABASE_URL=          # or PG_HOST, PG_USER, PG_PASSWORD, PG_DATABASE, PG_PORT
 PORT=5000
 DEBUG=false
+CORS_ALLOWED_ORIGINS=https://medclues.onrender.com
 
 # Email / OTP
 BREVO_API_KEY=         # or your SMTP vars
@@ -105,10 +107,20 @@ GEMINI_API_KEY=
 MISTRAL_API_KEY=
 OPENAI_API_KEY=
 
-# Telegram bot (if enabled)
+# Telegram bot (@medcluesBot)
 TELEGRAM_BOT_TOKEN=
+TELEGRAM_BOT_USERNAME=medcluesBot
 TELEGRAM_BOT_ENABLED=true
 ```
+
+### Render deploy failure: `JWT_SECRET must be at least 32 characters`
+
+1. Render Dashboard → **medclues** service → **Environment**
+2. Set `JWT_SECRET` to a random string **≥ 32 characters** (not `greatstack`)
+3. Set `DEBUG=false`, `DATABASE_URL`, `TELEGRAM_BOT_*` as above
+4. **Manual Deploy** → wait for **Live** status
+5. Test: `GET https://medclues.onrender.com/api/health` (or docs)
+6. Test Telegram: `GET /api/user/telegram/status` with auth token (should not 404)
 
 ---
 

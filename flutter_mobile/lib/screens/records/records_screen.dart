@@ -2,6 +2,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../l10n/l10n_extension.dart';
@@ -10,6 +11,7 @@ import '../../utils/theme_context.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/health_record_provider.dart';
 import '../../providers/service_providers.dart';
+import '../../services/app_permissions_service.dart';
 import '../../services/health_record_service.dart';
 import '../../utils/validators.dart';
 import '../../widgets/common/app_loader.dart';
@@ -126,6 +128,13 @@ class _RecordsScreenState extends ConsumerState<RecordsScreen> {
     final titleError = Validators.reportTitle(_title.text, l10n);
     if (titleError != null) {
       AppSnackbar.show(context, titleError);
+      return;
+    }
+
+    final photosOk = await AppPermissionsService.ensurePhotos();
+    if (!photosOk && mounted) {
+      AppSnackbar.show(context, l10n.permissionsFiles);
+      await AppPermissionsService.openSettingsIfPermanentlyDenied(Permission.photos);
       return;
     }
 

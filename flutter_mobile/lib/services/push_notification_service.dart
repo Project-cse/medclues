@@ -7,6 +7,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:go_router/go_router.dart';
 
 import '../config/api_config.dart';
+import 'app_permissions_service.dart';
 import '../routes/route_names.dart';
 import 'api_service.dart';
 
@@ -143,6 +144,7 @@ class PushNotificationService {
   Future<String?> syncTokenWithBackend() async {
     if (!isSupported) return null;
     try {
+      await AppPermissionsService.ensureNotifications();
       final token = await FirebaseMessaging.instance.getToken();
       _cachedToken = token;
       if (token != null) await _uploadToken(token);

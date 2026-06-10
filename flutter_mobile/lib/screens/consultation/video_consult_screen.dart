@@ -12,6 +12,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../constants/app_colors.dart';
 import '../../l10n/l10n_extension.dart';
 import '../../providers/service_providers.dart';
+import '../../services/app_permissions_service.dart';
 import '../../services/consultation_service.dart';
 import '../../widgets/animations/connecting_doctor_overlay.dart';
 
@@ -126,7 +127,7 @@ class _VideoConsultScreenState extends ConsumerState<VideoConsultScreen> {
 
   Future<void> _requestPermissions() async {
     if (kIsWeb) return;
-    await [Permission.microphone, Permission.camera].request();
+    await AppPermissionsService.ensureVideoConsult();
   }
 
   Future<void> _start() async {

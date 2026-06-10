@@ -547,6 +547,10 @@ async def book_appointment(user_id: int, req_body: dict, prescription_file: Opti
         slots_booked = doc_data.get('slots_booked', {})
         if isinstance(slots_booked, str):
             slots_booked = json.loads(slots_booked)
+        is_opd_block = slot_type_req in ("morning_opd", "evening_opd") or (
+            doctor_slot_service.infer_slot_type_from_label(slot_time) is not None
+        )
+
         if booked_slot_id:
             # doctor_slots is source of truth — allow multiple bookings per OPD block label
             if slot_date not in slots_booked:
@@ -554,6 +558,13 @@ async def book_appointment(user_id: int, req_body: dict, prescription_file: Opti
             marker = f"slot:{booked_slot_id}"
             if marker not in slots_booked[slot_date]:
                 slots_booked[slot_date].append(marker)
+        elif is_opd_block:
+            # OPD blocks hold 20 seats in doctor_slots — never reject on legacy block label
+            if not wants_slot:
+                return {
+                    "success": False,
+                    "message": "Please select a valid OPD time slot.",
+                }
         elif slot_date in slots_booked:
             if slot_time in slots_booked[slot_date]:
                 return {"success": False, "message": "Slot not available"}

@@ -76,9 +76,13 @@ class TelegramLinkService {
     } on DioException catch (e) {
       if (e.response?.statusCode == 404) {
         throw TelegramLinkException(
-          'Telegram linking API is not available on this server yet.',
+          'Server update required. Redeploy backend with Telegram routes, then try again.',
           isNotFound: true,
         );
+      }
+      final msg = e.response?.data;
+      if (msg is Map && msg['message'] != null) {
+        throw TelegramLinkException('${msg['message']}');
       }
       rethrow;
     }
