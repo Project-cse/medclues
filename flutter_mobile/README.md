@@ -1,11 +1,17 @@
 # MEDCLUES — Flutter Mobile App
 
 **Package:** `medichain_mobile` · **Version:** `1.0.0+1`  
-**Brand:** MEDCLUES · **Tagline:** EMERGENCY | BOOKING
+**Brand:** MEDCLUES · **Tagline:** EMERGENCY | BOOKING | SINCE 2026  
+**Display name (Android):** MediChain+ (launcher label in `AndroidManifest.xml`)
 
-Flutter patient application for the MEDCLUES healthcare platform. Ported from the React Native Expo app (`mobile/`) with full API parity against `fastapi_back/`. Includes a **standalone Emergency Module** that operates without login.
+Flutter patient app for the MEDCLUES healthcare platform. Full API parity with `fastapi_back/`. Includes a **standalone Emergency module** (works without login).
 
-**Platform overview:** [../README.md](../README.md)
+| Resource | URL |
+|----------|-----|
+| Production API | `https://medclues.onrender.com` |
+| API docs (when running locally) | `http://localhost:5000/docs` |
+| Monorepo overview | [../README.md](../README.md) |
+| Backend deploy guide | [../BACKEND_GITHUB_DEPLOY.md](../BACKEND_GITHUB_DEPLOY.md) |
 
 ---
 
@@ -14,25 +20,28 @@ Flutter patient application for the MEDCLUES healthcare platform. Ported from th
 1. [Prerequisites](#prerequisites)
 2. [Quick Start](#quick-start)
 3. [Environment & API Configuration](#environment--api-configuration)
-4. [Run & Build](#run--build)
-5. [Project Structure](#project-structure)
-6. [Navigation & Routes](#navigation--routes)
-7. [Authentication](#authentication)
-8. [All Screens](#all-screens)
-9. [Booking Flow](#booking-flow)
-10. [Video Consultation](#video-consultation)
-11. [Payments](#payments)
+4. [Run on Device (Android / Web / iOS)](#run-on-device-android--web--ios)
+5. [Build Release APK](#build-release-apk)
+6. [Project Structure](#project-structure)
+7. [Navigation & Routes](#navigation--routes)
+8. [Authentication](#authentication)
+9. [Onboarding](#onboarding)
+10. [Booking & Payments](#booking--payments)
+11. [Video Consultation](#video-consultation)
 12. [Health Records](#health-records)
 13. [Hospitals, Labs & Blood Banks](#hospitals-labs--blood-banks)
 14. [Emergency Module](#emergency-module)
-15. [State Management](#state-management)
-16. [Services & API Layer](#services--api-layer)
-17. [Widgets & UI System](#widgets--ui-system)
-18. [Branding, Themes & Animations](#branding-themes--animations)
-19. [Assets](#assets)
-20. [Platform Support](#platform-support)
-21. [Scripts & Tooling](#scripts--tooling)
-22. [Troubleshooting](#troubleshooting)
+15. [Themes & Auth UI](#themes--auth-ui)
+16. [State Management](#state-management)
+17. [Services & API Layer](#services--api-layer)
+18. [Assets & Branding](#assets--branding)
+19. [Platform Support](#platform-support)
+20. [Form Validation](#form-validation)
+21. [Multi-Language (i18n)](#multi-language-i18n)
+22. [Google Play Store](#google-play-store)
+23. [Scripts & Tooling](#scripts--tooling)
+24. [Troubleshooting](#troubleshooting)
+25. [Related Documentation](#related-documentation)
 
 ---
 
@@ -42,11 +51,18 @@ Flutter patient application for the MEDCLUES healthcare platform. Ported from th
 |-------------|---------|
 | Flutter SDK | **3.3+** (Dart `>=3.3.0 <4.0.0`) |
 | IDE | VS Code or Android Studio with Flutter extension |
-| Backend | FastAPI on port **5000** (`fastapi_back/`) |
-| Device | Android emulator, physical device, iOS simulator, or Chrome |
+| Backend | FastAPI — local `http://localhost:5000` or production `https://medclues.onrender.com` |
+| Android | USB debugging for physical phone, or emulator |
+| iOS | **Requires macOS + Xcode** (cannot build iOS from Windows) |
+| Web | Chrome recommended |
 
 ```bash
 flutter doctor
+```
+
+Enable **Windows Developer Mode** if `flutter pub get` warns about symlinks:
+```powershell
+start ms-settings:developers
 ```
 
 ---
@@ -58,18 +74,21 @@ flutter doctor
 cd flutter_mobile
 flutter pub get
 
-# 2. Sync API URL from Expo mobile config
-.\sync_env.ps1
+# 2. Generate launcher icons (from medclues_logo.png)
+dart run flutter_launcher_icons
 
-# 3. Start backend (separate terminal)
-cd ../fastapi_back
-python -m uvicorn main:app --host 0.0.0.0 --port 5000 --reload
+# 3. Configure API (see Environment section)
+#    Edit assets/config.env — set API_BASE_URL
 
-# 4. Run app
-cd ../flutter_mobile
-flutter run                  # default device
-flutter run -d chrome        # web browser
-flutter run -d <device_id>   # specific device
+# 4. Run (pick one target)
+flutter run -d chrome
+flutter run -d <android_device_id>
+```
+
+**Production backend (no local server needed):** set in `assets/config.env`:
+```
+API_BASE_URL=https://medclues.onrender.com
+API_BASE_URL_WEB=https://medclues.onrender.com
 ```
 
 ---
@@ -80,79 +99,164 @@ flutter run -d <device_id>   # specific device
 
 | File | Role |
 |------|------|
-| `sync_env.ps1` | Copies `EXPO_PUBLIC_API_URL` from `../mobile/.env` → `flutter_mobile/.env` as `API_BASE_URL` |
-| `.env` | Local dev overrides (not bundled) |
-| `.env.example` | Template |
-| `assets/config.env` | Bundled fallback — **required for web** (dotfiles 404 in browser) |
+| `assets/config.env` | **Bundled** — used on web, APK, and as fallback on mobile |
+| `.env` | Local overrides (optional, not committed) |
+| `sync_env.ps1` | Copies `EXPO_PUBLIC_API_URL` from legacy `../mobile/.env` |
+| `--dart-define` | Highest priority override at build/run time |
 
-### Load order (`main.dart`)
+### Load order (`lib/config/api_config.dart`)
 
-1. `assets/config.env`
-2. `.env`
-3. `--dart-define` overrides
+1. `--dart-define=API_BASE_URL=...`
+2. `assets/config.env` / `.env` (`flutter_dotenv`)
+3. Platform defaults (emulator: `10.0.2.2:5000`, web: `localhost:5000`)
 
 ### Environment keys
 
 | Key | Purpose |
 |-----|---------|
-| `API_BASE_URL` | FastAPI URL for Android/iOS (from Expo sync) |
-| `API_BASE_URL_WEB` | API URL for Chrome/web (default `http://localhost:5000`) |
-| `EXPO_PUBLIC_API_URL` | Fallback alias read by `ApiConfig` |
-| `AGORA_APP_ID` | Agora video consult app ID |
-| `GOOGLE_WEB_CLIENT_ID` | Google OAuth server client ID |
-| `FIREBASE_API_KEY_WEB` | Firebase web API key |
-| `FIREBASE_APP_ID_WEB` | Firebase web app ID |
-| `FIREBASE_API_KEY_IOS` | Firebase iOS API key |
-| `FIREBASE_APP_ID_IOS` | Firebase iOS app ID (required for iOS Google Sign-In) |
-| `FIREBASE_MESSAGING_SENDER_ID` | Firebase sender ID |
-| `FIREBASE_PROJECT_ID` | Firebase project ID |
-| `FIREBASE_STORAGE_BUCKET` | Firebase storage bucket |
-| `FIREBASE_AUTH_DOMAIN` | Firebase auth domain (web) |
-| `FIREBASE_MEASUREMENT_ID` | Firebase analytics (web) |
-| `TELEGRAM_BOT_TOKEN` | Telegram integration check (prefer backend-only) |
+| `API_BASE_URL` | FastAPI URL for Android/iOS |
+| `API_BASE_URL_WEB` | API URL for Chrome/web |
+| `GOOGLE_WEB_CLIENT_ID` | Google OAuth (Firebase Web client ID) |
+| `AGORA_APP_ID` | Agora video consult (optional; backend may also provide) |
+| `TELEGRAM_BOT_TOKEN` | Optional integration check |
 
 ### Platform API defaults
 
-| Target | `API_BASE_URL` |
-|--------|----------------|
+| Target | Recommended `API_BASE_URL` |
+|--------|--------------------------|
+| **Production APK / phone** | `https://medclues.onrender.com` |
 | Android emulator | `http://10.0.2.2:5000` |
-| iOS simulator | `http://localhost:5000` |
-| Physical phone (same Wi‑Fi) | `http://<YOUR_PC_LAN_IP>:5000` |
-| Chrome (web) | `http://localhost:5000` (via `API_BASE_URL_WEB`) |
+| iOS simulator (Mac) | `http://localhost:5000` |
+| Physical phone + local backend | `http://<YOUR_PC_LAN_IP>:5000` |
+| Chrome (local backend) | `http://localhost:5000` via `API_BASE_URL_WEB` |
 
-**Never use `localhost` on a physical phone** — use your PC's LAN IP.
+> **Never use `localhost` on a physical phone** — the phone cannot reach your PC's localhost. Use LAN IP or the Render production URL.
+
+### Override at build time
+
+```bash
+flutter run --dart-define=API_BASE_URL=https://medclues.onrender.com
+flutter build apk --release --dart-define=API_BASE_URL=https://medclues.onrender.com
+```
 
 ---
 
-## Run & Build
+## Run on Device (Android / Web / iOS)
 
-### Development
+### Web (Chrome) — works on Windows
 
 ```bash
-flutter run
+cd flutter_mobile
 flutter run -d chrome
-.\run_chrome.ps1          # sync env + chrome
-.\run_android_phone.ps1   # auto LAN IP + USB phone
+# or
+.\run_chrome.ps1
 ```
 
-### Release builds
+After changing `web/index.html`, do a **full restart** (not hot reload).
+
+### Android phone via USB (Windows)
+
+1. On phone: **Settings → About → tap Build number 7×** → enable **USB debugging**
+2. Connect USB → allow debugging prompt
+3. Verify device:
+   ```powershell
+   flutter devices
+   adb devices
+   ```
+4. Run:
+   ```powershell
+   .\run_android_phone.ps1
+   ```
+   Or manually:
+   ```powershell
+   flutter run --release --dart-define=API_BASE_URL=https://medclues.onrender.com
+   ```
+
+### Android emulator
 
 ```bash
-# Android APK
-flutter build apk --release
-# Output: build/app/outputs/flutter-apk/app-release.apk
-
-# Android App Bundle (Play Store)
-flutter build appbundle --release
-
-# Web
-flutter build web
+flutter emulators
+flutter emulators --launch <emulator_id>
+flutter run -d emulator-5554
 ```
 
-### Analyze
+### iPhone via USB — **Mac only**
+
+iOS builds **cannot** be produced on Windows. You need:
+
+1. Mac with **Xcode** installed
+2. iPhone: **Trust computer** + **Developer Mode** (iOS 16+)
+3. Apple ID in Xcode → **Signing & Capabilities**
+4. Commands:
+   ```bash
+   cd flutter_mobile
+   flutter pub get
+   cd ios && pod install && cd ..
+   open ios/Runner.xcworkspace   # set Team + Bundle ID
+   flutter devices
+   flutter run --release
+   ```
+5. On iPhone first install: **Settings → General → VPN & Device Management → Trust**
+
+For App Store / TestFlight: `flutter build ios --release` then Archive in Xcode.
+
+---
+
+## Build Release APK
+
+### Standard release APK (production API)
+
+```powershell
+cd flutter_mobile
+flutter clean
+flutter pub get
+dart run flutter_launcher_icons
+flutter build apk --release --dart-define=API_BASE_URL=https://medclues.onrender.com
+```
+
+**Output:**
+```
+build/app/outputs/flutter-apk/app-release.apk
+```
+
+### Smaller per-CPU APKs
 
 ```bash
-flutter analyze
+flutter build apk --release --split-per-abi --dart-define=API_BASE_URL=https://medclues.onrender.com
+```
+
+Use `app-arm64-v8a-release.apk` on most modern phones.
+
+### Install APK on connected phone
+
+```bash
+adb install -r build/app/outputs/flutter-apk/app-release.apk
+```
+
+### Android release notes
+
+| Item | Detail |
+|------|--------|
+| App ID | `com.medichain.medichain_mobile` |
+| Launcher icon | Generated from `assets/images/medclues_logo.png` |
+| ProGuard | `android/app/proguard-rules.pro` (Agora R8 rules included) |
+| Signing | Debug keystore by default — create release keystore before Play Store |
+| Cleartext HTTP | Enabled for local dev (`usesCleartextTraffic`) |
+
+### Play Store bundle
+
+```bash
+flutter build appbundle --release --dart-define=API_BASE_URL=https://medclues.onrender.com
+```
+
+Output: `build/app/outputs/bundle/release/app-release.aab`
+
+### Emergency testing in release build
+
+Release builds dial real **108 / 100 / 101**. To block calls while testing a release APK:
+
+```bash
+flutter build apk --release --dart-define=EMERGENCY_TESTING=true
 ```
 
 ---
@@ -162,288 +266,192 @@ flutter analyze
 ```
 flutter_mobile/
 ├── lib/
-│   ├── main.dart                    # Entry: env load, Firebase init, MedcluesApp
-│   ├── firebase_options.dart        # Platform Firebase config
-│   │
-│   ├── config/                      # AppConfig, ApiConfig
-│   ├── constants/                   # Colors, typography, strings, icons, dimensions
-│   ├── brand/                       # MEDCLUES palette, typography, logo painter, login transition
-│   ├── themes/                      # Light/dark Material 3, form styles
-│   │
-│   ├── models/                      # 14 data models (doctor, appointment, patient, etc.)
-│   ├── helpers/                     # StorageHelper, TokenHelper, PermissionHelper
-│   ├── utils/                       # Validators, formatters, JSON parser, file openers
-│   │
-│   ├── services/                    # 14 Dio API services
-│   ├── repositories/                # 5 data repositories
-│   ├── providers/                   # 12 Riverpod provider files
-│   │
-│   ├── routes/
-│   │   ├── route_names.dart         # Named route constants
-│   │   ├── app_router.dart          # go_router + auth redirect + DashboardShell
-│   │   └── router_refresh.dart      # Auth-driven router refresh
-│   │
-│   ├── screens/                     # 35 routed UI screens (see All Screens)
-│   │
-│   ├── features/
-│   │   └── emergency/               # Standalone emergency module (see Emergency Module)
-│   │       ├── models/              # Contact, case, settings models
-│   │       ├── services/            # Storage, GPS, SOS timer, WhatsApp notify
-│   │       ├── providers/           # Emergency Riverpod state
-│   │       ├── screens/             # Access, active, settings
-│   │       ├── widgets/             # Help button, action buttons, WhatsApp panel
-│   │       ├── utils/               # Navigation, symptom classification
-│   │       └── emergency_constants.dart
-│   │
-│   └── widgets/                     # Shared UI components (see Widgets section)
-│
+│   ├── main.dart                    # Entry: env, Firebase, MedcluesApp, router
+│   ├── firebase_options.dart
+│   ├── config/                      # ApiConfig, AppConfig
+│   ├── constants/                   # Colors, typography, form_options, profile_options
+│   ├── brand/                       # MEDCLUES palette, logo, login transition
+│   ├── themes/                      # Light / dark Material 3
+│   ├── models/                      # Doctor, appointment, patient, payment, etc.
+│   ├── helpers/                     # StorageHelper, TokenHelper, permissions
+│   ├── utils/
+│   │   ├── validators.dart          # Shared field validation rules
+│   │   ├── input_formatters.dart    # Keyboard input restrictions
+│   │   └── …                        # Formatters, JSON parser
+│   ├── services/                    # Dio API services (auth, booking, payments…)
+│   ├── repositories/                # Auth, appointment, doctor, patient repos
+│   ├── providers/                   # Riverpod state
+│   ├── routes/                      # go_router, auth redirect, DashboardShell
+│   ├── screens/                     # Auth, dashboard, booking, profile, etc.
+│   ├── features/emergency/          # Standalone SOS module (no login required)
+│   ├── onboarding/                  # First-run wizard (8 steps)
+│   └── widgets/                     # Shared UI (auth, cards, animations, skeletons)
 ├── assets/
-│   ├── images/                      # Logos, speciality icons (12 PNGs)
-│   ├── images/specialities/web/     # SVG/PNG web variants
-│   ├── videos/opening.mp4           # Splash opening video
-│   ├── animations/                  # Lottie (success, ambulancia)
-│   ├── icons/                       # logo.svg
-│   └── config.env                   # Bundled env for web
-│
-├── android/                         # google-services.json, MainActivity
-├── ios/                             # GoogleService-Info.plist
-├── web/                             # index.html, manifest.json, PWA icons
-├── windows/ / macos/ / linux/       # Desktop scaffolding (secondary)
-│
+│   ├── config.env                   # Bundled API URL (required for web/APK)
+│   ├── images/medclues_logo.png     # App icon source (1024×1024)
+│   ├── images/specialities/         # Speciality PNG icons
+│   ├── videos/opening.mp4           # Splash video
+│   └── animations/                  # Lottie files
+├── android/                         # google-services.json, ProGuard, manifest
+├── ios/                             # GoogleService-Info.plist, Xcode project
+├── web/                             # index.html (autofill CSS), PWA manifest
 ├── sync_env.ps1
 ├── run_chrome.ps1
 ├── run_android_phone.ps1
-├── pubspec.yaml
-└── README.md
+├── get_android_sha.ps1              # Firebase SHA-1 helper
+└── pubspec.yaml
 ```
 
 ---
 
 ## Navigation & Routes
 
-### Bottom navigation shell (`DashboardShell`)
+### Bottom navigation (`DashboardShell`)
 
 | Tab | Route | Screen |
 |-----|-------|--------|
-| Home | `/dashboard` | `DashboardScreen` |
-| Appointments | `/appointments` | `UpcomingAppointmentsScreen` |
-| Records | `/records` | `RecordsScreen` |
-| Profile | `/profile` | `ProfileScreen` |
+| Home | `/dashboard` | Dashboard |
+| Appointments | `/appointments` | Upcoming / completed / cancelled |
+| Records | `/records` | Health records |
+| Profile | `/profile` | Profile hub |
 
-### All routes
+### Auth routes (always light theme — see [Themes & Auth UI](#themes--auth-ui))
 
-| Route | Screen | Auth required |
-|-------|--------|---------------|
+| Route | Screen | Auth |
+|-------|--------|------|
 | `/` | Splash (opening video) | No |
 | `/login` | Login | No |
-| `/signup` | Signup wizard | No |
-| `/forgot-password` | Forgot password OTP | No |
-| `/dashboard` | Patient home | Yes |
-| `/specialities` | Specialities list | Yes |
-| `/search` | Home search | Yes |
-| `/doctors` | Doctors list (`?speciality=`) | Yes |
-| `/doctors/search` | Doctor search | Yes |
-| `/doctors/:id` | Doctor profile | Yes |
-| `/booking/patient/:doctorId` | Patient selector (For Me/Others) | Yes |
-| `/booking/:doctorId` | Booking wizard (`?visit=online`) | Yes |
-| `/booking/confirmation` | Booking confirmation + receipt | Yes |
-| `/booking/success` | Booking success celebration | Yes |
-| `/booking/receipt/:id` | Standalone receipt | Yes |
-| `/appointments` | Appointments tabs | Yes |
-| `/appointments/:id` | Appointment detail | Yes |
-| `/video-consult/:appointmentId` | Agora video room | Yes |
-| `/hospitals` | Hospitals list | Yes |
-| `/hospitals/:id` | Hospital detail | Yes |
-| `/labs` | Labs list | Yes |
-| `/blood-banks` | Blood banks list | Yes |
-| `/blood-banks/:id` | Blood bank detail | Yes |
-| `/records` | Health records | Yes |
-| `/notifications` | Notifications feed | Yes |
-| `/profile` | Profile hub | Yes |
-| `/personal-info` | Edit personal info | Yes |
-| `/address` | Patient address | Yes |
-| `/payment-history` | Payment history | Yes |
-| `/payment-methods` | Payment methods info | Yes |
-| `/help` | Help & support | Yes |
-| `/about` | About app | Yes |
-| `/terms` | Terms & conditions | Yes |
-| `/settings` | App settings (dark mode) | Yes |
-| `/emergency` | Emergency access | **No** |
-| `/emergency/settings` | Emergency settings | **No** |
-| `/emergency/active` | Emergency active SOS | **No** |
+| `/signup` | 4-step registration wizard | No |
+| `/forgot-password` | OTP reset | No |
+
+### Emergency routes (no login, always light theme)
+
+| Route | Screen |
+|-------|--------|
+| `/emergency` | SOS access + countdown |
+| `/emergency/settings` | Contacts, medical info, SOS prefs |
+| `/emergency/active` | Post-SOS actions |
 
 ### Auth redirect rules
 
-- Emergency routes (`/emergency*`) **always bypass** login redirect
-- Authenticated users on splash/login/signup → redirect to `/dashboard`
-- Unauthenticated users on protected routes → redirect to `/login`
-- 401 API response → clear token → redirect to login
+- `/emergency*` **always bypass** login
+- Logged-in user on `/login` or `/signup` → `/dashboard`
+- Guest on protected route → `/login`
+- API **401** → clear tokens → `/login`
+- Access token expiry → auto **refresh** via `/api/auth/refresh` when refresh token exists
+
+Full route list: `lib/routes/route_names.dart` and `lib/routes/app_router.dart`.
 
 ---
 
 ## Authentication
 
-### Flow
-
-```
-Splash (/) → checkAuth() → authenticated? → /dashboard
-                          → not authenticated → /login
-```
-
 ### Methods
 
-| Method | Endpoint / Flow |
-|--------|----------------|
-| Email/password login | `POST /api/user/login` |
-| Registration | `POST /api/user/register` → auto-login |
-| Google Sign-In | Firebase Auth → `POST /api/user/social-login` |
-| Forgot password | `POST /api/auth/forgot-password` → verify OTP → reset |
-| Session restore | Read JWT from secure storage → validate expiry → fetch profile |
-| Logout | Clear secure storage + Google sign-out |
+| Method | Flow |
+|--------|------|
+| Email/password | `POST /api/user/login` |
+| Registration | 4-step wizard → `POST /api/user/register` |
+| Google Sign-In | Firebase → `POST /api/user/social-login` |
+| Forgot password | Email OTP → reset password |
+| Session restore | Secure storage JWT + refresh token rotation |
+| Logout | `POST /api/auth/logout` + clear storage |
 
-### Google Sign-In platform behavior
+### Signup wizard (4 steps)
 
-| Platform | Method |
-|----------|--------|
-| Web | Firebase `signInWithPopup(GoogleAuthProvider)` |
-| Android/iOS | `google_sign_in` → Firebase credential → backend social-login |
+| Step | Fields |
+|------|--------|
+| 1 — Personal | Full name, **date of birth** (picker), gender |
+| 2 — Contact | Email, phone |
+| 3 — Security | Password, confirm, terms checkbox |
+| 4 — Success | Celebration → dashboard |
+
+- **"Already have an account? Login"** link on all signup steps
+- Optional **Google Sign-In** on step 1
+- Auth screens use **light theme only** (unaffected by app dark mode)
+- Full password/phone/OTP rules defined in `Validators` — see [Form Validation](#form-validation) (signup wiring in progress)
 
 ### Token handling
 
-- **Storage:** `flutter_secure_storage` via `StorageHelper`
-- **Headers:** `Authorization: Bearer <token>` + `token: <token>`
-- **Expiry:** JWT `exp` claim (~7 days); cleared on 401
-- **No refresh endpoint** — re-login required after expiry
+| Item | Detail |
+|------|--------|
+| Storage | `flutter_secure_storage` |
+| Headers | `Authorization: Bearer` + `token:` |
+| Access token | Short-lived (~15 min) |
+| Refresh token | Rotated via `POST /api/auth/refresh` |
+| Expired session | Auto-refresh in `ApiService` interceptor |
 
-### Firebase files
+### Google Sign-In
 
-| File | Platform |
-|------|----------|
-| `lib/firebase_options.dart` | All platforms |
-| `android/app/google-services.json` | Android |
-| `ios/Runner/GoogleService-Info.plist` | iOS |
+| Platform | Method |
+|----------|--------|
+| Web | Firebase `signInWithPopup` |
+| Android/iOS | `google_sign_in` → Firebase credential → backend |
 
----
+Requires `GOOGLE_WEB_CLIENT_ID` in `config.env` and Firebase config files:
+- `android/app/google-services.json`
+- `ios/Runner/GoogleService-Info.plist`
 
-## All Screens
-
-### Splash & Auth
-
-| Screen | File | Features |
-|--------|------|----------|
-| Splash | `splash/splash_screen.dart` | Opening video (`opening.mp4`), logo fallback, floating SOS, auth handoff |
-| Login | `auth/login_screen.dart` | Email/password, Google Sign-In, forgot password sheet, emergency help |
-| Signup | `auth/signup_screen.dart` | 4-step wizard, Google Sign-In, validation shake, success celebration |
-| Forgot Password | `auth/forgot_password_screen.dart` | Email → OTP → new password |
-
-### Home & Discovery
-
-| Screen | File | Features |
-|--------|------|----------|
-| Dashboard | `dashboard/dashboard_screen.dart` | Greeting, inline search, speciality grid, top doctors, quick-access, drawer, emergency help |
-| Home Search | `search/home_search_screen.dart` | Full-screen search (doctors, specialities, services) |
-| Specialities | `specialities/specialities_screen.dart` | All medical specialities from API |
-
-### Doctors
-
-| Screen | File | Features |
-|--------|------|----------|
-| Doctors List | `doctors/doctors_list_screen.dart` | Filter (all/available/rating/experience), speciality query param |
-| Search Doctors | `doctors/search_doctors_screen.dart` | Text search |
-| Doctor Profile | `doctors/doctor_profile_screen.dart` | Fees, hospital, in-person + online booking, video consult card |
-
-### Booking
-
-| Screen | File | Features |
-|--------|------|----------|
-| Patient Selector | `booking/booking_patient_selector_screen.dart` | "For Me" / "For Others" |
-| Booking | `booking/booking_screen.dart` | Week/day slots, visit type, symptoms, report upload, Razorpay |
-| Booking Success | `booking/booking_success_screen.dart` | Celebration animation + booking ID |
-| Booking Confirmation | `booking/booking_confirmation_screen.dart` | Receipt card, PDF/share, join video call |
-| Booking Receipt | `booking/booking_receipt_screen.dart` | Standalone receipt by appointment ID |
-
-### Appointments & Consultation
-
-| Screen | File | Features |
-|--------|------|----------|
-| Appointments | `appointments/upcoming_appointments_screen.dart` | Tabs: Upcoming / Completed / Cancelled |
-| Appointment Detail | `appointments/appointment_detail_screen.dart` | Detail, cancel, join video |
-| Video Consult | `consultation/video_consult_screen.dart` | Agora RTC, mute/camera, timer, end call |
-
-### Hospitals, Labs, Blood Banks
-
-| Screen | File | Features |
-|--------|------|----------|
-| Hospitals List | `hospitals/hospitals_list_screen.dart` | All + nearby (GPS) toggle, search |
-| Hospital Detail | `hospitals/hospital_details_screen.dart` | Profile + affiliated doctors |
-| Labs List | `labs/labs_list_screen.dart` | Searchable diagnostic labs |
-| Blood Banks List | `labs/blood_banks_list_screen.dart` | Searchable blood bank directory |
-| Blood Bank Detail | `labs/blood_bank_detail_screen.dart` | Blood-type availability circles |
-
-### Records, Notifications, Profile
-
-| Screen | File | Features |
-|--------|------|----------|
-| Records | `records/records_screen.dart` | Upload (file picker), list, view PDF/images |
-| Notifications | `notifications/notifications_screen.dart` | Appointment-derived feed, read state |
-| Profile | `profile/profile_screen.dart` | Photo upload, menu hub, emergency help, logout |
-| Personal Info | `profile/personal_info_screen.dart` | Name, phone, gender, DOB, photo |
-| Address | `profile/address_screen.dart` | Patient address fields |
-| Payment History | `profile/payment_history_screen.dart` | Razorpay payment cards |
-| Payment Methods | `profile/payment_methods_screen.dart` | Online (Razorpay) vs in-clinic info |
-| Help | `profile/help_screen.dart` | FAQ content |
-| About | `profile/about_screen.dart` | App information |
-| Terms | `profile/terms_screen.dart` | Terms sections |
-| Settings | `settings/settings_screen.dart` | Dark mode, emergency settings, emergency help |
-
-### Emergency (feature module)
-
-| Screen | File | Features |
-|--------|------|----------|
-| Emergency Access | `features/emergency/screens/emergency_access_screen.dart` | Auto-SOS timer, critical/respond/helper flows |
-| Emergency Settings | `features/emergency/screens/emergency_settings_screen.dart` | Contacts, medical info, SOS prefs |
-| Emergency Active | `features/emergency/screens/emergency_active_screen.dart` | Post-SOS actions, WhatsApp, calls, maps |
-
-### Legacy (not routed)
-
-| Screen | File | Note |
-|--------|------|------|
-| Emergency (old) | `screens/emergency/emergency_screen.dart` | Superseded by `features/emergency/` |
-| Placeholder | `screens/common/placeholder_screen.dart` | "Coming soon" scaffold |
+Run `.\get_android_sha.ps1` and add SHA-1 to Firebase Console for Android.
 
 ---
 
-## Booking Flow
+## Onboarding
+
+First-login wizard (`lib/onboarding/`) — 8 steps including emergency contact and profile completion.
+
+| Step | Content |
+|------|---------|
+| Emergency contact | `POST /api/user/emergency-contacts/add` |
+| Profile | Patch patient profile |
+| Tutorial | In-app feature tour |
+
+Progress synced via `PATCH /api/user/onboarding`.
+
+---
+
+## Booking & Payments
+
+### Booking flow
 
 ```
-Doctor Profile (/doctors/:id)
-    │
-    ▼
-Patient Selector (/booking/patient/:doctorId)
-    "For Me" or "For Others"
-    │
-    ▼
-Booking Screen (/booking/:doctorId[?visit=online])
-    ├── Load doctor + week/day slots
-    ├── Select visit type (In-Person / Online)
-    ├── Optional symptoms + report file upload
-    ├── Payment: Razorpay for online visits
-    │             Direct book for in-clinic
-    └── POST /api/user/book-appointment
-    │
-    ▼
-Booking Success (/booking/success)
-    Celebration + booking ID
-    │
-    ▼
-Booking Confirmation (/booking/confirmation)
-    or Receipt (/booking/receipt/:id)
-    ├── Receipt card with QR
-    ├── PDF generate + share
-    └── "Join Video Call" → /video-consult/:id (if online)
+Doctor Profile → Patient selector (For Me / Others) → Booking screen
+  → Slot selection → Symptoms + optional report upload
+  → Razorpay (online) or direct book (in-clinic)
+  → Success → Confirmation / Receipt → Video consult (if online)
 ```
 
-**State providers:** `bookingPatientProvider`, `bookingDraftProvider`, `bookingInProgressProvider`
+### Patient Details form (Book for Someone Else)
+
+**Screen:** `lib/screens/booking/booking_patient_selector_screen.dart`  
+**Widgets:** `PremiumPatientFormField`, `PremiumPatientDropdownField`
+
+Validated client-side before Continue (UI styling unchanged — errors show as text below fields):
+
+| Field | Rules |
+|-------|-------|
+| Patient Name | Required; letters + spaces only; 2–50 chars; auto-trim |
+| Age | Required; 0–120 integer; **wheel picker** (no free typing) |
+| Gender | Dropdown only — see `FormOptions.genders` |
+| Contact Number | Required; exactly 10 digits; must start with 6, 7, 8, or 9 |
+| Relationship | Dropdown only — see `FormOptions.relationships` |
+
+- **Continue** button disabled until all fields pass validation
+- `inputFormatters` block invalid characters while typing
+- Backend validation for `actualPatient` is planned — do not rely on frontend alone
+
+### Payments (Razorpay)
+
+| Item | Detail |
+|------|--------|
+| Service | `lib/services/payment_service.dart` |
+| Create order | `POST /api/payments/create-order` |
+| Verify | `POST /api/payments/verify` |
+| Confirm (I've paid) | `POST /api/payments/confirm-order` |
+| History | `GET /api/payments/history` |
+| Hosted checkout | Opens `/api/payments/checkout?token=...` in browser |
+
+Backend stores orders in PostgreSQL (`payment_transactions` table) — survives server restarts.
 
 ---
 
@@ -451,26 +459,11 @@ Booking Confirmation (/booking/confirmation)
 
 | Item | Detail |
 |------|--------|
-| Screen | `consultation/video_consult_screen.dart` |
 | Route | `/video-consult/:appointmentId` |
 | SDK | `agora_rtc_engine` |
-| Token | `POST /api/doctor/agora-token` (via `consultation_service.dart`) |
-| Features | Connecting overlay, mute/camera toggles, call duration, remote presence, end call |
-| Config | `AGORA_APP_ID` in env |
-| Entry points | Appointment detail, booking confirmation, doctor profile (online path) |
-
----
-
-## Payments
-
-| Item | Detail |
-|------|--------|
-| Gateway | Razorpay |
-| Service | `payment_service.dart` |
-| Endpoints | create-order, verify, confirm-order, failed, status, checkout, razorpay-key |
-| Booking | Online visits trigger Razorpay checkout in `booking_screen.dart` |
-| History | `payment_history_screen.dart` via `paymentHistoryProvider` |
-| Methods info | `payment_methods_screen.dart` (informational) |
+| Token | From backend consultation endpoints |
+| Permissions | Camera + microphone via `permission_handler` |
+| Web | Agora iris script in `web/index.html` |
 
 ---
 
@@ -478,148 +471,68 @@ Booking Confirmation (/booking/confirmation)
 
 | Item | Detail |
 |------|--------|
-| Screen | `records/records_screen.dart` (bottom-nav tab) |
-| Service | `health_record_service.dart` |
-| Endpoints | List, upload, view URL, file download |
-| Provider | `healthRecordsProvider` |
-| File handling | `report_file_opener.dart` (IO + web implementations) |
-| PDF receipts | `appointment_receipt_pdf.dart` |
+| Screen | `records/records_screen.dart` (bottom nav) |
+| Upload | Multipart to backend → Cloudinary |
+| View | PDF/image via view-url or file stream endpoints |
+| Dark mode | Supported (theme-aware skeletons) |
 
 ---
 
 ## Hospitals, Labs & Blood Banks
 
-### Hospitals
+| Feature | Endpoints |
+|---------|-----------|
+| Hospitals | List, detail, nearby GPS |
+| Labs | `GET /api/lab/list` |
+| Blood banks | `GET /api/blood-bank/list` + detail with blood-type availability |
 
-| Item | Detail |
-|------|--------|
-| Service | `hospital_service.dart` |
-| Endpoints | List, details, nearby via `/api/location/nearby-hospitals` |
-| Screens | `hospitals_list_screen.dart`, `hospital_details_screen.dart` |
-| Providers | `hospitalsListProvider`, `hospitalDetailProvider` |
-| Features | All hospitals + nearby GPS toggle |
-
-### Labs
-
-| Item | Detail |
-|------|--------|
-| Service | `lab_service.dart` |
-| Endpoint | `GET /api/lab/list` |
-| Screen | `labs_list_screen.dart` with search |
-
-### Blood Banks
-
-| Item | Detail |
-|------|--------|
-| Service | `blood_bank_service.dart` |
-| Endpoint | `GET /api/blood-bank/list` |
-| Screens | `blood_banks_list_screen.dart`, `blood_bank_detail_screen.dart` |
-| Widgets | `blood_bank_card.dart`, `blood_drop_icon.dart`, `blood_type_circle_tile.dart` |
-| Navigation | Detail requires `BloodBankModel` passed via `extra` |
+List screens support **dark mode** with theme-aware premium widgets.
 
 ---
 
 ## Emergency Module
 
 **Location:** `lib/features/emergency/`  
-**Works without login** — all `/emergency*` routes bypass auth redirect.
+**No login required** — routes bypass auth redirect.  
+**Always light theme** — `ForceLightTheme` on emergency screens.
 
 ### Access points
 
-Emergency Help button (`EmergencyHelpButton`) on:
-- Opening splash (floating SOS, `replaceRoute: true`)
-- Login screen
-- Register screen
-- Patient Home (dashboard)
-- Profile screen
-- Settings screen
-
-Dashboard quick-access tile also links to `/emergency`.
-
-### Routes
-
-| Route | Screen | Purpose |
-|-------|--------|---------|
-| `/emergency` | Emergency Access | Countdown + response options |
-| `/emergency/settings` | Emergency Settings | Contacts, medical info, SOS prefs |
-| `/emergency/active` | Emergency Active | Post-SOS actions |
+`EmergencyHelpButton` on: splash, login, signup, dashboard, profile, settings.
 
 ### SOS flow
 
 ```
 Emergency Access
-    │
-    ├── Auto-SOS timer (default 30s, configurable)
-    │   └── Timer STOPS on any user action
-    │   └── If no action → auto critical SOS
-    │
-    ├── "I Am Critical"
-    │   └── Immediate SOS → Emergency Active
-    │
-    ├── "I Can Respond"
-    │   └── Symptom picker → severity classification
-    │       ├── Critical → ambulance, WhatsApp, hospitals
-    │       ├── Moderate → video doctor, hospitals, WhatsApp
-    │       └── Minor → book normal consultation
-    │
-    └── "Help Someone Else"
-        └── Helper severity (Critical / Moderate / Minor)
+  ├── Auto-SOS countdown (default 30s, configurable)
+  ├── "I Am Critical" → Emergency Active
+  ├── "I Can Respond" → symptom picker → severity actions
+  └── "Help Someone Else" → helper flow
 ```
 
-### Symptom classification
+### Severity actions
 
-| Severity | Symptoms |
-|----------|----------|
-| **Critical** | Chest Pain, Breathing Difficulty, Heavy Bleeding, Accident, Stroke Symptoms |
-| **Moderate** | Severe Pain, Fever |
-| **Minor** | Other |
+| Severity | Actions |
+|----------|---------|
+| Critical | Ambulance 108, WhatsApp relatives, nearby hospitals |
+| Moderate | Video doctor, hospitals, WhatsApp |
+| Minor | Book normal consultation |
 
-### Emergency Settings (local storage)
+### Emergency settings
 
-| Field | Required |
-|-------|----------|
-| Relative Contact 1 — Name | Yes (with phone) |
-| Relative Contact 1 — Phone | Yes (with name) |
-| Relative Contact 2 — Name | Yes (with phone) |
-| Relative Contact 2 — Phone | Yes (with name) |
-| Blood Group | Optional |
-| Allergies | Optional |
-| Existing Diseases | Optional |
-| Current Medications | Optional |
-| Auto SOS Timer | 10–120 seconds (slider) |
-| Voice SOS | Toggle (preference stored) |
-| Triple Tap SOS | Toggle (preference stored) |
-| Shake SOS | Toggle (preference stored) |
-| Auto Location Sharing | Toggle (default on) |
+| Field | Notes |
+|-------|-------|
+| 2 relative contacts | Name + phone required together |
+| Blood group, allergies, conditions, medications | Optional |
+| Auto-SOS timer | 10–120 seconds |
+| Voice / triple-tap / shake SOS | Preference toggles |
+| Auto location | Default on |
 
-**Storage:** SharedPreferences keys `emergency_settings_v1`, `emergency_cases_v1`
+**Storage:** local `SharedPreferences` + **backend sync** when logged in (`emergency_api_service.dart` → `/api/user/emergency-contacts/*`).
 
-### Notify relatives
+**SOS audit:** logged-in SOS events sent to `POST /api/emergency/log-event`.
 
-| Action | Method |
-|--------|--------|
-| WhatsApp message + live location | `wa.me` with pre-filled alert + Google Maps link |
-| Phone call to relative | System dialer (`tel:`) |
-| No contacts saved | System share sheet fallback |
-
-**WhatsApp is for messages and location links only — not WhatsApp voice calls.**
-
-### Emergency Active screen actions
-
-| Action | Notes |
-|--------|-------|
-| WhatsApp Location Alert | Send to first saved relative |
-| Notify Relatives panel | Per-contact WhatsApp message + phone call buttons |
-| Call Ambulance (108) | Disabled in testing mode |
-| Call Police (100/112) | Disabled in testing mode |
-| Call Fire (101) | Disabled in testing mode |
-| Nearby Hospitals | Google Maps search with GPS |
-| Open My Location | Google Maps link |
-| Emergency Video Doctor | Links to `/doctors?visit=online` (moderate severity) |
-| Book Normal Consultation | Links to `/doctors` (minor severity) |
-| Home button | Dashboard (logged in) or Login (guest) |
-
-### Default emergency numbers
+### Emergency numbers (India)
 
 | Service | Number |
 |---------|--------|
@@ -627,195 +540,114 @@ Emergency Access
 | Police | 100 / 112 |
 | Fire | 101 |
 
-### Testing mode
+### Testing mode vs production
 
-In `lib/features/emergency/emergency_constants.dart`:
+| Build | `testingMode` | Emergency calls |
+|-------|---------------|-----------------|
+| **Debug** (`flutter run`) | `true` | Blocked — toast shown |
+| **Release APK** | `false` | Real `tel:` calls to 108/100/101 |
+| Release + override | `--dart-define=EMERGENCY_TESTING=true` | Blocked |
 
-```dart
-static const testingMode = true;  // set false for production
-```
+Configured in `lib/features/emergency/emergency_constants.dart`.
 
-When `true`: ambulance/police/fire `tel:` calls blocked with toast message. WhatsApp, GPS, relative calls, hospitals, and booking still work.
+### Notify relatives
 
-### Emergency architecture files
+- WhatsApp message with live Google Maps link (`wa.me`)
+- Phone call via system dialer
+- System share sheet if no contacts saved
 
-| Type | Files |
-|------|-------|
-| Models | `emergency_contact_model.dart`, `emergency_case_model.dart`, `emergency_settings_model.dart` |
-| Services | `emergency_storage_service.dart`, `emergency_location_service.dart`, `emergency_notification_service.dart`, `emergency_sos_timer_service.dart` |
-| Providers | `emergency_provider.dart` |
-| Screens | `emergency_access_screen.dart`, `emergency_settings_screen.dart`, `emergency_active_screen.dart` |
-| Widgets | `emergency_help_button.dart`, `emergency_action_button.dart`, `emergency_home_button.dart`, `emergency_whatsapp_contacts_panel.dart` |
-| Utils | `emergency_navigation.dart`, `emergency_symptom_utils.dart` |
+---
+
+## Themes & Auth UI
+
+| Area | Theme behavior |
+|------|----------------|
+| Login, signup, forgot password | **Always light** (`ForceLightTheme` via `LoginScreenShell`) |
+| Emergency screens | **Always light** (`ForceLightTheme`) |
+| Dashboard, booking, hospitals, labs, profile, settings | **System / light / dark** (user choice in Settings) |
+
+Dark mode uses true-black scaffold (`#000000`) with theme-aware premium colors for hospital/booking flows.
+
+### Settings → Appearance
+
+- System default
+- Light
+- Dark
+
+Persisted via `themeModeProvider` in `lib/providers/theme_provider.dart`.
 
 ---
 
 ## State Management
 
-### Riverpod providers
+**Riverpod** (`flutter_riverpod`)
 
-| Provider file | Key providers |
-|---------------|---------------|
-| `auth_provider.dart` | `authProvider` (loading/authenticated/unauthenticated/error) |
-| `theme_provider.dart` | `themeModeProvider` (light/dark, persisted) |
-| `booking_state_provider.dart` | `bookingDraftProvider`, `bookingPatientProvider` |
-| `appointment_provider.dart` | Upcoming/past/cancelled/detail, slots, tab state |
-| `doctor_provider.dart` | All doctors, top doctors, list, detail, speciality filter |
-| `speciality_provider.dart` | `specialitiesProvider` |
-| `patient_provider.dart` | `patientProfileProvider` |
-| `hospital_provider.dart` | Hospitals list, detail |
-| `payment_provider.dart` | `paymentHistoryProvider` |
-| `health_record_provider.dart` | `healthRecordsProvider` |
-| `notification_provider.dart` | Notifications + read state |
-| `service_providers.dart` | All service/repository instances |
-| `emergency_provider.dart` | Settings, session, storage, location, notification |
+| Provider file | Purpose |
+|---------------|---------|
+| `auth_provider.dart` | Login state, session |
+| `theme_provider.dart` | Light / dark / system |
+| `booking_state_provider.dart` | Booking draft, patient selection |
+| `appointment_provider.dart` | Appointments, slots, tabs |
+| `doctor_provider.dart` | Doctors list, detail, filters |
+| `payment_provider.dart` | Payment history |
+| `health_record_provider.dart` | Health records list |
+| `emergency_provider.dart` | SOS session, settings, location |
+| `service_providers.dart` | Service + repository DI |
 
 ---
 
 ## Services & API Layer
 
-### Services (`lib/services/`)
+### Core services
 
 | Service | Purpose |
 |---------|---------|
-| `api_service.dart` | Dio HTTP client, JWT headers, 401 handling, debug logging |
-| `auth_service.dart` | Login, signup, forgot/reset password, social login, profile |
-| `google_auth_service.dart` | Firebase + Google Sign-In (web popup, mobile SDK) |
-| `appointment_service.dart` | Book, cancel, list appointments, fetch slots |
-| `consultation_service.dart` | Agora token, video status/timer, end call |
-| `doctor_service.dart` | Doctor list, search, by ID |
-| `speciality_service.dart` | Public specialities |
-| `patient_service.dart` | Patient profile CRUD + photo upload |
-| `payment_service.dart` | Razorpay order/verify/history/checkout |
-| `health_record_service.dart` | List/upload/view health records |
-| `hospital_service.dart` | Hospital list, details, nearby |
-| `lab_service.dart` | Lab list |
-| `blood_bank_service.dart` | Blood bank list |
-| `notification_service.dart` | Derives notifications from appointments |
-| `integration_service.dart` | Checks Agora/Telegram config availability |
-
-### Repositories (`lib/repositories/`)
-
-| Repository | Wraps |
-|------------|-------|
-| `auth_repository.dart` | Login, signup, Google, token storage, session, logout |
-| `appointment_repository.dart` | Appointments, slots, book, cancel |
-| `doctor_repository.dart` | Doctor data |
-| `speciality_repository.dart` | Speciality data |
-| `patient_repository.dart` | Patient profile + photo |
+| `api_service.dart` | Dio client, JWT, refresh, 401 handling |
+| `auth_service.dart` | Login, register, social, profile |
+| `google_auth_service.dart` | Firebase Google auth |
+| `appointment_service.dart` | Book, cancel, list |
+| `payment_service.dart` | Razorpay flow |
+| `consultation_service.dart` | Agora video |
+| `emergency_api_service.dart` | Contact sync + SOS audit log |
+| `health_record_service.dart` | Upload / list / view records |
+| `hospital_service.dart` | Hospitals + nearby |
+| `patient_service.dart` | Profile CRUD |
 
 ### Key API endpoints
 
-| Action | Method & Path |
-|--------|---------------|
+| Action | Path |
+|--------|------|
 | Login | `POST /api/user/login` |
 | Register | `POST /api/user/register` |
-| Google login | `POST /api/user/social-login` |
+| Social login | `POST /api/user/social-login` |
+| Refresh token | `POST /api/auth/refresh` |
+| Logout | `POST /api/auth/logout` |
 | Profile | `GET /api/user/get-profile`, `PATCH /api/user/profile` |
-| Doctors | `GET /api/doctor/list`, `GET /api/doctor/{id}` |
-| Public doctors | `GET /api/hospital-tieup/public/doctors` |
-| Specialities | `GET /api/specialty/public/all` |
-| Slots | `GET /api/ai/doctor-slots/{docId}` |
-| Book | `POST /api/user/book-appointment` |
 | Appointments | `GET /api/user/appointments` |
-| Cancel | `POST /api/user/cancel-appointment` |
-| Health records | `/api/health-records/*` |
-| Hospitals | `/api/hospital-tieup/*`, `/api/location/nearby-hospitals` |
-| Labs | `GET /api/lab/list` |
-| Blood banks | `GET /api/blood-bank/list` |
+| Book | `POST /api/user/book-appointment` |
 | Payments | `/api/payments/*` |
-| Forgot password | `POST /api/auth/forgot-password`, verify, reset |
-| Agora token | Via consultation service |
-| Config | `GET /api/config/integrations` |
-
-Emergency data is **local only** — no backend required for SOS.
-
----
-
-## Widgets & UI System
-
-### By category (`lib/widgets/`)
-
-| Folder | Widgets | Purpose |
-|--------|---------|---------|
-| `animations/` | 14 widgets | Morphing buttons, wizard progress, receipt unroll, success celebration, healthcare motion, validation shake |
-| `auth/` | 8 widgets | Auth input, brand logo, login shell, Google button, forgot password sheet |
-| `blood/` | 2 widgets | Blood drop icon, blood type circle tile |
-| `booking/` | 1 widget | Appointment receipt card |
-| `brand/` | 1 widget | MEDCLUES logo image (auth/large/compact sizes) |
-| `cards/` | 4 widgets | Appointment, blood bank, doctor, speciality cards |
-| `common/` | 8 widgets | Button, loader, snackbar, text field, avatar, empty/error states |
-| `home/` | 5 widgets | Search bar, search results, speciality grid, top doctor cards |
-| `layout/` | 1 widget | Patient drawer |
-| `skeleton/` | 2 widgets | Appointment and doctor card shimmer loaders |
-| `splash/` | 2 widgets | Fullscreen splash video, mobile fit video |
-
-### Data models (`lib/models/`)
-
-`api_response_model`, `appointment_model`, `blood_bank_model`, `doctor_model`, `hospital_detail_model`, `hospital_model`, `lab_model`, `notification_model`, `patient_booking_info`, `patient_model`, `payment_history_item`, `slot_model`, `speciality_model`, `user_model`
+| Emergency contacts | `/api/user/emergency-contacts/*` |
+| Emergency log | `POST /api/emergency/log-event` |
+| Health records | `/api/user/health-records/*` |
+| Integrations | `GET /api/config/integrations` |
 
 ---
 
-## Branding, Themes & Animations
-
-### Brand identity
-
-| Item | Value |
-|------|-------|
-| App name | MEDCLUES |
-| Tagline | EMERGENCY \| BOOKING |
-| Logo | `assets/images/medclues_logo.png` |
-| Opening video | `assets/videos/opening.mp4` (1080×1920 portrait, H.264) |
-| Splash background | `#F5F5F5` |
-| Primary font | Poppins (Google Fonts, runtime) |
-
-### Brand files (`lib/brand/`)
-
-- `medclues_palette.dart` — Navy, teal, emergency reds, splash canvas
-- `medclues_brand_typography.dart` — Brand text styles
-- `medclues_logo_widget.dart` / `medclues_logo_painter.dart` — Programmatic logo
-- `medclues_login_transition.dart` — Shared-axis login page transition
-
-### Themes (`lib/themes/`)
-
-- `light_theme.dart` — Material 3 light
-- `dark_theme.dart` — Material 3 dark
-- `theme_form_styles.dart` — Shared form field styling
-- Toggle: Settings screen → `themeModeProvider` (persisted)
-
-### Animation packages
-
-| Package | Usage |
-|---------|-------|
-| `flutter_animate` | Premium toast, UI micro-animations |
-| `lottie` | Success checkmark, ambulancia |
-| `rive` | Advanced animations |
-| `animations` | Shared-axis page transitions (signup wizard) |
-
-### UI motion highlights
-
-- Signup 4-step wizard with horizontal slide transitions
-- Booking receipt unroll animation
-- Success celebration (Lottie checkmark)
-- Connecting doctor overlay (video consult)
-- Heartbeat logo, signal pulse painter
-- Healthcare motion backgrounds on auth screens
-- Morphing login button (idle → loading → success)
-
----
-
-## Assets
+## Assets & Branding
 
 | Asset | Path |
 |-------|------|
-| App logo | `assets/images/medclues_logo.png` |
-| App icons | `assets/images/icon.png`, `adaptive-icon.png`, `splash-icon.png`, `favicon.png` |
-| Opening video | `assets/videos/opening.mp4` |
-| Speciality icons (12) | `assets/images/specialities/` — cardiology, orthopedics, psychiatry, ophthalmology, ENT, dentistry, general medicine, gynecology, dermatology, pediatrics, neurology, gastroenterology |
-| Web speciality variants | `assets/images/specialities/web/` |
-| Lottie animations | `assets/animations/success_checkmark.lottie`, `ambulancia.lottie` |
-| SVG logo | `assets/icons/logo.svg` |
+| Logo / app icon source | `assets/images/medclues_logo.png` (1024×1024) |
+| Launcher icons | Generated to `android/` + `ios/` via `flutter_launcher_icons` |
+| Splash video | `assets/videos/opening.mp4` |
+| Speciality icons | `assets/images/specialities/*.png` |
+| Lottie | `assets/animations/` |
 | Bundled env | `assets/config.env` |
+
+Regenerate icons after logo change:
+```bash
+dart run flutter_launcher_icons
+```
 
 ---
 
@@ -823,43 +655,257 @@ Emergency data is **local only** — no backend required for SOS.
 
 | Platform | Status | Notes |
 |----------|--------|-------|
-| **Android** | Primary | `google-services.json`, release APK/AAB |
-| **iOS** | Primary | `GoogleService-Info.plist`, needs `FIREBASE_APP_ID_IOS` |
-| **Web (Chrome)** | Supported | `assets/config.env` required; `WebSafeMediaQuery` wrapper |
-| Windows | Scaffolded | Desktop build possible |
-| macOS | Scaffolded | Desktop build possible |
-| Linux | Scaffolded | Desktop build possible |
-
-### Platform-specific code
-
-- `utils/report_file_opener_io.dart` / `report_file_opener_web.dart`
-- `utils/web_safe_media_query.dart`
-- Firebase: always on Android; conditional on web/iOS via env
+| **Android** | Primary | APK tested; ProGuard for Agora |
+| **Web (Chrome)** | Supported | `config.env` required; autofill CSS in `index.html` |
+| **iOS** | Supported | **Mac + Xcode required** to build |
+| Windows / macOS / Linux | Scaffolded | Desktop builds possible, not primary target |
 
 ### Permissions
 
-- **Location:** `ACCESS_FINE_LOCATION` (Android), `NSLocationWhenInUseUsageDescription` (iOS) — emergency GPS
-- **Camera/Mic:** Video consult via `permission_helper.dart`
+| Permission | Used for |
+|------------|----------|
+| Location | Emergency GPS, nearby hospitals |
+| Camera / Mic | Video consultation |
+| Internet | All API calls |
+| Storage | Health record uploads |
+
+---
+
+## Form Validation
+
+Client-side validation layer. **Backend must also validate** — frontend rules are UX only, not security.
+
+### Core files
+
+| File | Purpose |
+|------|---------|
+| `lib/utils/validators.dart` | All validation functions + `sanitizeText()` |
+| `lib/utils/input_formatters.dart` | `FilteringTextInputFormatter`, `maxLength` per field type |
+| `lib/constants/form_options.dart` | Shared dropdown enums (gender, relationship) |
+| `lib/constants/profile_options.dart` | Profile-specific gender/blood group options |
+| `lib/widgets/healthcare/premium_patient_form_field.dart` | Booking form fields with optional `validator` |
+
+### Validation rules (`Validators` class)
+
+| Field | Function | Rules |
+|-------|----------|-------|
+| Patient name | `patientName()` | Required; `A–Z` + single spaces; 2–50 chars; trim |
+| Doctor name | `doctorName()` | Required; `A–Z` + spaces; 3–60 chars; no numbers |
+| Age | `age()` | Required; integer 0–120; message: *"Please select a valid age."* |
+| Contact (India) | `indianPhone()` | Required (optional flag); exactly 10 digits; starts 6–9 |
+| Email | `email()` | Optional or required flag; format check; max 100 chars |
+| Password | `password()` | 8–32 chars; 1 upper, 1 lower, 1 number, 1 special |
+| Confirm password | `confirmPassword()` | Must match password |
+| OTP | `otp()` | Exactly 6 digits |
+| Address | `address()` | Max 250; letters, numbers, comma, hyphen, slash |
+| Appointment reason | `appointmentReason()` | 5–500 chars; HTML stripped |
+| Report title | `reportTitle()` | 3–100 chars |
+| Emergency name | `emergencyContactName()` | Letters + spaces; max 50 |
+| Emergency phone | `emergencyContactPhone()` | 10-digit Indian mobile |
+| DOB vs age | `dobMatchesAge()` | DOB not in future; age must match DOB |
+
+### Input formatters
+
+| Formatter | Used for |
+|-----------|----------|
+| `InputFormatters.name` | Patient name (letters + space, max 50) |
+| `InputFormatters.phone` | Digits only, max 10 |
+| `InputFormatters.otp` | Digits only, max 6 |
+| `InputFormatters.address` | Allowed address chars, max 250 |
+| `InputFormatters.reportTitle` | Max 100 |
+| `InputFormatters.appointmentReason` | Max 500 |
+
+### Dropdown enums (`FormOptions`)
+
+**Gender:** Male, Female, Other, Prefer not to say
+
+**Relationship:** Father, Mother, Brother, Sister, Spouse, Son, Daughter, Guardian, Friend, Other
+
+### Screens — validation status
+
+| Screen | Status |
+|--------|--------|
+| Booking → Patient Details | **Implemented** — full rules + age picker |
+| Signup / Login / Forgot password | Shared validators ready; **wiring in progress** |
+| Profile / Address | **Pending** |
+| Onboarding / Emergency settings | **Pending** |
+| Health records upload | **Pending** (title + file size/type) |
+| Booking symptoms / notes | **Pending** |
+
+### UI behaviour (no layout/CSS changes)
+
+- Existing field boxes, icons, borders, and themes are unchanged
+- Invalid fields show a small error message **below** the input (same secondary text style)
+- Submit/Continue disabled until the form is valid
+- Validation runs on user interaction (`AutovalidateMode.onUserInteraction`)
+
+### Sanitization
+
+`Validators.sanitizeText()` trims whitespace, strips HTML tags, and enforces max length before API calls. Always pair with backend validation.
+
+---
+
+## Multi-Language (i18n)
+
+**Languages:** English (default), Telugu (`te`), Hindi (`hi`)
+
+| File | Purpose |
+|------|---------|
+| `l10n.yaml` | Flutter gen-l10n config |
+| `lib/l10n/app_en.arb` | English strings (template) |
+| `lib/l10n/app_te.arb` | Telugu translations |
+| `lib/l10n/app_hi.arb` | Hindi translations |
+| `lib/l10n/app_localizations.dart` | Generated — do not edit |
+| `lib/providers/locale_provider.dart` | Locale state + SharedPreferences |
+| `lib/l10n/l10n_extension.dart` | `context.l10n` shortcut |
+| `lib/widgets/common/language_selector.dart` | Language picker UI |
+
+### Language selector locations
+
+- **Login** — top-right (`LanguageSelectorCompact`)
+- **Settings** — Language card (`LanguageSelectorCard`)
+- **Emergency Settings** — AppBar actions
+
+### Usage in code
+
+```dart
+import '../../l10n/l10n_extension.dart';
+
+Text(context.l10n.authSignIn);
+validator: (v) => Validators.email(v, context.l10n),
+```
+
+### Persist & switch
+
+- Saved key: `@pms/app_locale` in SharedPreferences
+- Changing language rebuilds `MaterialApp` immediately — no logout required
+
+### Regenerate after ARB edits
+
+```bash
+cd flutter_mobile
+flutter gen-l10n
+```
+
+### Localization status
+
+| Area | Status |
+|------|--------|
+| Auth (login, signup, forgot) | Done |
+| Settings, profile menu | Done |
+| Booking (patient form + full booking flow) | Done |
+| Appointments list & detail | Done |
+| Doctor search & profile | Done |
+| Video consultation | Done |
+| Health records | Done |
+| Emergency (settings, access, active) | Done |
+| Onboarding & tutorial | Done |
+| Personal info & address | Done |
+| PDF receipt | Done |
+| Dashboard & bottom navigation | Done |
+| Validators & error messages | Done |
+
+---
+
+## Google Play Store
+
+### Prerequisites
+
+1. [Google Play Console](https://play.google.com/console) account ($25 one-time fee)
+2. Privacy policy URL (required for health apps)
+3. Production API in `assets/config.env`: `https://medclues.onrender.com`
+4. Store assets: 512×512 icon, 1024×500 feature graphic, phone screenshots, support email
+
+### Step 1 — Create release signing key
+
+Play Store rejects debug-signed builds. Current `build.gradle.kts` uses debug signing for release — change before publishing.
+
+```powershell
+cd flutter_mobile\android\app
+keytool -genkey -v -keystore upload-keystore.jks -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+```
+
+Create `android/key.properties` (do **not** commit):
+
+```properties
+storePassword=YOUR_KEYSTORE_PASSWORD
+keyPassword=YOUR_KEY_PASSWORD
+keyAlias=upload
+storeFile=app/upload-keystore.jks
+```
+
+Wire `signingConfigs.release` in `android/app/build.gradle.kts` (see [Flutter Android signing docs](https://docs.flutter.dev/deployment/android#signing-the-app)).
+
+### Step 2 — Build App Bundle (AAB)
+
+```powershell
+cd flutter_mobile
+flutter clean
+flutter pub get
+dart run flutter_launcher_icons
+flutter build appbundle --release --dart-define=API_BASE_URL=https://medclues.onrender.com
+```
+
+**Output:** `build/app/outputs/bundle/release/app-release.aab`
+
+Bump version in `pubspec.yaml` before each upload:
+
+```yaml
+version: 1.0.1+2   # versionName + versionCode (code must increase every release)
+```
+
+### Step 3 — Firebase SHA-1 for Play builds
+
+Add the **upload keystore** SHA-1 to Firebase (Google Sign-In on Play builds):
+
+```powershell
+.\get_android_sha.ps1
+# or:
+keytool -list -v -keystore android\app\upload-keystore.jks -alias upload
+```
+
+### Step 4 — Play Console checklist
+
+| Task | Notes |
+|------|-------|
+| Store listing | Title, descriptions, icon, feature graphic, screenshots |
+| App access | Provide test login if reviewers need an account |
+| Content rating | Complete IARC questionnaire |
+| Data safety | Declare health, location, contact, payment data |
+| Privacy policy | URL required |
+| Internal testing | Upload AAB → test → then promote to Production |
+
+### Step 5 — Submit
+
+1. **Release** → **Internal testing** (recommended first) or **Production**
+2. Upload `app-release.aab`
+3. Complete all policy forms (green checkmarks)
+4. **Send for review** — typically 1–7 days
+
+### App identifiers
+
+| Item | Value |
+|------|-------|
+| Application ID | `com.medichain.medichain_mobile` |
+| Display name (launcher) | MediChain+ (`AndroidManifest.xml`) |
+| Package name (pubspec) | `medichain_mobile` |
 
 ---
 
 ## Scripts & Tooling
 
-| Script | Command | Purpose |
-|--------|---------|---------|
-| `sync_env.ps1` | `.\sync_env.ps1` | Sync `API_BASE_URL` from `mobile/.env` |
-| `run_chrome.ps1` | `.\run_chrome.ps1` | Sync env + `flutter run -d chrome` |
-| `run_android_phone.ps1` | `.\run_android_phone.ps1` | Auto-detect LAN IP → update `assets/config.env` → run on USB phone |
-| `flutter analyze` | — | Static analysis |
-| `flutter test` | — | Widget tests (`test/widget_test.dart`) |
+| Script | Purpose |
+|--------|---------|
+| `sync_env.ps1` | Sync API URL from legacy Expo `mobile/.env` |
+| `run_chrome.ps1` | Sync env + run Chrome |
+| `run_android_phone.ps1` | LAN IP detect + run on USB Android |
+| `get_android_sha.ps1` | Print SHA-1 for Firebase Console |
 
-### Firebase / Google config files
-
-| File | Platform |
-|------|----------|
-| `lib/firebase_options.dart` | Generated Firebase options |
-| `android/app/google-services.json` | Android Firebase |
-| `ios/Runner/GoogleService-Info.plist` | iOS Firebase |
+```bash
+flutter analyze          # Static analysis
+flutter test             # Widget tests
+dart run flutter_launcher_icons   # Regenerate app icons
+```
 
 ---
 
@@ -867,47 +913,66 @@ Emergency data is **local only** — no backend required for SOS.
 
 ### Cannot reach API from phone
 
-- Backend: `python -m uvicorn main:app --host 0.0.0.0 --port 5000 --reload`
-- Phone and PC on same Wi‑Fi
-- Use LAN IP in `.env`, not `localhost`
-- Re-run `.\sync_env.ps1` after changing `mobile/.env`
-- For USB phone: run `.\run_android_phone.ps1`
+- Use `https://medclues.onrender.com` in `assets/config.env` (not `localhost`)
+- For local backend: same Wi‑Fi, `uvicorn --host 0.0.0.0 --port 5000`, PC LAN IP in config
+- Rebuild APK after changing `config.env`
 
-### Emergency contacts not saving
+### Login/signup fields show grey block on web when focused
 
-- Both **name and phone** required per contact
-- Tap **Save Settings** — confirm toast: `Settings saved — N relative contact(s) stored`
-- Data persists in SharedPreferences across restarts
-
-### Auto-SOS timer issues
-
-- Timer stops on any button tap, settings open, back, or home
-- Banner shows **"Timer stopped"** when cancelled
-- From splash, emergency uses `replaceRoute` so video won't redirect you away
+- Fixed via `AuthInput` + `web/index.html` autofill CSS
+- Do **full restart** after `index.html` changes
 
 ### Google Sign-In fails
 
-- Check Firebase config files exist for your platform
-- Web: `FIREBASE_API_KEY_WEB`, `GOOGLE_WEB_CLIENT_ID`
-- iOS: `FIREBASE_APP_ID_IOS` required
-- Android: `google-services.json` + SHA-1 in Firebase console
+- Add Android SHA-1 to Firebase (`get_android_sha.ps1`)
+- Set `GOOGLE_WEB_CLIENT_ID` in `config.env`
+- Verify `google-services.json` / `GoogleService-Info.plist` exist
+
+### Release APK build fails (R8 / Agora)
+
+- `android/app/proguard-rules.pro` includes Agora `-dontwarn` rules
+- Run `flutter clean` then rebuild
+
+### Emergency calls don't work
+
+- **Debug build:** calls blocked (`testingMode = true`) — expected
+- **Release APK:** calls 108/100/101 work
+- Use `--dart-define=EMERGENCY_TESTING=true` to block in release test builds
+
+### iPhone on Windows
+
+- Cannot build iOS on Windows — use a Mac or distribute via TestFlight
 
 ### Video consult won't connect
 
-- Verify `AGORA_APP_ID` in env
-- Check `GET /api/config/integrations` returns Agora as available
+- Set `AGORA_APP_ID` or verify backend Agora config
 - Grant camera/microphone permissions
+- Check `GET /api/config/integrations`
 
-### RenderFlex overflow
+### Payment stuck after Razorpay
 
-- Reduce system font scale or use taller device
-- Symptom/helper lists use scrollable `ListView`
+- Tap **"I've paid"** in app → calls `POST /api/payments/confirm-order`
+- Backend persists order in `payment_transactions` table
 
-### Web limitations
+### Dark mode on login page
 
-- GPS requires browser permission (HTTPS or localhost)
-- WhatsApp opens `wa.me` in new tab
-- Some native features (tel:, file picker) behave differently
+- Login/signup **always light** — if you still see dark inputs, hot restart the app
+
+### Booking Continue button stays disabled
+
+- Fill all Patient Details fields with valid values
+- Age must be selected via the age wheel picker (tap the Age field)
+- Contact must be exactly 10 digits starting with 6–9
+
+### Form validation errors not visible
+
+- Errors appear as small text below the field (not inside the input box)
+- Hot restart after code changes to `premium_patient_form_field.dart`
+
+### Play Store upload rejected (signing)
+
+- Release builds must use `upload-keystore.jks`, not the debug keystore
+- See [Google Play Store](#google-play-store) section
 
 ---
 
@@ -915,16 +980,14 @@ Emergency data is **local only** — no backend required for SOS.
 
 | Document | Location |
 |----------|----------|
-| Platform overview | [../README.md](../README.md) |
-| Expo mobile app | [../mobile/README.md](../mobile/README.md) |
-| Google Sign-In (Expo) | [../mobile/GOOGLE_SIGNIN.md](../mobile/GOOGLE_SIGNIN.md) |
-| Backend API docs | `http://localhost:5000/docs` |
-| Agora setup | [../fastapi_back/AGORA_VIDEO.md](../fastapi_back/AGORA_VIDEO.md) |
-| Telegram bot | [../fastapi_back/TELEGRAM_BOT.md](../fastapi_back/TELEGRAM_BOT.md) |
-| Phone testing | [../fastapi_back/README_PHONE.md](../fastapi_back/README_PHONE.md) |
+| Monorepo overview | [../README.md](../README.md) |
+| Backend deploy | [../BACKEND_GITHUB_DEPLOY.md](../BACKEND_GITHUB_DEPLOY.md) |
+| Backend security steps | [../fastapi_back/SECURITY_STEP1.md](../fastapi_back/SECURITY_STEP1.md) |
+| Agora video | [../fastapi_back/AGORA_VIDEO.md](../fastapi_back/AGORA_VIDEO.md) |
+| Phone API testing | [../fastapi_back/README_PHONE.md](../fastapi_back/README_PHONE.md) |
 
 ---
 
 ## License
 
-Part of the MEDCLUES / PMS FNL 2 healthcare platform. Keep API keys, `.env` files, and credential documents private.
+Part of the MEDCLUES healthcare platform. Do not commit `.env`, Firebase keys, or credential files to public repositories.

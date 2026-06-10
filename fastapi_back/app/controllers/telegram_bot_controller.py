@@ -25,8 +25,10 @@ BOT_NAME = "Medi-Chain Bot"
 def _help_text() -> str:
     return (
         f"🏥 {BOT_NAME} — Patient commands\n\n"
+        "Link account (recommended):\n"
+        "MediChain+ app → Settings → Connect Telegram\n"
+        "(works with Google sign-in — no password here)\n\n"
         "Account:\n"
-        "/login <email> <password> — Link your MediChain+ account\n"
         "/logout — Unlink this Telegram chat\n"
         "/profile — Your profile\n\n"
         "Appointments:\n"
@@ -41,9 +43,12 @@ def _help_text() -> str:
 def _welcome_unlinked() -> str:
     return (
         f"Welcome to {BOT_NAME}! 🏥\n\n"
-        "Your account is not linked yet.\n"
-        "Please link your account by typing:\n"
-        "/login <your_email> <your_password>"
+        "Your account is not linked yet.\n\n"
+        "✅ Easy link (Google or email login in app):\n"
+        "1. Open MediChain+ on your phone\n"
+        "2. Go to Settings → Connect Telegram\n"
+        "3. Tap Connect — Telegram opens automatically\n\n"
+        "No password needed in this chat."
     )
 
 
@@ -79,7 +84,7 @@ async def build_reply(
 ) -> Optional[str]:
     lower = text.lower()
     if lower.startswith("/start"):
-        return await _cmd_start(chat_id)
+        return await _cmd_start(chat_id, text, telegram_username)
     if lower.startswith("/help"):
         return _help_text()
     if lower.startswith("/login"):
@@ -100,7 +105,19 @@ async def build_reply(
     )
 
 
-async def _cmd_start(chat_id: int) -> str:
+async def _cmd_start(
+    chat_id: int,
+    text: str,
+    telegram_username: Optional[str] = None,
+) -> str:
+    parts = text.split(maxsplit=1)
+    if len(parts) > 1 and parts[1].startswith("link_"):
+        from app.controllers.telegram_link_controller import link_chat_with_code
+
+        code = parts[1][5:].strip()
+        ok, msg = await link_chat_with_code(chat_id, code, telegram_username)
+        return msg
+
     link = await telegram_model.get_link_by_chat_id(chat_id)
     if link:
         return _welcome_linked(link["name"], link.get("role") or "patient")

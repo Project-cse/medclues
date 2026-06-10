@@ -15,12 +15,14 @@ class AppointmentCard extends StatelessWidget {
     this.showBadge = true,
     this.onTap,
     this.onCancel,
+    this.onAddToCalendar,
   });
 
   final AppointmentModel appointment;
   final bool showBadge;
   final VoidCallback? onTap;
   final VoidCallback? onCancel;
+  final VoidCallback? onAddToCalendar;
 
   @override
   Widget build(BuildContext context) {
@@ -87,8 +89,31 @@ class AppointmentCard extends StatelessWidget {
                     ],
                   ),
                 ],
-                if (onCancel != null && isUpcoming) ...[
+                if (onAddToCalendar != null && isUpcoming) ...[
                   const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: onAddToCalendar,
+                      icon: const Icon(Icons.event_available_outlined, size: 16),
+                      label: Text(
+                        'Calendar',
+                        style: GoogleFonts.poppins(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.primaryBlue,
+                        ),
+                      ),
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                    ),
+                  ),
+                ],
+                if (onCancel != null && isUpcoming) ...[
+                  const SizedBox(height: 4),
                   Align(
                     alignment: Alignment.centerLeft,
                     child: TextButton(

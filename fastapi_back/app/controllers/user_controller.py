@@ -14,6 +14,14 @@ from app.utils.formatters import format_user, format_doctor
 import cloudinary.uploader
 from app.services import email_service, socket_service
 from app.config.db import db
+from app.services.oauth_verification import (
+    OAuthVerificationError,
+    extract_id_token_from_body,
+    verify_google_id_token,
+)
+from app.utils.app_logger import get_logger
+
+log = get_logger(__name__)
 
 # Helper to verify password (supporting plain text with auto-upgrade fallback)
 def verify_password(password: str, hashed: str) -> bool:
@@ -130,8 +138,29 @@ async def social_login(req_body: dict):
         email = req_body.get('email')
         name = req_body.get('name')
         photo_url = req_body.get('photoURL')
-        provider = req_body.get('provider', 'google')
+        provider = (req_body.get('provider') or 'google').strip().lower()
         uid = req_body.get('uid')
+
+        id_token_raw = extract_id_token_from_body(req_body)
+        if id_token_raw and provider in ('google', 'firebase'):
+            try:
+                claims = verify_google_id_token(id_token_raw)
+                email = claims.get('email') or email
+                name = claims.get('name') or name or (email.split('@')[0] if email else '')
+                photo_url = claims.get('picture') or photo_url
+                uid = claims.get('sub') or uid
+            except OAuthVerificationError as oauth_err:
+                return {"success": False, "message": str(oauth_err)}
+        elif not settings.SOCIAL_LOGIN_ALLOW_LEGACY:
+            return {
+                "success": False,
+                "message": "ID token required for social login. Update the client app or contact support.",
+            }
+        else:
+            log.warning(
+                "Social login legacy path used for provider=%s (no idToken verified)",
+                provider,
+            )
 
         if not email:
             return {"success": False, "message": "Missing Email"}
@@ -478,18 +507,30 @@ async def book_appointment(user_id: int, req_body: dict, prescription_file: Opti
         from app.services import doctor_slot_service
         from app.models import doctor_slot_model
 
+        doctor_ref, _ = doctor_slot_service.normalize_doctor_ref(doc_id)
+        await doctor_slot_service.ensure_doctor_slots_for_doctor(doctor_ref)
+
         slot_id_raw = req_body.get('slotId') or req_body.get('slot_id')
-        booking_mode_req = (req_body.get('mode') or req_body.get('visitType') or '').lower()
-        slot_type_req = req_body.get('slotType') or req_body.get('slot_type')
+        booking_mode_req = doctor_slot_service.normalize_booking_mode(
+            req_body.get('mode') or req_body.get('visitType')
+        )
+        slot_type_req = doctor_slot_service.infer_slot_type_from_label(
+            slot_time,
+            req_body.get('slotType') or req_body.get('slot_type'),
+        )
         resolved_slot = None
         booked_slot_id = None
 
-        if slot_id_raw or (booking_mode_req and slot_type_req):
-            doctor_ref, _ = doctor_slot_service.normalize_doctor_ref(doc_id)
+        wants_slot = bool(
+            slot_id_raw
+            or booking_mode_req in ("offline", "online")
+            or slot_type_req in ("morning_opd", "evening_opd", "video")
+        )
+        if wants_slot:
             resolved_slot, slot_err = await doctor_slot_service.resolve_slot_for_booking(
                 doctor_ref,
                 int(slot_id_raw) if slot_id_raw else None,
-                booking_mode_req or 'offline',
+                booking_mode_req,
                 slot_type_req,
                 slot_date,
             )
@@ -506,10 +547,15 @@ async def book_appointment(user_id: int, req_body: dict, prescription_file: Opti
         slots_booked = doc_data.get('slots_booked', {})
         if isinstance(slots_booked, str):
             slots_booked = json.loads(slots_booked)
-        if slot_date in slots_booked:
+        if booked_slot_id:
+            # doctor_slots is source of truth — allow multiple bookings per OPD block label
+            if slot_date not in slots_booked:
+                slots_booked[slot_date] = []
+            marker = f"slot:{booked_slot_id}"
+            if marker not in slots_booked[slot_date]:
+                slots_booked[slot_date].append(marker)
+        elif slot_date in slots_booked:
             if slot_time in slots_booked[slot_date]:
-                if booked_slot_id:
-                    await doctor_slot_model.release_slot(booked_slot_id)
                 return {"success": False, "message": "Slot not available"}
             slots_booked[slot_date].append(slot_time)
         else:
@@ -656,6 +702,20 @@ async def book_appointment(user_id: int, req_body: dict, prescription_file: Opti
 
         saved_booking_id = new_appointment.get('booking_id') or booking_id
 
+        try:
+            from app.services import fcm_service
+            asyncio.create_task(
+                fcm_service.notify_appointment_booked(
+                    user_id,
+                    doc_data.get('name', 'Doctor'),
+                    slot_date,
+                    slot_time,
+                    int(new_appointment['id']),
+                )
+            )
+        except Exception as push_err:
+            print(f"[WARNING] FCM booking push: {push_err}")
+
         return {
             "success": True,
             "message": "Appointment Booked",
@@ -670,9 +730,19 @@ async def book_appointment(user_id: int, req_body: dict, prescription_file: Opti
         print(f"[ERROR] Book Appointment Error: {e}")
         return {"success": False, "message": str(e)}
 
-async def list_appointments(user_id: int):
+async def list_appointments(
+    user_id: int,
+    *,
+    limit: int | None = None,
+    offset: int = 0,
+):
     try:
-        appointments = await appointment_model.get_appointments_by_user_id(user_id)
+        from app.utils.pagination import pagination_meta, with_pagination
+
+        total = await appointment_model.count_appointments_by_user_id(user_id)
+        appointments = await appointment_model.get_appointments_by_user_id(
+            user_id, limit=limit, offset=offset
+        )
         
         # JS expects specifically formatted objects
         formatted = []
@@ -703,9 +773,18 @@ async def list_appointments(user_id: int):
                 "queuePosition": apt['queue_position'],
                 "estimatedWaitTime": apt['estimated_wait_time']
             })
-        return {"success": True, "appointments": formatted}
+        payload = {"success": True, "appointments": formatted}
+        return with_pagination(
+            payload,
+            pagination_meta(
+                total=total,
+                limit=limit,
+                offset=offset,
+                returned=len(formatted),
+            ),
+        )
     except Exception as e:
-        print(f"[ERROR] List Appointments Error: {e}")
+        log.error("List appointments error: %s", e)
         return {"success": False, "message": str(e)}
 
 async def cancel_appointment(user_id: int, appointment_id: int):
@@ -731,14 +810,33 @@ async def cancel_appointment(user_id: int, appointment_id: int):
             
             date = appointment['slot_date']
             time_str = appointment['slot_time']
-            
-            if date in slots_booked and time_str in slots_booked[date]:
-                slots_booked[date].remove(time_str)
+            slot_id = appointment.get('slot_id')
+
+            if date in slots_booked:
+                if slot_id:
+                    marker = f"slot:{slot_id}"
+                    if marker in slots_booked[date]:
+                        slots_booked[date].remove(marker)
+                if time_str in slots_booked[date]:
+                    slots_booked[date].remove(time_str)
                 await doctor_model.update_doctor(doc_id, {"slots_booked": slots_booked})
 
         # Trigger Real-time update
         from app.services.socket_service import sio
         await sio.emit('appointments-deleted', {'id': appointment_id})
+
+        try:
+            from app.services import fcm_service
+            doc_name = "your doctor"
+            if doc_data and doc_data.get("name"):
+                doc_name = doc_data["name"]
+            asyncio.create_task(
+                fcm_service.notify_appointment_cancelled(
+                    user_id, doc_name, int(appointment_id)
+                )
+            )
+        except Exception as push_err:
+            print(f"[WARNING] FCM cancel push: {push_err}")
 
         return {"success": True, "message": "Appointment Cancelled"}
     except Exception as e:
@@ -885,15 +983,21 @@ async def add_emergency_contact(user_id: int, req_body: dict):
     except Exception as e:
         return {"success": False, "message": str(e)}
 
-async def update_emergency_contact(contact_id: int, req_body: dict):
+async def update_emergency_contact(user_id: int, contact_id: int, req_body: dict):
     try:
+        existing = await user_model.get_emergency_contact_by_id(contact_id)
+        if not existing or existing.get("user_id") != user_id:
+            return {"success": False, "message": "Contact not found"}
         await user_model.update_emergency_contact(contact_id, req_body)
         return {"success": True, "message": "Contact updated"}
     except Exception as e:
         return {"success": False, "message": str(e)}
 
-async def delete_emergency_contact(contact_id: int):
+async def delete_emergency_contact(user_id: int, contact_id: int):
     try:
+        existing = await user_model.get_emergency_contact_by_id(contact_id)
+        if not existing or existing.get("user_id") != user_id:
+            return {"success": False, "message": "Contact not found"}
         await user_model.delete_emergency_contact(contact_id)
         return {"success": True, "message": "Deleted"}
     except Exception as e:
@@ -1093,3 +1197,24 @@ async def init_payu_payment(user_id: int, req_body: dict):
 
 async def get_merchant_upi():
     return {"success": True, "merchantUPI": settings.MERCHANT_UPI_ID or "demo@upi"}
+
+
+async def register_fcm_token(user_id: int, body: dict):
+    token = (body.get("token") or body.get("fcm_token") or "").strip()
+    if not token:
+        return {"success": False, "message": "FCM token is required"}
+    platform = (body.get("platform") or "android").strip().lower()
+    from app.models import fcm_token_model
+
+    await fcm_token_model.upsert_token(user_id, token, platform)
+    return {"success": True, "message": "FCM token saved"}
+
+
+async def remove_fcm_token(user_id: int, body: dict):
+    token = (body.get("token") or body.get("fcm_token") or "").strip()
+    if not token:
+        return {"success": False, "message": "FCM token is required"}
+    from app.models import fcm_token_model
+
+    await fcm_token_model.delete_token(user_id, token)
+    return {"success": True, "message": "FCM token removed"}

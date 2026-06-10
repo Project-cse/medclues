@@ -1,7 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/emergency_case_model.dart';
+import '../models/emergency_contact_model.dart';
 import '../models/emergency_settings_model.dart';
+import '../../../providers/auth_provider.dart';
+import '../../../providers/service_providers.dart';
 import '../services/emergency_location_service.dart';
 import '../services/emergency_notification_service.dart';
 import '../services/emergency_storage_service.dart';
@@ -35,6 +38,29 @@ class EmergencySettingsNotifier extends AsyncNotifier<EmergencySettingsModel> {
   Future<void> reload() async {
     state = const AsyncLoading();
     state = AsyncData(await ref.read(emergencyStorageProvider).loadSettings());
+  }
+
+  /// Saves the first emergency contact locally (tutorial / onboarding).
+  Future<void> upsertPrimaryContact(EmergencyContactModel contact) async {
+    final current = await ref.read(emergencyStorageProvider).loadSettings();
+    await save(current.copyWith(relativeContact1: contact));
+  }
+
+  /// Pull server contacts into local storage so Emergency settings & SOS see them.
+  Future<void> syncRemoteContactsFromApi() async {
+    try {
+      final remote = await ref.read(emergencyApiServiceProvider).fetchContacts();
+      if (remote.isEmpty) return;
+      final current = await ref.read(emergencyStorageProvider).loadSettings();
+      await save(
+        current.copyWith(
+          relativeContact1: remote.first,
+          relativeContact2: remote.length > 1 ? remote[1] : current.relativeContact2,
+        ),
+      );
+    } catch (_) {
+      // Offline or API unavailable — keep local data
+    }
   }
 }
 
@@ -97,6 +123,11 @@ class EmergencySessionNotifier extends Notifier<EmergencySessionState> {
     );
 
     await storage.saveCase(caseModel);
+
+    final auth = ref.read(authProvider);
+    if (auth.status == AuthStatus.authenticated) {
+      await ref.read(emergencyApiServiceProvider).logSosEvent(caseModel);
+    }
 
     final contacts = (await ref.read(emergencySettingsProvider.future)).savedContacts;
     if (contacts.isNotEmpty && severity == EmergencySeverity.critical) {

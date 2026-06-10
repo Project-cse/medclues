@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../constants/app_colors.dart';
+import '../../l10n/l10n_extension.dart';
 import '../../utils/theme_context.dart';
 import '../../models/doctor_model.dart';
 import '../../providers/doctor_provider.dart';
@@ -77,7 +78,7 @@ class _DoctorsListScreenState extends ConsumerState<DoctorsListScreen> {
   Widget build(BuildContext context) {
     final doctors = ref.watch(doctorsListProvider);
     final spec = widget.speciality?.trim();
-    final title = spec != null && spec.isNotEmpty ? formatSpecialityTitle(spec) : 'All Doctors';
+    final title = spec != null && spec.isNotEmpty ? formatSpecialityTitle(spec) : context.l10n.dashboardTopDoctors;
 
     return Scaffold(
       appBar: AppBar(title: Text(title, style: GoogleFonts.poppins(fontWeight: FontWeight.w700))),
@@ -91,8 +92,8 @@ class _DoctorsListScreenState extends ConsumerState<DoctorsListScreen> {
                 _searchText = v;
                 _page = 0;
               }),
-              decoration: const InputDecoration(
-                hintText: 'Search doctors...',
+              decoration: InputDecoration(
+                hintText: context.l10n.doctorsSearch,
                 prefixIcon: Icon(Icons.search),
               ),
             ),
@@ -102,10 +103,10 @@ class _DoctorsListScreenState extends ConsumerState<DoctorsListScreen> {
             padding: const EdgeInsets.all(12),
             child: Row(
               children: [
-                _chip('All', _DoctorFilter.all),
-                _chip('Available', _DoctorFilter.available),
-                _chip('Rating', _DoctorFilter.rating),
-                _chip('Experience', _DoctorFilter.experience),
+                _chip(context.l10n.dashboardViewAll, _DoctorFilter.all),
+                _chip(context.l10n.doctorsFilterAvailable, _DoctorFilter.available),
+                _chip(context.l10n.doctorsFilterRating, _DoctorFilter.rating),
+                _chip(context.l10n.doctorExperience, _DoctorFilter.experience),
               ],
             ),
           ),
@@ -113,7 +114,7 @@ class _DoctorsListScreenState extends ConsumerState<DoctorsListScreen> {
             child: doctors.when(
               data: (list) {
                 final sorted = _applyFilters(list);
-                if (sorted.isEmpty) return const AppEmptyState(title: 'No doctors found');
+                if (sorted.isEmpty) return AppEmptyState(title: context.l10n.doctorsEmpty);
                 final totalPages = totalPagesFor(sorted.length);
                 final safePage = _page.clamp(0, totalPages > 0 ? totalPages - 1 : 0);
                 if (safePage != _page) {

@@ -60,7 +60,7 @@ async def store_token(
     )
 
 
-async def find_active_by_hash(token_hash: str) -> Optional[dict]:
+async def find_by_hash(token_hash: str) -> Optional[dict]:
     row = await db.fetch_row(
         """
         SELECT id, user_id, role, token_hash, expires_at, revoked_at
@@ -71,6 +71,13 @@ async def find_active_by_hash(token_hash: str) -> Optional[dict]:
         token_hash,
     )
     return dict(row) if row else None
+
+
+async def find_active_by_hash(token_hash: str) -> Optional[dict]:
+    row = await find_by_hash(token_hash)
+    if not row or row.get("revoked_at"):
+        return None
+    return row
 
 
 async def revoke_by_hash(token_hash: str) -> None:

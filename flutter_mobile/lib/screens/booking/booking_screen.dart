@@ -21,6 +21,7 @@ import '../../providers/service_providers.dart';
 import '../../services/payment_service.dart';
 import '../../services/razorpay_checkout_service.dart';
 import '../../routes/route_names.dart';
+import '../../l10n/l10n_extension.dart';
 import '../../utils/currency_formatter.dart';
 import '../../utils/date_formatter.dart';
 import '../../utils/specialization_symptoms.dart';
@@ -55,6 +56,7 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
   PlatformFile? _reportFile;
   String? _reportFileName;
   late final List<({String label, int dayNum, String slotDate, String monthShort})> _week;
+  Timer? _slotRefreshTimer;
 
   PatientBookingInfo get _patient =>
       ref.read(bookingPatientProvider) ?? PatientBookingInfo(name: 'Patient', isSelf: true);
@@ -91,7 +93,27 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
       roomNo: doctor.addressLine2,
     );
     ref.invalidate(upcomingAppointmentsProvider);
+    ref.invalidate(doctorScheduleProvider((doctorId: widget.doctorId, mode: _slotMode)));
     if (mounted) context.go(RouteNames.bookingSuccess);
+  }
+
+  void _invalidateSchedule() {
+    ref.invalidate(doctorScheduleProvider((doctorId: widget.doctorId, mode: _slotMode)));
+  }
+
+  Widget _buildOpdSlotChip(SlotModel slot) {
+    final l10n = context.l10n;
+    return PremiumOpdSlotChip(
+      label: DateFormatter.displayTime(slot.displayTime),
+      selected: _selectedSlot?.time == slot.time,
+      enabled: slot.available,
+      remainingCount: slot.availableCount,
+      remainingLabel: slot.availableCount != null
+          ? l10n.bookingAppointmentsLeft(slot.availableCount!)
+          : null,
+      fullLabel: l10n.bookingSlotFull,
+      onTap: slot.available ? () => setState(() => _selectedSlot = slot) : null,
+    );
   }
 
   Future<void> _pickReport() async {
@@ -110,6 +132,11 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
   /// Slot API mode: online = video consult slots; offline = OPD blocks.
   String get _slotMode => widget.preferOnline ? 'online' : 'offline';
 
+  String? get _selectedSlotType =>
+      _selectedSlot == null
+          ? null
+          : inferOpdSlotType(_selectedSlot!.displayTime, _selectedSlot!.slotType);
+
   bool get _requiresRazorpay => widget.preferOnline || _payOnline;
 
   Future<Map<String, dynamic>> _collectRazorpayPayment({
@@ -126,7 +153,7 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
           key: order.razorpayKey,
           orderId: order.orderId,
           amountPaise: order.amount,
-          description: 'Consultation with ${doctor.name}',
+          description: context.l10n.bookingConsultationWith(doctor.name),
           customerName: user?.name,
           customerEmail: user?.email,
           customerPhone: user?.phone ?? _patient.phone,
@@ -148,20 +175,20 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
       mode: LaunchMode.externalApplication,
     );
     if (!launched) {
-      throw Exception('Could not open payment page. Check your connection.');
+      throw Exception(context.l10n.paymentCouldNotOpen);
     }
     return _waitForPaymentCompletion(order);
   }
 
   Future<void> _submitBooking(DoctorModel doctor) async {
     if (_selectedSlot == null) {
-      AppSnackbar.show(context, 'Please select date and time');
+      AppSnackbar.show(context, context.l10n.bookingSelectDateTime);
       return;
     }
 
     final availableSymptoms = SpecializationSymptoms.forSpecialization(doctor.specialization);
     if (availableSymptoms.isNotEmpty && _selectedSymptoms.isEmpty) {
-      AppSnackbar.show(context, 'Please select at least one symptom');
+      AppSnackbar.show(context, context.l10n.bookingSelectSymptom);
       return;
     }
 
@@ -175,7 +202,7 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
         if (!_patient.isSelf) {
           AppSnackbar.show(
             context,
-            'Online payment: book for yourself, or choose Pay at clinic for others.',
+            context.l10n.bookingOnlineOthersPayment,
           );
           return;
         }
@@ -190,7 +217,7 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
           appointmentTime: _selectedSlot!.time,
           notes: notes,
           slotId: _selectedSlot!.slotId,
-          slotType: _selectedSlot!.slotType,
+          slotType: _selectedSlotType,
           mode: isVideo ? 'online' : 'offline',
           visitType: isVideo ? 'Online' : 'In-clinic',
         );
@@ -239,7 +266,7 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
             visitType: 'In-clinic',
             mode: 'offline',
             slotId: _selectedSlot!.slotId,
-            slotType: _selectedSlot!.slotType,
+            slotType: _selectedSlotType,
             prescription: _reportFile,
           );
       await _completeBooking(
@@ -250,6 +277,7 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
         paymentMethod: 'payOnVisit',
       );
     } catch (e) {
+      _invalidateSchedule();
       if (mounted) {
         AppSnackbar.show(context, e.toString().replaceFirst('Exception: ', ''));
       }
@@ -264,19 +292,20 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
   ) async {
     final status = await paymentService.getOrderStatus(orderId);
     if (status['failed'] == true) {
-      throw Exception('Payment failed at Razorpay');
+      throw Exception(context.l10n.paymentFailed);
     }
     if (status['paid'] == true) {
       return paymentService.confirmPaidOrder(orderId);
     }
-    throw Exception('Payment not completed yet. Finish payment in Razorpay checkout.');
+    throw Exception(context.l10n.paymentNotCompleted);
   }
 
   Future<Map<String, dynamic>> _waitForPaymentCompletion(PaymentOrderResult order) async {
     final paymentService = ref.read(paymentServiceProvider);
+    final l10n = context.l10n;
     final cancelCompleter = Completer<void>();
     final confirmNowCompleter = Completer<void>();
-    var statusLabel = 'Complete payment in the Razorpay tab, then return here.';
+    var statusLabel = l10n.paymentCompleteBrowserHint;
     var dialogOpen = false;
     void Function(void Function())? dialogSetState;
 
@@ -292,7 +321,7 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
               builder: (context, setDialogState) {
                 dialogSetState = setDialogState;
                 return AlertDialog(
-                  title: const Text('Waiting for payment'),
+                  title: Text(l10n.paymentWaitingTitle),
                   content: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -303,10 +332,10 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
                       )),
                       Text(statusLabel),
                       const SizedBox(height: 12),
-                      Text('Order: ${order.orderId}', style: const TextStyle(fontSize: 12)),
+                      Text(l10n.paymentOrderLabel(order.orderId), style: const TextStyle(fontSize: 12)),
                       const SizedBox(height: 8),
                       Text(
-                        'After "Payment successful" on Razorpay, tap I\'ve paid below.',
+                        l10n.paymentTapIvePaidHint,
                         style: GoogleFonts.poppins(fontSize: 11, color: AppColors.textSecondary),
                       ),
                     ],
@@ -317,13 +346,13 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
                         if (!cancelCompleter.isCompleted) cancelCompleter.complete();
                         Navigator.pop(ctx);
                       },
-                      child: const Text('Cancel'),
+                      child: Text(l10n.commonCancel),
                     ),
                     FilledButton(
                       onPressed: () {
                         if (!confirmNowCompleter.isCompleted) confirmNowCompleter.complete();
                       },
-                      child: const Text("I've paid"),
+                      child: Text(l10n.paymentIvePaid),
                     ),
                   ],
                 );
@@ -338,9 +367,9 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
       final deadline = DateTime.now().add(const Duration(minutes: 5));
       while (DateTime.now().isBefore(deadline)) {
         if (cancelCompleter.isCompleted) {
-          throw Exception('Payment cancelled');
+          throw Exception(l10n.paymentCancelled);
         }
-        if (!mounted) throw Exception('Payment cancelled');
+        if (!mounted) throw Exception(l10n.paymentCancelled);
 
         await Future.any<void>([
           Future<void>.delayed(const Duration(seconds: 2)),
@@ -348,7 +377,7 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
           confirmNowCompleter.future,
         ]);
         if (cancelCompleter.isCompleted) {
-          throw Exception('Payment cancelled');
+          throw Exception(l10n.paymentCancelled);
         }
 
         try {
@@ -360,19 +389,19 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
             rethrow;
           }
           statusLabel = msg.contains('not completed')
-              ? 'Finish payment in Razorpay, then tap I\'ve paid.'
-              : 'Confirming booking… $msg';
+              ? l10n.paymentFinishThenTap
+              : l10n.paymentConfirmingBooking(msg);
           dialogSetState?.call(() {});
         }
       }
 
       if (cancelCompleter.isCompleted) {
-        throw Exception('Payment cancelled');
+        throw Exception(l10n.paymentCancelled);
       }
 
       final manual = await _showPaymentVerifyDialog(order, statusLabel);
       if (manual == null) {
-        throw Exception('Payment cancelled');
+        throw Exception(l10n.paymentCancelled);
       }
       return paymentService.verifyAppointmentPayment(
         orderId: manual.$1,
@@ -397,24 +426,24 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
-        title: const Text('Complete payment'),
+        title: Text(context.l10n.paymentCompleteTitle),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
               statusHint != null
-                  ? 'Payment status: $statusHint\n\nFinish payment in the Razorpay tab. The app checks automatically; use manual verify only if needed.'
-                  : 'Finish payment in the browser tab, then paste Razorpay details below.',
+                  ? context.l10n.paymentCompleteAutoHint(statusHint)
+                  : context.l10n.paymentCompleteBrowserHint,
             ),
             const SizedBox(height: 12),
-            Text('Order: ${order.orderId}', style: const TextStyle(fontSize: 12)),
-            TextField(controller: paymentId, decoration: const InputDecoration(labelText: 'Payment ID')),
-            TextField(controller: signature, decoration: const InputDecoration(labelText: 'Signature')),
+            Text(context.l10n.paymentOrderLabel(order.orderId), style: const TextStyle(fontSize: 12)),
+            TextField(controller: paymentId, decoration: InputDecoration(labelText: context.l10n.paymentPaymentId)),
+            TextField(controller: signature, decoration: InputDecoration(labelText: context.l10n.paymentSignature)),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Verify')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(context.l10n.commonCancel)),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text(context.l10n.paymentVerify)),
         ],
       ),
     );
@@ -433,11 +462,17 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
     _week = DateFormatter.buildNext5Days();
     _payOnline = false;
     final slotMode = widget.preferOnline ? 'online' : 'offline';
-    Future.microtask(() => prefetchDoctorSchedule(ref, widget.doctorId, mode: slotMode));
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      prefetchDoctorSchedule(ref, widget.doctorId, mode: slotMode);
+      _invalidateSchedule();
       if (ref.read(bookingPatientProvider) == null) {
         context.replace(_patientSelectorPath);
       }
+    });
+    _slotRefreshTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      if (!mounted) return;
+      _invalidateSchedule();
     });
   }
 
@@ -467,11 +502,11 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
       lastDate: last,
       builder: (ctx, child) => Theme(
         data: Theme.of(ctx).copyWith(
-          colorScheme: const ColorScheme.light(
+          colorScheme: ColorScheme.light(
             primary: PremiumBookingTheme.primaryBlue,
             onPrimary: Colors.white,
-            surface: PremiumBookingTheme.white,
-            onSurface: PremiumBookingTheme.text,
+            surface: PremiumBookingTheme.white(context),
+            onSurface: PremiumBookingTheme.text(context),
           ),
         ),
         child: child!,
@@ -486,6 +521,7 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
 
   @override
   void dispose() {
+    _slotRefreshTimer?.cancel();
     _note.dispose();
     _dateScroll.dispose();
     super.dispose();
@@ -493,6 +529,7 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final doctorAsync = ref.watch(doctorDetailProvider(widget.doctorId));
     final selectedDate = _week[_dayIndex].slotDate;
     final slotMode = _slotMode;
@@ -500,10 +537,10 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
       doctorScheduleProvider((doctorId: widget.doctorId, mode: slotMode)),
     );
 
-    final pageTitle = widget.preferOnline ? 'Book Video Consultation' : 'Book Appointment';
+    final pageTitle = widget.preferOnline ? l10n.bookingBookVideoConsult : l10n.bookingBookAppointment;
 
     return Scaffold(
-      backgroundColor: PremiumBookingTheme.background,
+      backgroundColor: PremiumBookingTheme.background(context),
       appBar: PremiumBookingAppBar(title: pageTitle),
       body: doctorAsync.when(
         loading: () => const AppLoader(),
@@ -518,10 +555,10 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
           final canBook = _selectedSlot != null;
           final symptoms = SpecializationSymptoms.forSpecialization(doctor.specialization);
           final ctaLabel = _booking
-              ? 'Confirming…'
+              ? l10n.bookingConfirming
               : _requiresRazorpay
-                  ? 'Pay ${CurrencyFormatter.format(fee)} & Book'
-                  : 'Book Appointment';
+                  ? l10n.bookingPayAndBook(CurrencyFormatter.format(fee))
+                  : l10n.bookingBookAppointment;
 
           return Column(
             children: [
@@ -537,7 +574,7 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
                     PremiumDoctorBookingCard(doctor: doctor),
                     const SizedBox(height: PremiumBookingTheme.sectionGap),
                     PremiumBookingSectionHeader(
-                      title: 'Select Date',
+                      title: l10n.bookingSelectDate,
                       trailing: PremiumViewCalendarAction(onTap: _openCalendarPicker),
                     ),
                     const SizedBox(height: 14),
@@ -570,7 +607,7 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
                     ),
                     const SizedBox(height: PremiumBookingTheme.sectionGap),
                     PremiumBookingSectionHeader(
-                      title: widget.preferOnline ? 'Video Consultation Slots' : 'OPD Time Slots',
+                      title: widget.preferOnline ? l10n.bookingVideoSlots : l10n.bookingOpdSlots,
                       icon: Icons.schedule_rounded,
                     ),
                     const SizedBox(height: 14),
@@ -579,30 +616,31 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
                       data: (schedule) {
                         final day = schedule[selectedDate];
                         final slots = day?.slots ?? const <SlotModel>[];
+                        final selectedStillValid = _selectedSlot == null ||
+                            slots.any(
+                              (s) => s.time == _selectedSlot!.time && s.available,
+                            );
+                        if (!selectedStillValid && _selectedSlot != null) {
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (mounted) setState(() => _selectedSlot = null);
+                          });
+                        }
                         if (slots.isEmpty) {
                           return Text(
-                            'No available slots for this date',
+                            l10n.bookingNoSlots,
                             style: GoogleFonts.inter(
                               fontSize: 13,
-                              color: PremiumBookingTheme.textSecondary,
+                              color: PremiumBookingTheme.textSecondary(context),
                             ),
                           );
                         }
                         if (slots.length == 2) {
                           return Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               for (var i = 0; i < slots.length; i++) ...[
                                 if (i > 0) const SizedBox(width: 12),
-                                Expanded(
-                                  child: PremiumOpdSlotChip(
-                                    label: DateFormatter.displayTime(slots[i].displayTime),
-                                    selected: _selectedSlot?.time == slots[i].time,
-                                    enabled: slots[i].available,
-                                    onTap: slots[i].available
-                                        ? () => setState(() => _selectedSlot = slots[i])
-                                        : null,
-                                  ),
-                                ),
+                                Expanded(child: _buildOpdSlotChip(slots[i])),
                               ],
                             ],
                           );
@@ -610,12 +648,7 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
                         return Column(
                           children: [
                             for (final s in slots) ...[
-                              PremiumOpdSlotChip(
-                                label: DateFormatter.displayTime(s.displayTime),
-                                selected: _selectedSlot?.time == s.time,
-                                enabled: s.available,
-                                onTap: s.available ? () => setState(() => _selectedSlot = s) : null,
-                              ),
+                              _buildOpdSlotChip(s),
                               const SizedBox(height: 10),
                             ],
                           ],
@@ -629,7 +662,7 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
                       ),
                       error: (e, _) => Text(
                         '$e',
-                        style: GoogleFonts.inter(color: PremiumBookingTheme.textSecondary),
+                        style: GoogleFonts.inter(color: PremiumBookingTheme.textSecondary(context)),
                       ),
                     ),
                     if (symptoms.isNotEmpty) ...[
@@ -651,12 +684,12 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
                     _reportsCard(doctor),
                     if (!widget.preferOnline) ...[
                       const SizedBox(height: PremiumBookingTheme.sectionGap),
-                      _sectionTitle('Payment Mode'),
+                      _sectionTitle(l10n.bookingPaymentMode),
                       Row(
                         children: [
                           Expanded(
                             child: _visitPill(
-                              label: 'In-clinic',
+                              label: l10n.bookingInClinic,
                               active: !_payOnline,
                               onTap: () => setState(() => _payOnline = false),
                             ),
@@ -664,7 +697,7 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
                           const SizedBox(width: 12),
                           Expanded(
                             child: _visitPill(
-                              label: 'Pay Online',
+                              label: l10n.bookingPayOnline,
                               active: _payOnline,
                               onTap: () => setState(() => _payOnline = true),
                             ),
@@ -676,51 +709,51 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
                         _infoBanner(
                           icon: Icons.payment_rounded,
                           text:
-                              'Pay ${CurrencyFormatter.format(doctor.consultationFee)} now via Razorpay before your visit.',
+                              l10n.bookingPayOnlineBanner(CurrencyFormatter.format(doctor.consultationFee)),
                         )
                       else
                         Text(
-                          'In-clinic visits: pay at the hospital reception.',
+                          l10n.bookingInClinicPayHint,
                           style: GoogleFonts.inter(
                             fontSize: 12,
-                            color: PremiumBookingTheme.textSecondary,
+                            color: PremiumBookingTheme.textSecondary(context),
                           ),
                         ),
                     ] else ...[
                       const SizedBox(height: 12),
                       Text(
-                        'Video consultation fee: ${CurrencyFormatter.format(fee)}. Payment via Razorpay is required.',
+                        l10n.bookingVideoFeeRequired(CurrencyFormatter.format(fee)),
                         style: GoogleFonts.inter(
                           fontSize: 12,
-                          color: PremiumBookingTheme.textSecondary,
+                          color: PremiumBookingTheme.textSecondary(context),
                         ),
                       ),
                     ],
                     const SizedBox(height: PremiumBookingTheme.sectionGap),
-                    _sectionTitle('Additional Note (Optional)'),
+                    _sectionTitle(l10n.bookingAdditionalNotes),
                     const SizedBox(height: 10),
                     TextField(
                       controller: _note,
                       maxLines: 3,
-                      style: GoogleFonts.inter(fontSize: 14, color: PremiumBookingTheme.text),
+                      style: GoogleFonts.inter(fontSize: 14, color: PremiumBookingTheme.text(context)),
                       decoration: InputDecoration(
-                        hintText: 'Any other details for the doctor...',
-                        hintStyle: GoogleFonts.inter(color: PremiumBookingTheme.textSecondary),
+                        hintText: l10n.bookingAdditionalNotes,
+                        hintStyle: GoogleFonts.inter(color: PremiumBookingTheme.textSecondary(context)),
                         filled: true,
-                        fillColor: PremiumBookingTheme.white,
+                        fillColor: PremiumBookingTheme.white(context),
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          borderSide: const BorderSide(color: PremiumBookingTheme.border),
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: PremiumBookingTheme.border(context)),
                         ),
                         enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          borderSide: const BorderSide(color: PremiumBookingTheme.border),
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: PremiumBookingTheme.border(context)),
                         ),
                         focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(16),
+                          borderRadius: BorderRadius.circular(12),
                           borderSide: const BorderSide(color: PremiumBookingTheme.accentBlue, width: 1.5),
                         ),
-                        contentPadding: const EdgeInsets.all(16),
+                        contentPadding: const EdgeInsets.all(14),
                       ),
                     ),
                     const SizedBox(height: PremiumBookingTheme.sectionGap),
@@ -742,13 +775,13 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
   }
 
   Widget _sectionTitle(String text) {
-    return Text(
-      text,
-      style: GoogleFonts.inter(
-        fontSize: 17,
-        fontWeight: FontWeight.w700,
-        color: PremiumBookingTheme.text,
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(text, style: PremiumBookingTheme.sectionTitleStyle(context)),
+        const SizedBox(height: 10),
+        Divider(height: 1, color: PremiumBookingTheme.border(context)),
+      ],
     );
   }
 
@@ -757,22 +790,23 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: PremiumBookingTheme.securityBg,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: PremiumBookingTheme.accentBlue.withValues(alpha: 0.15)),
+        color: PremiumBookingTheme.securityBg(context),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: PremiumBookingTheme.accentBlue.withValues(alpha: 0.2)),
       ),
       child: Row(
         children: [
-          Icon(icon, color: PremiumBookingTheme.accentBlue, size: 20),
+          Container(
+            width: 32,
+            height: 32,
+            decoration: PremiumBookingTheme.iconBadge(context),
+            child: Icon(icon, color: PremiumBookingTheme.accentBlue, size: 16),
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
               text,
-              style: GoogleFonts.inter(
-                fontSize: 12,
-                color: PremiumBookingTheme.text,
-                height: 1.4,
-              ),
+              style: PremiumBookingTheme.sectionSubtitleStyle(context),
             ),
           ),
         ],
@@ -783,22 +817,15 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
   Widget _reportsCard(DoctorModel doctor) {
     return Container(
       padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: PremiumBookingTheme.white,
-        borderRadius: BorderRadius.circular(PremiumBookingTheme.cardRadius),
-        boxShadow: PremiumBookingTheme.cardShadow,
-      ),
+      decoration: PremiumBookingTheme.corporateCard(context),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: PremiumBookingTheme.chipSelectedBg,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(Icons.description_outlined, size: 22, color: PremiumBookingTheme.accentBlue),
+            width: 36,
+            height: 36,
+            decoration: PremiumBookingTheme.iconBadge(context),
+            child: const Icon(Icons.description_outlined, size: 18, color: PremiumBookingTheme.accentBlue),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -806,35 +833,32 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Have Medical Reports?',
-                  style: GoogleFonts.inter(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: PremiumBookingTheme.text,
-                  ),
+                  context.l10n.bookingUploadReport,
+                  style: PremiumBookingTheme.sectionTitleStyle(context),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Upload lab reports, X-rays, or scans before your appointment.',
-                  style: GoogleFonts.inter(
-                    fontSize: 12,
-                    color: PremiumBookingTheme.textSecondary,
-                    height: 1.4,
-                  ),
+                  context.l10n.bookingPickReport,
+                  style: PremiumBookingTheme.sectionSubtitleStyle(context),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 14),
+                Divider(height: 1, color: PremiumBookingTheme.border(context)),
+                const SizedBox(height: 14),
                 OutlinedButton.icon(
                   onPressed: _pickReport,
-                  icon: const Icon(Icons.cloud_upload_outlined, size: 18),
+                  icon: const Icon(Icons.cloud_upload_outlined, size: 16),
                   label: Text(
-                    _reportFileName ?? 'Upload Reports',
-                    style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 13),
+                    _reportFileName ?? context.l10n.bookingUploadReport,
+                    style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 12),
                   ),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: PremiumBookingTheme.accentBlue,
-                    backgroundColor: PremiumBookingTheme.white,
-                    side: const BorderSide(color: PremiumBookingTheme.border),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    backgroundColor: PremiumBookingTheme.chipSelectedBg(context),
+                    side: BorderSide(
+                      color: PremiumBookingTheme.accentBlue.withValues(alpha: 0.25),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
                 ),
                 if (_reportFileName != null)
@@ -865,19 +889,19 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
         padding: const EdgeInsets.symmetric(vertical: 14),
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: active ? PremiumBookingTheme.primaryBlue : PremiumBookingTheme.white,
-          borderRadius: BorderRadius.circular(14),
+          gradient: active ? PremiumBookingTheme.selectedGradient : null,
+          color: active ? null : PremiumBookingTheme.white(context),
+          borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: active ? PremiumBookingTheme.primaryBlue : PremiumBookingTheme.border,
+            color: active ? PremiumBookingTheme.primaryBlue : PremiumBookingTheme.border(context),
           ),
-          boxShadow: active ? PremiumBookingTheme.softShadow : null,
         ),
         child: Text(
           label,
           style: GoogleFonts.inter(
             fontWeight: FontWeight.w600,
-            fontSize: 13,
-            color: active ? Colors.white : PremiumBookingTheme.textSecondary,
+            fontSize: 12,
+            color: active ? Colors.white : PremiumBookingTheme.text(context),
           ),
         ),
       ),

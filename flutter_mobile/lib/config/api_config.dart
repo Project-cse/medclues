@@ -42,6 +42,13 @@ class ApiConfig {
       _env('AGORA_APP_ID')?.trim() ?? const String.fromEnvironment('AGORA_APP_ID');
   static String get telegramBotToken =>
       _env('TELEGRAM_BOT_TOKEN')?.trim() ?? const String.fromEnvironment('TELEGRAM_BOT_TOKEN');
+  static String get telegramBotUsername {
+    final fromEnv = _env('TELEGRAM_BOT_USERNAME')?.trim().replaceFirst('@', '');
+    if (fromEnv != null && fromEnv.isNotEmpty) return fromEnv;
+    const fromDefine = String.fromEnvironment('TELEGRAM_BOT_USERNAME');
+    if (fromDefine.isNotEmpty) return fromDefine.replaceFirst('@', '');
+    return 'medcluesBot';
+  }
 
   // Auth / user
   static const String userLogin = '/api/user/login';
@@ -53,7 +60,14 @@ class ApiConfig {
   static const String userUpdateProfile = '/api/user/update-profile';
   static const String userEmergencyContacts = '/api/user/emergency-contacts';
   static const String userEmergencyContactAdd = '/api/user/emergency-contacts/add';
+  static const String userEmergencyContactUpdate = '/api/user/emergency-contacts/update';
+  static const String userEmergencyContactDelete = '/api/user/emergency-contacts/delete';
+  static const String emergencyLogEvent = '/api/emergency/log-event';
+  static const String emergencySendAlert = '/api/emergency/send-alert';
   static const String userForgotPassword = '/api/user/forgot-password';
+  static const String userFcmToken = '/api/user/fcm-token';
+  static const String userTelegramLinkCode = '/api/user/telegram/link-code';
+  static const String userTelegramStatus = '/api/user/telegram/status';
 
   // Health records
   static const String healthRecords = '/api/user/health-records';

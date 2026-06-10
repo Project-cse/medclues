@@ -1,5 +1,5 @@
-from fastapi import APIRouter, Request, Depends
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, Request, Depends, HTTPException
+from fastapi.responses import HTMLResponse, JSONResponse
 from app.controllers import payments_controller
 from app.middleware.auth import auth_user
 
@@ -17,9 +17,22 @@ async def checkout_complete(req: Request):
     )
 
 
+@router.post("/webhook")
+async def razorpay_webhook(req: Request):
+    """Razorpay server-to-server webhook (configure in Razorpay Dashboard)."""
+    body = await req.body()
+    signature = req.headers.get("X-Razorpay-Signature") or ""
+    if not payments_controller.verify_webhook_signature(body, signature):
+        raise HTTPException(status_code=400, detail="Invalid webhook signature")
+    import json
+    payload = json.loads(body.decode("utf-8"))
+    result = await payments_controller.handle_razorpay_webhook(payload)
+    return JSONResponse(content=result)
+
+
 @router.get("/checkout")
 async def payment_checkout(token: str):
-    html = payments_controller.get_checkout_html(token)
+    html = await payments_controller.get_checkout_html(token)
     if not html:
         return HTMLResponse(
             "<h2>Invalid or expired payment link</h2><p>Please return to the app and try again.</p>",
@@ -35,15 +48,20 @@ async def razorpay_key():
 
 @router.post("/create-order")
 async def create_order(req: Request, user_id: int = Depends(auth_user)):
-    body = await req.json()
-    if body.get("doctor_id"):
-        return await payments_controller.create_appointment_order(user_id, body)
+    from app.schemas.payments import CreateOrderRequest
+    from app.utils.validation import validate_body
 
-    amount = body.get("amount")
-    currency = body.get("currency", "INR")
-    receipt = body.get("receipt")
-    if amount is None:
-        return {"success": False, "message": "amount is required (INR or paise)"}
+    body = await req.json()
+    parsed = validate_body(CreateOrderRequest, body)
+    if hasattr(parsed, "status_code"):
+        return parsed
+    data = parsed.model_dump()
+    if data.get("doctor_id"):
+        return await payments_controller.create_appointment_order(user_id, data)
+
+    amount = data.get("amount")
+    currency = data.get("currency", "INR")
+    receipt = data.get("receipt")
     return await payments_controller.create_order(amount, currency, receipt)
 
 
@@ -109,5 +127,12 @@ async def confirm_order(req: Request, user_id: int = Depends(auth_user)):
 
 
 @router.get("/history")
-async def payment_history(user_id: int = Depends(auth_user)):
-    return await payments_controller.get_payment_history(user_id)
+async def payment_history(
+    user_id: int = Depends(auth_user),
+    limit: int | None = None,
+    offset: int = 0,
+):
+    from app.utils.pagination import parse_pagination
+
+    lim, off = parse_pagination(limit, offset)
+    return await payments_controller.get_payment_history(user_id, limit=lim, offset=off)

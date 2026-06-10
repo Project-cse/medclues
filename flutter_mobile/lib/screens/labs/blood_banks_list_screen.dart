@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../../constants/app_colors.dart';
 import '../../models/blood_bank_model.dart';
 import '../../services/api_service.dart';
 import '../../services/blood_bank_service.dart';
+import '../../utils/theme_context.dart';
 import '../../widgets/cards/blood_bank_card.dart';
-import '../../widgets/common/app_loader.dart';
+import '../../widgets/skeleton/list_card_skeleton.dart';
 
 final bloodBankServiceProvider =
     Provider<BloodBankService>((ref) => BloodBankService(ref.watch(apiServiceProvider)));
@@ -28,22 +28,23 @@ class BloodBanksListScreen extends ConsumerWidget {
       appBar: AppBar(
         title: Text(
           'Blood Banks',
-          style: GoogleFonts.poppins(
-            fontWeight: FontWeight.w700,
-            color: const Color(0xFF1E293B),
-          ),
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w700),
         ),
-        backgroundColor: Colors.white,
-        foregroundColor: const Color(0xFF1E293B),
-        elevation: 0,
-        surfaceTintColor: Colors.transparent,
       ),
       body: async.when(
-        loading: () => const AppLoader(),
+        loading: () => ListView.builder(
+          padding: const EdgeInsets.only(top: 8),
+          itemCount: 5,
+          itemBuilder: (_, __) => const ListCardSkeleton(height: 130),
+        ),
         error: (e, _) => Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
-            child: Text(e.toString(), textAlign: TextAlign.center),
+            child: Text(
+              e.toString(),
+              textAlign: TextAlign.center,
+              style: TextStyle(color: context.secondaryText),
+            ),
           ),
         ),
         data: (list) {
@@ -51,12 +52,12 @@ class BloodBanksListScreen extends ConsumerWidget {
             return Center(
               child: Text(
                 'No blood banks found',
-                style: GoogleFonts.poppins(color: AppColors.textSecondary),
+                style: GoogleFonts.poppins(color: context.secondaryText),
               ),
             );
           }
           return RefreshIndicator(
-            color: AppColors.logoTeal,
+            color: context.cs.primary,
             onRefresh: () async => ref.invalidate(bloodBanksListProvider),
             child: ListView.builder(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),

@@ -4,7 +4,11 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../widgets/emergency_home_button.dart';
 
+import '../../../l10n/l10n_extension.dart';
+import '../../../providers/auth_provider.dart';
+import '../../../providers/service_providers.dart';
 import '../../../widgets/common/app_snackbar.dart';
+import '../../../widgets/common/language_selector.dart';
 import '../emergency_constants.dart';
 import '../models/emergency_contact_model.dart';
 import '../models/emergency_settings_model.dart';
@@ -58,7 +62,22 @@ class _EmergencySettingsScreenState extends ConsumerState<EmergencySettingsScree
   }
 
   Future<void> _loadFromProvider() async {
-    final settings = await ref.read(emergencySettingsProvider.future);
+    var settings = await ref.read(emergencySettingsProvider.future);
+    final auth = ref.read(authProvider);
+    if (auth.status == AuthStatus.authenticated) {
+      try {
+        final remote = await ref.read(emergencyApiServiceProvider).fetchContacts();
+        if (remote.isNotEmpty) {
+          settings = settings.copyWith(
+            relativeContact1: remote.isNotEmpty ? remote.first : settings.relativeContact1,
+            relativeContact2: remote.length > 1 ? remote[1] : settings.relativeContact2,
+          );
+          await ref.read(emergencySettingsProvider.notifier).save(settings);
+        }
+      } catch (_) {
+        // Keep local settings when offline or API unavailable
+      }
+    }
     if (!mounted) return;
     _applyToForm(settings);
   }
@@ -89,12 +108,13 @@ class _EmergencySettingsScreenState extends ConsumerState<EmergencySettingsScree
       _c2Name.text.trim().isNotEmpty != _c2Phone.text.trim().isNotEmpty;
 
   Future<void> _save() async {
+    final l10n = context.l10n;
     if (_contact1Partial) {
-      AppSnackbar.show(context, 'Contact 1: enter both name and phone number');
+      AppSnackbar.show(context, '${l10n.emergencyContact1}: ${l10n.validationEmergencyNameRequired}, ${l10n.validationPhoneRequired}');
       return;
     }
     if (_contact2Partial) {
-      AppSnackbar.show(context, 'Contact 2: enter both name and phone number');
+      AppSnackbar.show(context, '${l10n.emergencyContact2}: ${l10n.validationEmergencyNameRequired}, ${l10n.validationPhoneRequired}');
       return;
     }
 
@@ -105,7 +125,7 @@ class _EmergencySettingsScreenState extends ConsumerState<EmergencySettingsScree
       c1 = storage.parseContact(_c1Name.text, _c1Phone.text, _c1Relation.text);
       c2 = storage.parseContact(_c2Name.text, _c2Phone.text, _c2Relation.text);
     } on ArgumentError catch (e) {
-      AppSnackbar.show(context, e.message?.toString() ?? 'Invalid contact details');
+      AppSnackbar.show(context, e.message?.toString() ?? l10n.commonError);
       return;
     }
 
@@ -126,20 +146,33 @@ class _EmergencySettingsScreenState extends ConsumerState<EmergencySettingsScree
       );
 
       await ref.read(emergencySettingsProvider.notifier).save(settings);
+
+      final auth = ref.read(authProvider);
+      if (auth.status == AuthStatus.authenticated && settings.savedContacts.isNotEmpty) {
+        try {
+          await ref.read(emergencyApiServiceProvider).syncContacts(settings.savedContacts);
+        } catch (_) {
+          // Local save succeeded; backend sync can retry later
+        }
+      }
+
       await ref.read(emergencySettingsProvider.notifier).reload();
       final verified = ref.read(emergencySettingsProvider).value ?? settings;
 
       if (!mounted) return;
       final count = verified.savedContacts.length;
+      final synced = auth.status == AuthStatus.authenticated && count > 0;
       AppSnackbar.show(
         context,
         count == 0
-            ? 'Settings saved (no relative contacts yet)'
-            : 'Settings saved — $count relative contact${count == 1 ? '' : 's'} stored',
+            ? l10n.emergencySaved
+            : synced
+                ? l10n.emergencySaved
+                : l10n.emergencySaved,
         success: true,
       );
     } catch (e) {
-      if (mounted) AppSnackbar.show(context, 'Could not save settings: $e');
+      if (mounted) AppSnackbar.show(context, '${l10n.commonError}: $e');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -147,6 +180,7 @@ class _EmergencySettingsScreenState extends ConsumerState<EmergencySettingsScree
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final settingsAsync = ref.watch(emergencySettingsProvider);
 
     return Scaffold(
@@ -154,31 +188,32 @@ class _EmergencySettingsScreenState extends ConsumerState<EmergencySettingsScree
       appBar: AppBar(
         backgroundColor: EmergencyConstants.emergencyRed,
         foregroundColor: Colors.white,
-        title: const Text('Emergency Settings'),
+        title: Text(l10n.emergencySettings),
         leading: const EmergencyHomeButton(clearSession: false),
+        actions: const [LanguageSelectorCompact()],
       ),
       body: settingsAsync.isLoading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                _sectionTitle('Relative Contacts'),
+                _sectionTitle(l10n.settingsEmergencySubtitle),
                 Text(
-                  'Both name and phone are required for each contact.',
+                  '${l10n.validationEmergencyNameRequired} & ${l10n.validationPhoneRequired}',
                   style: GoogleFonts.poppins(fontSize: 12, color: EmergencyConstants.emergencyText),
                 ),
                 const SizedBox(height: 8),
-                _contactFields('Contact 1', _c1Name, _c1Phone, _c1Relation),
-                _contactFields('Contact 2', _c2Name, _c2Phone, _c2Relation),
-                _sectionTitle('Medical Info'),
-                _field('Blood Group', _bloodGroup, hint: 'e.g. O+'),
-                _field('Allergies', _allergies, maxLines: 2),
-                _field('Existing Diseases', _diseases, maxLines: 2),
-                _field('Current Medications', _medications, maxLines: 2),
-                _sectionTitle('SOS Preferences'),
+                _contactFields(l10n.emergencyContact1, _c1Name, _c1Phone, _c1Relation),
+                _contactFields(l10n.emergencyContact2, _c2Name, _c2Phone, _c2Relation),
+                _sectionTitle(l10n.emergencyMedicalInfo),
+                _field(l10n.emergencyBloodGroup, _bloodGroup, hint: l10n.emergencyBloodGroupHint),
+                _field(l10n.emergencyAllergies, _allergies, maxLines: 2),
+                _field(l10n.emergencyExistingDiseases, _diseases, maxLines: 2),
+                _field(l10n.emergencyMedications, _medications, maxLines: 2),
+                _sectionTitle(l10n.emergencySosPreferences),
                 _switchTile(
-                  'Auto SOS Timer',
-                  'Countdown before automatic SOS (${_timerSeconds}s)',
+                  l10n.emergencyAutoSos,
+                  l10n.emergencyAutoSosTimerDesc(_timerSeconds),
                   true,
                   onChanged: null,
                 ),
@@ -191,18 +226,18 @@ class _EmergencySettingsScreenState extends ConsumerState<EmergencySettingsScree
                   activeColor: EmergencyConstants.emergencyRed,
                   onChanged: (v) => setState(() => _timerSeconds = v.round()),
                 ),
-                _switchTile('Voice SOS', 'Trigger SOS with voice command', _voiceSos,
+                _switchTile(l10n.emergencyVoiceSos, l10n.emergencyVoiceSosDesc, _voiceSos,
                     onChanged: (v) => setState(() => _voiceSos = v)),
-                _switchTile('Triple Tap SOS', 'Triple-tap power button pattern', _tripleTap,
+                _switchTile(l10n.emergencyTripleTap, l10n.emergencyTripleTapDesc, _tripleTap,
                     onChanged: (v) => setState(() => _tripleTap = v)),
-                _switchTile('Shake SOS', 'Shake device to trigger SOS', _shakeSos,
+                _switchTile(l10n.emergencyShakeSos, l10n.emergencyShakeSosDesc, _shakeSos,
                     onChanged: (v) => setState(() => _shakeSos = v)),
-                _switchTile('Auto Location Sharing', 'Share GPS when SOS activates', _autoLocation,
+                _switchTile(l10n.emergencyAutoLocationSharing, l10n.emergencyAutoLocationSharingDesc, _autoLocation,
                     onChanged: (v) => setState(() => _autoLocation = v)),
-                _sectionTitle('Default Emergency Numbers'),
-                _numberTile('Ambulance', EmergencyConstants.ambulance),
-                _numberTile('Police', '${EmergencyConstants.police} / ${EmergencyConstants.policeAlt}'),
-                _numberTile('Fire', EmergencyConstants.fire),
+                _sectionTitle(l10n.emergencyDefaultNumbers),
+                _numberTile(l10n.emergencyAmbulance, EmergencyConstants.ambulance),
+                _numberTile(l10n.emergencyPolice, '${EmergencyConstants.police} / ${EmergencyConstants.policeAlt}'),
+                _numberTile(l10n.emergencyFire, EmergencyConstants.fire),
                 const SizedBox(height: 16),
                 FilledButton(
                   style: FilledButton.styleFrom(
@@ -218,7 +253,7 @@ class _EmergencySettingsScreenState extends ConsumerState<EmergencySettingsScree
                           child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                         )
                       : Text(
-                          'Save Settings',
+                          l10n.emergencySave,
                           style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 16),
                         ),
                 ),
@@ -239,6 +274,7 @@ class _EmergencySettingsScreenState extends ConsumerState<EmergencySettingsScree
   }
 
   Widget _contactFields(String label, TextEditingController name, TextEditingController phone, TextEditingController relation) {
+    final l10n = context.l10n;
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: Padding(
@@ -248,9 +284,9 @@ class _EmergencySettingsScreenState extends ConsumerState<EmergencySettingsScree
           children: [
             Text(label, style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),
-            _field('Name *', name),
-            _field('Phone *', phone, keyboard: TextInputType.phone),
-            _field('Relation', relation, hint: 'e.g. Spouse'),
+            _field(l10n.emergencyNameRequired, name),
+            _field(l10n.emergencyPhoneRequired, phone, keyboard: TextInputType.phone),
+            _field(l10n.emergencyRelation, relation, hint: l10n.emergencyRelationHint),
           ],
         ),
       ),

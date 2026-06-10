@@ -13,9 +13,12 @@
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:medichain_mobile/l10n/app_localizations.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -24,10 +27,12 @@ import 'config/api_config.dart';
 import 'firebase_options.dart';
 import 'helpers/storage_helper.dart';
 import 'providers/auth_provider.dart';
+import 'providers/locale_provider.dart';
 import 'providers/theme_provider.dart';
 import 'onboarding/onboarding_manager.dart';
 import 'routes/app_router.dart';
 import 'services/api_service.dart';
+import 'services/push_notification_service.dart';
 import 'themes/app_theme.dart';
 import 'utils/web_safe_media_query.dart';
 
@@ -36,6 +41,7 @@ Future<void> main() async {
 
   await _loadEnv();
   await _initFirebase();
+  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   if (kDebugMode) {
     debugPrint('MEDCLUES API: ${ApiConfig.baseUrl}');
   }
@@ -59,6 +65,8 @@ Future<void> main() async {
   api.bindUnauthorized(() async {
     await container.read(authProvider.notifier).logout();
   });
+
+  PushNotificationService.instance.bind(api: api, navKey: rootNavigatorKey);
 
   runApp(
     UncontrolledProviderScope(
@@ -103,9 +111,18 @@ class MedcluesApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(goRouterProvider);
     final themeMode = ref.watch(themeModeProvider);
+    final locale = ref.watch(localeProvider);
     return MaterialApp.router(
       title: 'MEDCLUES',
       debugShowCheckedModeBanner: false,
+      locale: locale,
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       themeMode: themeMode,

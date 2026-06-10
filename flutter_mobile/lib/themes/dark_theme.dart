@@ -4,16 +4,16 @@ import 'package:google_fonts/google_fonts.dart';
 import '../constants/app_colors.dart';
 
 ThemeData buildDarkTheme() {
-  const bg = Color(0xFF0F172A);
-  const surface = Color(0xFF1E293B);
-  const surfaceHigh = Color(0xFF334155);
-  const onSurface = Color(0xFFF8FAFC);
-  const onVariant = Color(0xFF94A3B8);
-  const outline = Color(0xFF334155);
+  const bg = Color(0xFF000000);
+  const surface = Color(0xFF1A1A1A);
+  const surfaceHigh = Color(0xFF2A2A2A);
+  const onSurface = Color(0xFFF5F5F5);
+  const onVariant = Color(0xFFB0B0B0);
+  const outline = Color(0xFF2E2E2E);
 
   final colorScheme = const ColorScheme.dark(
     primary: Color(0xFF38BDF8),
-    onPrimary: Color(0xFF0F172A),
+    onPrimary: Color(0xFF000000),
     secondary: AppColors.brandCyan,
     surface: surface,
     onSurface: onSurface,
@@ -46,7 +46,7 @@ ThemeData buildDarkTheme() {
     ),
     navigationBarTheme: NavigationBarThemeData(
       backgroundColor: surface,
-      indicatorColor: const Color(0xFF0C4A6E),
+      indicatorColor: const Color(0xFF1E3A5F),
       elevation: 0,
       labelTextStyle: WidgetStateProperty.resolveWith((states) {
         final selected = states.contains(WidgetState.selected);
@@ -75,7 +75,8 @@ ThemeData buildDarkTheme() {
       textColor: onSurface,
     ),
     inputDecorationTheme: InputDecorationTheme(
-      filled: false,
+      filled: true,
+      fillColor: surfaceHigh,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       labelStyle: GoogleFonts.poppins(color: onVariant),
       hintStyle: GoogleFonts.poppins(color: onVariant),
@@ -111,7 +112,7 @@ ThemeData buildDarkTheme() {
     ),
     chipTheme: ChipThemeData(
       backgroundColor: surfaceHigh,
-      selectedColor: const Color(0xFF0C4A6E),
+      selectedColor: const Color(0xFF1E3A5F),
       disabledColor: surface,
       labelStyle: GoogleFonts.poppins(color: onSurface, fontSize: 12),
       secondaryLabelStyle: GoogleFonts.poppins(color: onSurface, fontSize: 12),

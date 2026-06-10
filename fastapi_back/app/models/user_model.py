@@ -122,13 +122,29 @@ async def get_emergency_contacts(user_id: int):
     sql = 'SELECT * FROM emergency_contacts WHERE user_id = $1'
     return await db.query(sql, user_id)
 
+
+async def get_emergency_contact_by_id(contact_id: int):
+    sql = 'SELECT * FROM emergency_contacts WHERE id = $1 LIMIT 1'
+    return await db.fetch_row(sql, contact_id)
+
 async def add_emergency_contact(user_id: int, contact_data: Dict[str, Any]):
+    contact_type = (
+        contact_data.get('contact_type')
+        or contact_data.get('type')
+        or 'family'
+    )
     sql = """
         INSERT INTO emergency_contacts (user_id, name, phone, relation, contact_type)
         VALUES ($1, $2, $3, $4, $5)
         RETURNING *
     """
-    values = (user_id, contact_data.get('name'), contact_data.get('phone'), contact_data.get('relation'), contact_data.get('contact_type'))
+    values = (
+        user_id,
+        contact_data.get('name'),
+        contact_data.get('phone'),
+        contact_data.get('relation'),
+        contact_type,
+    )
     return await db.fetch_row(sql, *values)
 
 async def delete_emergency_contact(contact_id: int):

@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../constants/app_colors.dart';
+import '../../l10n/l10n_extension.dart';
 import '../../utils/theme_context.dart';
 import '../../providers/appointment_provider.dart';
 import '../../providers/doctor_provider.dart';
@@ -38,6 +39,7 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final doctorAsync = ref.watch(doctorDetailProvider(doctorId));
     ref.listen(doctorDetailProvider(doctorId), (prev, next) {
       next.whenData((_) {
@@ -116,7 +118,7 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
-                          '${doctor.experienceLabel} Experience',
+                          '${doctor.experienceLabel} ${l10n.doctorExperience}',
                           style: GoogleFonts.poppins(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
@@ -144,7 +146,7 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                     if (doctor.consultationFee > 0) ...[
                       const SizedBox(height: 8),
                       Text(
-                        'Consultation: ${CurrencyFormatter.format(doctor.consultationFee)}',
+                        '${l10n.doctorFees}: ${CurrencyFormatter.format(doctor.consultationFee)}',
                         style: GoogleFonts.poppins(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
@@ -157,14 +159,14 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                       children: [
                         _DoctorActionButton(
                           icon: Icons.videocam_outlined,
-                          label: 'Video',
+                          label: l10n.videoConsult,
                           onTap: () => _openVideoBooking(context),
                         ),
                         _DoctorActionButton(
                           icon: Icons.share_outlined,
-                          label: 'Share',
+                          label: l10n.doctorShare,
                           onTap: () {
-                            Share.share('Book appointment with ${doctor.name}');
+                            Share.share('${l10n.bookAppointment} - ${doctor.name}');
                           },
                         ),
                       ],
@@ -174,7 +176,7 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                       Align(
                         alignment: Alignment.centerLeft,
                         child: Text(
-                          'About Doctor',
+                          l10n.doctorAbout,
                           style: GoogleFonts.poppins(
                             fontSize: 17,
                             fontWeight: FontWeight.w700,
@@ -200,7 +202,7 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                       Align(
                         alignment: Alignment.centerLeft,
                         child: Text(
-                          'Education',
+                          l10n.doctorEducation,
                           style: GoogleFonts.poppins(
                             fontSize: 17,
                             fontWeight: FontWeight.w700,
@@ -225,7 +227,7 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                     Align(
                       alignment: Alignment.centerLeft,
                       child: Text(
-                        'Availability',
+                          l10n.doctorAvailability,
                         style: GoogleFonts.poppins(
                           fontSize: 17,
                           fontWeight: FontWeight.w700,
@@ -237,7 +239,7 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                     Align(
                       alignment: Alignment.centerLeft,
                       child: Text(
-                        'Days: Mon - Sat',
+                        l10n.doctorAvailabilityDays,
                         style: GoogleFonts.poppins(fontSize: 14, color: context.secondaryText),
                       ),
                     ),
@@ -245,7 +247,7 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                     Align(
                       alignment: Alignment.centerLeft,
                       child: Text(
-                        'Time: 10:00 AM - 06:00 PM',
+                        l10n.doctorAvailabilityTime,
                         style: GoogleFonts.poppins(fontSize: 14, color: context.secondaryText),
                       ),
                     ),
@@ -261,7 +263,7 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     AppButton(
-                      label: 'Book Appointment',
+                      label: l10n.bookAppointment,
                       onPressed: () => _openInClinicBooking(context),
                     ),
                   ],

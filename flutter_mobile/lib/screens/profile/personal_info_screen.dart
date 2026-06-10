@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 
 import '../../constants/app_colors.dart';
 import '../../constants/profile_options.dart';
+import '../../l10n/l10n_extension.dart';
 import '../../providers/patient_provider.dart';
 import '../../providers/service_providers.dart';
 import '../../themes/theme_form_styles.dart';
@@ -66,7 +67,7 @@ class _PersonalInfoScreenState extends ConsumerState<PersonalInfoScreen> {
   }
 
   String _genderLabel(String? value) {
-    if (value == null) return 'Not set';
+    if (value == null) return context.l10n.profileNotSet;
     for (final item in ProfileOptions.genderItems) {
       if (item.$1 == value) return item.$2;
     }
@@ -75,7 +76,7 @@ class _PersonalInfoScreenState extends ConsumerState<PersonalInfoScreen> {
 
   String _addressLabel(dynamic p) {
     final addr = p.address?.trim();
-    if (addr == null || addr.isEmpty) return 'Not set';
+    if (addr == null || addr.isEmpty) return context.l10n.profileNotSet;
     return addr;
   }
 
@@ -103,7 +104,7 @@ class _PersonalInfoScreenState extends ConsumerState<PersonalInfoScreen> {
       setState(() => _uploadingPhoto = true);
       await ref.read(patientRepositoryProvider).uploadPhoto(picked);
       ref.invalidate(patientProfileProvider);
-      if (mounted) AppSnackbar.show(context, 'Photo updated successfully!', success: true);
+      if (mounted) AppSnackbar.show(context, context.l10n.profilePhotoUpdated, success: true);
     } catch (e) {
       if (mounted) AppSnackbar.show(context, e.toString());
     } finally {
@@ -138,7 +139,7 @@ class _PersonalInfoScreenState extends ConsumerState<PersonalInfoScreen> {
           );
       ref.invalidate(patientProfileProvider);
       if (mounted) {
-        AppSnackbar.show(context, 'Profile updated', success: true);
+        AppSnackbar.show(context, context.l10n.profileSaved, success: true);
         setState(() => _editing = false);
       }
     } catch (e) {
@@ -155,7 +156,7 @@ class _PersonalInfoScreenState extends ConsumerState<PersonalInfoScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Personal Information'),
+        title: Text(context.l10n.profilePersonalInfo),
         actions: [
           profile.when(
             loading: () => const SizedBox.shrink(),
@@ -165,7 +166,7 @@ class _PersonalInfoScreenState extends ConsumerState<PersonalInfoScreen> {
                 return TextButton(
                   onPressed: _loading ? null : () => _cancelEditing(p),
                   child: Text(
-                    'Cancel',
+                    context.l10n.profileCancelEdit,
                     style: GoogleFonts.poppins(fontWeight: FontWeight.w600, color: cs.error),
                   ),
                 );
@@ -174,7 +175,7 @@ class _PersonalInfoScreenState extends ConsumerState<PersonalInfoScreen> {
                 onPressed: () => _startEditing(p),
                 icon: const Icon(Icons.edit_outlined, size: 18),
                 label: Text(
-                  'Edit Details',
+                  context.l10n.profileEdit,
                   style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
                 ),
               );
@@ -192,20 +193,20 @@ class _PersonalInfoScreenState extends ConsumerState<PersonalInfoScreen> {
               children: [
                 Center(child: AvatarImage(uri: p.profilePicUrl, size: 100)),
                 const SizedBox(height: 24),
-                _viewRow(context, 'Full Name', p.name.trim().isEmpty ? 'Not set' : p.name),
-                _viewRow(context, 'Email', p.email),
-                _viewRow(context, 'Phone', p.phone?.isNotEmpty == true ? p.phone! : 'Not set'),
-                _viewRow(context, 'Gender', _genderLabel(ProfileOptions.normalizeGender(p.gender))),
-                _viewRow(context, 'Date of Birth', _formatDobDisplay(p.dob)),
+                _viewRow(context, context.l10n.authFullName, p.name.trim().isEmpty ? context.l10n.profileNotSet : p.name),
+                _viewRow(context, context.l10n.authEmail, p.email),
+                _viewRow(context, context.l10n.authPhone, p.phone?.isNotEmpty == true ? p.phone! : context.l10n.profileNotSet),
+                _viewRow(context, context.l10n.authGender, _genderLabel(ProfileOptions.normalizeGender(p.gender))),
+                _viewRow(context, context.l10n.authDateOfBirth, _formatDobDisplay(p.dob)),
                 _viewRow(
                   context,
-                  'Blood Group',
-                  ProfileOptions.normalizeBloodGroup(p.bloodGroup) ?? 'Not set',
+                  context.l10n.profileBloodGroup,
+                  ProfileOptions.normalizeBloodGroup(p.bloodGroup) ?? context.l10n.profileNotSet,
                 ),
-                _viewRow(context, 'Address', _addressLabel(p)),
+                _viewRow(context, context.l10n.profileAddress, _addressLabel(p)),
                 const SizedBox(height: 16),
                 Text(
-                  'Tap Edit Details to update your photo, personal info, or address.',
+                  context.l10n.profileEdit,
                   style: GoogleFonts.poppins(fontSize: 12, color: cs.onSurfaceVariant),
                 ),
               ],
@@ -243,16 +244,16 @@ class _PersonalInfoScreenState extends ConsumerState<PersonalInfoScreen> {
               const SizedBox(height: 8),
               Center(
                 child: Text(
-                  'Tap photo to change',
+                  context.l10n.profileEdit,
                   style: GoogleFonts.poppins(fontSize: 12, color: cs.onSurfaceVariant),
                 ),
               ),
               const SizedBox(height: 24),
-              _textField(context, label: 'Full Name', controller: _name),
-              _readOnlyField(context, label: 'Email', value: p.email),
+              _textField(context, label: context.l10n.authFullName, controller: _name),
+              _readOnlyField(context, label: context.l10n.authEmail, value: p.email),
               _textField(
                 context,
-                label: 'Phone',
+                label: context.l10n.authPhone,
                 controller: _phone,
                 keyboard: TextInputType.phone,
               ),
@@ -264,19 +265,19 @@ class _PersonalInfoScreenState extends ConsumerState<PersonalInfoScreen> {
               _bloodDropdown(context),
               const SizedBox(height: 24),
               Text(
-                'Address',
+                context.l10n.addressTitle,
                 style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w700, color: cs.onSurface),
               ),
               const SizedBox(height: 12),
-              _textField(context, label: 'Address line 1', controller: _addressLine1, hint: 'Street, area'),
-              _textField(context, label: 'Address line 2', controller: _addressLine2, hint: 'City, state, PIN'),
+              _textField(context, label: context.l10n.profileAddressLine1, controller: _addressLine1, hint: context.l10n.profileAddressLine1),
+              _textField(context, label: context.l10n.profileAddressLine2, controller: _addressLine2, hint: context.l10n.profileAddressLine2),
               const SizedBox(height: 8),
               Text(
-                'Google sign-in does not provide gender, DOB, or blood group. Please set them here.',
+                context.l10n.commonContinue,
                 style: GoogleFonts.poppins(fontSize: 12, color: cs.onSurfaceVariant),
               ),
               const SizedBox(height: 24),
-              AppButton(label: 'Save Changes', loading: _loading, onPressed: () => _save(p)),
+              AppButton(label: context.l10n.profileSaveChanges, loading: _loading, onPressed: () => _save(p)),
             ],
           );
         },
@@ -286,7 +287,7 @@ class _PersonalInfoScreenState extends ConsumerState<PersonalInfoScreen> {
 
   String _formatDobDisplay(String? dob) {
     final raw = ProfileOptions.sanitize(dob);
-    if (raw == null) return 'Not set';
+    if (raw == null) return context.l10n.profileNotSet;
     final parsed = DateTime.tryParse(raw) ?? _tryParseDob(raw);
     if (parsed == null) return raw;
     return DateFormat('dd MMM yyyy').format(parsed);
@@ -372,12 +373,12 @@ class _PersonalInfoScreenState extends ConsumerState<PersonalInfoScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Gender', style: profileLabelStyle(context)),
+        Text(context.l10n.authGender, style: profileLabelStyle(context)),
         const SizedBox(height: 6),
         DropdownButtonFormField<String>(
           key: ValueKey(_gender),
           initialValue: _gender,
-          decoration: profileInputDecoration(context, hint: 'Select gender'),
+          decoration: profileInputDecoration(context, hint: context.l10n.authGender),
           style: profileFieldTextStyle(context),
           items: ProfileOptions.genderItems
               .map((e) => DropdownMenuItem(value: e.$1, child: Text(e.$2)))
@@ -392,12 +393,12 @@ class _PersonalInfoScreenState extends ConsumerState<PersonalInfoScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Blood Group', style: profileLabelStyle(context)),
+        Text(context.l10n.profileBloodGroup, style: profileLabelStyle(context)),
         const SizedBox(height: 6),
         DropdownButtonFormField<String>(
           key: ValueKey(_bloodGroup),
           initialValue: _bloodGroup,
-          decoration: profileInputDecoration(context, hint: 'Select blood group'),
+          decoration: profileInputDecoration(context, hint: context.l10n.profileBloodGroup),
           style: profileFieldTextStyle(context),
           items: ProfileOptions.bloodGroups
               .map((g) => DropdownMenuItem(value: g, child: Text(g)))
@@ -414,18 +415,18 @@ class _PersonalInfoScreenState extends ConsumerState<PersonalInfoScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Date of Birth', style: profileLabelStyle(context)),
+        Text(context.l10n.authDateOfBirth, style: profileLabelStyle(context)),
         const SizedBox(height: 6),
         InkWell(
           onTap: _pickDob,
           borderRadius: BorderRadius.circular(12),
           child: InputDecorator(
-            decoration: profileInputDecoration(context, hint: 'Select date of birth'),
+            decoration: profileInputDecoration(context, hint: context.l10n.authSelectDob),
             child: Row(
               children: [
                 Expanded(
                   child: Text(
-                    label ?? 'Select date of birth',
+                    label ?? context.l10n.authSelectDob,
                     style: profileFieldTextStyle(context).copyWith(
                       color: label == null ? cs.onSurfaceVariant : cs.onSurface,
                     ),

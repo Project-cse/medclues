@@ -20,7 +20,7 @@ class PremiumHospitalAppBar extends StatelessWidget implements PreferredSizeWidg
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: PremiumHealthcareTheme.white,
+      color: PremiumHealthcareTheme.white(context),
       child: SafeArea(
         bottom: false,
         child: Padding(
@@ -29,7 +29,7 @@ class PremiumHospitalAppBar extends StatelessWidget implements PreferredSizeWidg
             children: [
               IconButton(
                 onPressed: onBack ?? () => Navigator.of(context).maybePop(),
-                icon: const Icon(Icons.arrow_back_rounded, color: PremiumHealthcareTheme.text, size: 22),
+                icon: Icon(Icons.arrow_back_rounded, color: PremiumHealthcareTheme.text(context), size: 22),
               ),
               Expanded(
                 child: Text(
@@ -38,7 +38,7 @@ class PremiumHospitalAppBar extends StatelessWidget implements PreferredSizeWidg
                   style: GoogleFonts.inter(
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
-                    color: PremiumHealthcareTheme.text,
+                    color: PremiumHealthcareTheme.text(context),
                   ),
                 ),
               ),
@@ -74,7 +74,7 @@ class PremiumHospitalHeroCard extends StatelessWidget {
       height: 208,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(PremiumHealthcareTheme.cardRadius),
-        boxShadow: PremiumHealthcareTheme.cardShadow,
+        boxShadow: PremiumHealthcareTheme.cardShadow(context),
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(PremiumHealthcareTheme.cardRadius),
@@ -280,7 +280,7 @@ class _StatItem extends StatelessWidget {
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             border: Border.all(color: PremiumHealthcareTheme.secondaryBlue.withValues(alpha: 0.35)),
-            color: PremiumHealthcareTheme.white,
+            color: PremiumHealthcareTheme.white(context),
           ),
           child: Icon(icon, size: 20, color: PremiumHealthcareTheme.secondaryBlue),
         ),
@@ -290,7 +290,7 @@ class _StatItem extends StatelessWidget {
           style: GoogleFonts.inter(
             fontSize: 15,
             fontWeight: FontWeight.w700,
-            color: PremiumHealthcareTheme.text,
+            color: PremiumHealthcareTheme.text(context),
           ),
         ),
         const SizedBox(height: 2),
@@ -300,7 +300,7 @@ class _StatItem extends StatelessWidget {
           style: GoogleFonts.inter(
             fontSize: 10,
             fontWeight: FontWeight.w500,
-            color: PremiumHealthcareTheme.textSecondary,
+            color: PremiumHealthcareTheme.textSecondary(context),
           ),
         ),
       ],
@@ -336,7 +336,7 @@ class PremiumDoctorsSectionHeader extends StatelessWidget {
             style: GoogleFonts.inter(
               fontSize: 17,
               fontWeight: FontWeight.w700,
-              color: PremiumHealthcareTheme.text,
+              color: PremiumHealthcareTheme.text(context),
             ),
           ),
           const SizedBox(width: 8),
@@ -402,9 +402,9 @@ class PremiumHospitalDoctorCard extends StatelessWidget {
       ),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: PremiumHealthcareTheme.white,
+        color: PremiumHealthcareTheme.white(context),
         borderRadius: BorderRadius.circular(PremiumHealthcareTheme.doctorCardRadius),
-        border: Border.all(color: PremiumHealthcareTheme.border),
+        border: Border.all(color: PremiumHealthcareTheme.border(context)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.04),
@@ -427,7 +427,7 @@ class PremiumHospitalDoctorCard extends StatelessWidget {
                   style: GoogleFonts.inter(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
-                    color: PremiumHealthcareTheme.text,
+                    color: PremiumHealthcareTheme.text(context),
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -436,7 +436,7 @@ class PremiumHospitalDoctorCard extends StatelessWidget {
                   style: GoogleFonts.inter(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
-                    color: PremiumHealthcareTheme.textSecondary,
+                    color: PremiumHealthcareTheme.textSecondary(context),
                   ),
                 ),
                 if (doctor.hasRating) ...[
@@ -450,7 +450,7 @@ class PremiumHospitalDoctorCard extends StatelessWidget {
                         style: GoogleFonts.inter(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
-                          color: PremiumHealthcareTheme.text,
+                          color: PremiumHealthcareTheme.text(context),
                         ),
                       ),
                     ],
@@ -484,9 +484,9 @@ class PremiumHospitalDoctorCard extends StatelessWidget {
                 onPressed: onBook,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: PremiumHealthcareTheme.navyButton,
-                  disabledBackgroundColor: PremiumHealthcareTheme.border,
+                  disabledBackgroundColor: PremiumHealthcareTheme.border(context),
                   foregroundColor: Colors.white,
-                  disabledForegroundColor: PremiumHealthcareTheme.textSecondary,
+                  disabledForegroundColor: PremiumHealthcareTheme.textSecondary(context),
                   elevation: 0,
                   padding: const EdgeInsets.symmetric(horizontal: 10),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -535,7 +535,7 @@ class PremiumHospitalTrustBanner extends StatelessWidget {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: PremiumHealthcareTheme.white,
+              color: PremiumHealthcareTheme.white(context),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: PremiumHealthcareTheme.secondaryBlue.withValues(alpha: 0.2)),
             ),
@@ -560,7 +560,7 @@ class PremiumHospitalTrustBanner extends StatelessWidget {
                   style: GoogleFonts.inter(
                     fontSize: 12,
                     fontWeight: FontWeight.w400,
-                    color: PremiumHealthcareTheme.textSecondary,
+                    color: PremiumHealthcareTheme.textSecondary(context),
                     height: 1.4,
                   ),
                 ),

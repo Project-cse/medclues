@@ -10,10 +10,10 @@ class DoctorCardSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = context.isDark;
-    final base = isDark ? const Color(0xFF334155) : MedcluesPalette.slate100;
-    final highlight = isDark ? const Color(0xFF475569) : MedcluesPalette.slate200;
-    final shimmerMid = isDark ? const Color(0xFF64748B) : MedcluesPalette.pureWhite;
+    final base = context.skeletonBase;
+    final highlight = context.skeletonHighlight;
+    final shimmerMid = context.skeletonShimmer;
+    final line = context.skeletonLine;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -30,13 +30,14 @@ class DoctorCardSkeleton extends StatelessWidget {
           margin: const EdgeInsets.symmetric(horizontal: 16),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: context.borderColor),
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(16),
             child: Row(
               children: [
                 ColoredBox(
-                  color: MedcluesPalette.medicalTeal.withValues(alpha: isDark ? 0.5 : 0.35),
+                  color: MedcluesPalette.medicalTeal.withValues(alpha: context.isDark ? 0.5 : 0.35),
                   child: const SizedBox(width: 4, height: 100),
                 ),
                 Expanded(
@@ -49,7 +50,7 @@ class DoctorCardSkeleton extends StatelessWidget {
                           width: 56,
                           height: 56,
                           decoration: BoxDecoration(
-                            color: highlight,
+                            color: line,
                             shape: BoxShape.circle,
                           ),
                         ),
@@ -59,9 +60,9 @@ class DoctorCardSkeleton extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Container(height: 12, width: 140, color: highlight),
+                              Container(height: 12, width: 140, color: line),
                               const SizedBox(height: 8),
-                              Container(height: 10, width: 90, color: highlight),
+                              Container(height: 10, width: 90, color: line),
                             ],
                           ),
                         ),

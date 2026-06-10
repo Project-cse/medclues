@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../constants/app_colors.dart';
-
 class AppLoader extends StatelessWidget {
   const AppLoader({super.key, this.message});
 
@@ -13,7 +11,7 @@ class AppLoader extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const CircularProgressIndicator(color: AppColors.primary),
+          CircularProgressIndicator(color: Theme.of(context).colorScheme.primary),
           if (message != null) ...[
             const SizedBox(height: 16),
             Text(message!, style: Theme.of(context).textTheme.bodyMedium),

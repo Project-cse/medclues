@@ -65,8 +65,15 @@ class HealthRecordService {
     try {
       final res = await _api.dio.get<List<int>>(
         ApiConfig.healthRecordFile(recordId, fileIndex: fileIndex),
-        options: Options(responseType: ResponseType.bytes),
+        options: Options(
+          responseType: ResponseType.bytes,
+          receiveTimeout: const Duration(seconds: 120),
+        ),
       );
+      final contentType = res.headers.value('content-type') ?? '';
+      if (contentType.contains('application/json')) {
+        throw Exception('Report not found or unavailable');
+      }
       final data = res.data;
       if (data == null || data.isEmpty) {
         throw Exception('Report file is empty or unavailable');

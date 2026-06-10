@@ -4,8 +4,10 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../constants/app_colors.dart';
+import '../../l10n/l10n_extension.dart';
 import '../../providers/appointment_provider.dart';
 import '../../routes/route_names.dart';
+import '../../utils/calendar_helper.dart';
 import '../../utils/currency_formatter.dart';
 import '../../utils/date_formatter.dart';
 import '../../widgets/common/app_button.dart';
@@ -28,11 +30,12 @@ class AppointmentDetailScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     final appt = ref.watch(appointmentDetailProvider(appointmentId));
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Appointment Details', style: GoogleFonts.poppins(fontWeight: FontWeight.w700)),
+        title: Text(l10n.appointmentsDetailsTitle, style: GoogleFonts.poppins(fontWeight: FontWeight.w700)),
         leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => context.pop()),
       ),
       body: appt.when(
@@ -41,10 +44,10 @@ class AppointmentDetailScreen extends ConsumerWidget {
         data: (a) {
           final isUpcoming = a.isUpcoming;
           final statusLabel = a.cancelled
-              ? 'Cancelled'
+              ? l10n.appointmentsCancelled
               : a.isCompleted
-                  ? 'Completed'
-                  : 'Upcoming';
+                  ? l10n.appointmentsCompleted
+                  : l10n.appointmentsUpcoming;
 
           return SingleChildScrollView(
             padding: const EdgeInsets.all(16),
@@ -92,7 +95,7 @@ class AppointmentDetailScreen extends ConsumerWidget {
                                   borderRadius: BorderRadius.circular(999),
                                 ),
                                 child: Text(
-                                  'Upcoming',
+                                  l10n.appointmentsUpcoming,
                                   style: GoogleFonts.poppins(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w600,
@@ -109,32 +112,46 @@ class AppointmentDetailScreen extends ConsumerWidget {
                   const Divider(height: 32),
                   _detailRow(
                     Icons.calendar_today_outlined,
-                    'Date & time',
+                    l10n.receiptDateTime,
                     '${DateFormatter.formatSlotDate(a.slotDate)} • ${DateFormatter.displayTime(a.slotTime)}',
                   ),
                   if (a.hospitalName != null && a.hospitalName!.isNotEmpty)
-                    _detailRow(Icons.local_hospital_outlined, 'Hospital', a.hospitalName!),
+                    _detailRow(Icons.local_hospital_outlined, l10n.receiptHospital, a.hospitalName!),
                   if (a.location != null && a.location!.isNotEmpty)
-                    _detailRow(Icons.location_on_outlined, 'Location', a.location!),
-                  _detailRow(Icons.info_outline, 'Status', statusLabel),
+                    _detailRow(Icons.location_on_outlined, l10n.receiptLocation, a.location!),
+                  _detailRow(Icons.info_outline, l10n.receiptStatus, statusLabel),
                   if (a.amount != null)
-                    _detailRow(Icons.payments_outlined, 'Consultation fee', CurrencyFormatter.format(a.amount!)),
+                    _detailRow(Icons.payments_outlined, l10n.doctorFees, CurrencyFormatter.format(a.amount!)),
                   if (a.bookingId != null && a.bookingId!.isNotEmpty)
-                    _detailRow(Icons.qr_code_2, 'Booking ID', a.bookingId!.toUpperCase()),
+                    _detailRow(Icons.qr_code_2, l10n.receiptBookingId, a.bookingId!.toUpperCase()),
                   if (a.tokenNumber != null && a.tokenNumber! > 0)
-                    _detailRow(Icons.confirmation_number_outlined, 'Token', '#${a.tokenNumber}'),
+                    _detailRow(Icons.confirmation_number_outlined, l10n.receiptToken, '#${a.tokenNumber}'),
                   if (a.isOnlineVisit && isUpcoming) ...[
                     const SizedBox(height: 20),
                     AppButton(
-                      label: 'Join Video Consult',
+                      label: l10n.doctorVideoConsult,
                       onPressed: () => context.push('/video-consult/${a.id}'),
                     ),
                     const SizedBox(height: 12),
                   ],
                   if (isUpcoming) ...[
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 16),
                     AppButton(
-                      label: 'Cancel Appointment',
+                      label: l10n.appointmentsAddToCalendar,
+                      variant: AppButtonVariant.secondary,
+                      onPressed: () async {
+                        final ok = await CalendarHelper.addAppointmentToCalendar(a);
+                        if (!context.mounted) return;
+                        AppSnackbar.show(
+                          context,
+                          ok ? l10n.appointmentsCalendarAdded : l10n.appointmentsCalendarFailed,
+                          success: ok,
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    AppButton(
+                      label: l10n.appointmentsCancel,
                       variant: AppButtonVariant.danger,
                       onPressed: () async {
                         try {
@@ -142,7 +159,7 @@ class AppointmentDetailScreen extends ConsumerWidget {
                           if (!context.mounted) return;
                           ref.read(appointmentsTabProvider.notifier).state = 2;
                           context.go(RouteNames.appointments);
-                          AppSnackbar.show(context, 'Appointment cancelled', success: true);
+                          AppSnackbar.show(context, l10n.appointmentsCancelledSuccess, success: true);
                         } catch (e) {
                           if (context.mounted) {
                             AppSnackbar.show(context, e.toString().replaceFirst('Exception: ', ''));
@@ -153,7 +170,7 @@ class AppointmentDetailScreen extends ConsumerWidget {
                     const SizedBox(height: 12),
                   ],
                   AppButton(
-                    label: 'Download Receipt',
+                    label: l10n.receiptAppointmentReceipt,
                     variant: AppButtonVariant.secondary,
                     onPressed: () => context.push('/booking/receipt/${a.id}'),
                   ),

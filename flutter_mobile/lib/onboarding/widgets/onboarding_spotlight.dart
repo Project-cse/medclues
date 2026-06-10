@@ -4,6 +4,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../l10n/l10n_extension.dart';
 import '../../widgets/healthcare/premium_healthcare_theme.dart';
 import '../onboarding_tour_steps.dart';
 
@@ -293,6 +294,7 @@ class _CoachBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final progress = step.index / totalSteps;
 
     return Material(
@@ -320,7 +322,7 @@ class _CoachBubble extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.98),
                   borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: PremiumHealthcareTheme.border.withValues(alpha: 0.5)),
+                  border: Border.all(color: PremiumHealthcareTheme.border(context).withValues(alpha: 0.5)),
                   boxShadow: [
                     BoxShadow(
                       color: PremiumHealthcareTheme.primaryBlue.withValues(alpha: 0.14),
@@ -337,7 +339,7 @@ class _CoachBubble extends StatelessWidget {
                       child: LinearProgressIndicator(
                         value: progress,
                         minHeight: 3,
-                        backgroundColor: PremiumHealthcareTheme.border.withValues(alpha: 0.35),
+                        backgroundColor: PremiumHealthcareTheme.border(context).withValues(alpha: 0.35),
                         valueColor: const AlwaysStoppedAnimation(PremiumHealthcareTheme.secondaryBlue),
                       ),
                     ),
@@ -363,15 +365,15 @@ class _CoachBubble extends StatelessWidget {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      step.title,
+                                      step.title(l10n),
                                       style: GoogleFonts.inter(
                                         fontSize: 16,
                                         fontWeight: FontWeight.w700,
-                                        color: PremiumHealthcareTheme.text,
+                                        color: PremiumHealthcareTheme.text(context),
                                       ),
                                     ),
                                     Text(
-                                      'Step ${step.index} of $totalSteps',
+                                      '${step.index}/$totalSteps',
                                       style: GoogleFonts.inter(
                                         fontSize: 11,
                                         fontWeight: FontWeight.w600,
@@ -385,11 +387,11 @@ class _CoachBubble extends StatelessWidget {
                           ),
                           const SizedBox(height: 10),
                           Text(
-                            step.message,
+                            step.message(l10n),
                             style: GoogleFonts.inter(
                               fontSize: 13,
                               height: 1.5,
-                              color: PremiumHealthcareTheme.textSecondary,
+                              color: PremiumHealthcareTheme.textSecondary(context),
                             ),
                           ),
                           const SizedBox(height: 12),
@@ -404,7 +406,7 @@ class _CoachBubble extends StatelessWidget {
                                 decoration: BoxDecoration(
                                   color: i + 1 == step.index
                                       ? PremiumHealthcareTheme.secondaryBlue
-                                      : PremiumHealthcareTheme.border,
+                                      : PremiumHealthcareTheme.border(context),
                                   borderRadius: BorderRadius.circular(3),
                                 ),
                               ),
@@ -421,11 +423,11 @@ class _CoachBubble extends StatelessWidget {
                                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                                 ),
                                 child: Text(
-                                  'Skip',
+                                  l10n.onboardingSkip,
                                   style: GoogleFonts.inter(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w600,
-                                    color: PremiumHealthcareTheme.textSecondary,
+                                    color: PremiumHealthcareTheme.textSecondary(context),
                                   ),
                                 ),
                               ),
@@ -439,7 +441,7 @@ class _CoachBubble extends StatelessWidget {
                                     side: BorderSide(color: PremiumHealthcareTheme.primaryBlue.withValues(alpha: 0.28)),
                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                                   ),
-                                  child: Text('Back', style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 12)),
+                                  child: Text(l10n.commonBack, style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 12)),
                                 ),
                                 const SizedBox(width: 6),
                               ],
@@ -454,7 +456,7 @@ class _CoachBubble extends StatelessWidget {
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                                 ),
                                 child: Text(
-                                  isLastTourStep ? 'Continue' : 'Next',
+                                  isLastTourStep ? l10n.commonContinue : l10n.onboardingNext,
                                   style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 13),
                                 ),
                               ),
@@ -520,7 +522,7 @@ class _TrianglePainter extends CustomPainter {
     canvas.drawPath(
       path,
       Paint()
-        ..color = PremiumHealthcareTheme.border.withValues(alpha: 0.4)
+        ..color = color.withValues(alpha: 0.65)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 0.8,
     );

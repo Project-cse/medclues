@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/app_localizations.dart';
 
 import '../routes/route_names.dart';
 
@@ -45,19 +46,18 @@ class OnboardingTourStep {
 
   final int index;
   final String route;
-  final String title;
-  final String message;
+  final String Function(AppLocalizations) title;
+  final String Function(AppLocalizations) message;
   final IconData icon;
   final OnboardingTarget target;
 }
 
-const onboardingTourSteps = <OnboardingTourStep>[
+final onboardingTourSteps = <OnboardingTourStep>[
   OnboardingTourStep(
     index: 1,
     route: RouteNames.dashboard,
-    title: 'Home',
-    message:
-        'Welcome to MEDCLUES. Your dashboard gives quick access to appointments, hospitals, doctors, records, and emergency services.',
+    title: (l10n) => l10n.tourHomeTitle,
+    message: (l10n) => l10n.tourHomeDesc,
     icon: Icons.home_rounded,
     target: OnboardingTarget(
       top: 0.9,
@@ -70,8 +70,8 @@ const onboardingTourSteps = <OnboardingTourStep>[
   OnboardingTourStep(
     index: 2,
     route: RouteNames.hospitals,
-    title: 'Hospitals',
-    message: 'Search hospitals, explore specialties, and find healthcare facilities near you.',
+    title: (l10n) => l10n.tourHospitalsTitle,
+    message: (l10n) => l10n.tourHospitalsDesc,
     icon: Icons.local_hospital_rounded,
     target: OnboardingTarget(
       top: 0.16,
@@ -84,8 +84,8 @@ const onboardingTourSteps = <OnboardingTourStep>[
   OnboardingTourStep(
     index: 3,
     route: RouteNames.doctors,
-    title: 'Doctors',
-    message: 'Find experienced doctors, view profiles, and book online or in-clinic consultations.',
+    title: (l10n) => l10n.tourDoctorsTitle,
+    message: (l10n) => l10n.tourDoctorsDesc,
     icon: Icons.medical_services_rounded,
     target: OnboardingTarget(
       top: 0.1,
@@ -98,8 +98,8 @@ const onboardingTourSteps = <OnboardingTourStep>[
   OnboardingTourStep(
     index: 4,
     route: RouteNames.appointments,
-    title: 'Appointments',
-    message: 'Track upcoming, completed, and cancelled appointments in one place.',
+    title: (l10n) => l10n.tourAppointmentsTitle,
+    message: (l10n) => l10n.tourAppointmentsDesc,
     icon: Icons.calendar_today_rounded,
     target: OnboardingTarget(
       top: 0.9,
@@ -112,8 +112,8 @@ const onboardingTourSteps = <OnboardingTourStep>[
   OnboardingTourStep(
     index: 5,
     route: '/records',
-    title: 'Medical Records',
-    message: 'Upload, view, and securely share prescriptions, lab reports, and medical documents.',
+    title: (l10n) => l10n.tourRecordsTitle,
+    message: (l10n) => l10n.tourRecordsDesc,
     icon: Icons.folder_open_rounded,
     target: OnboardingTarget(
       top: 0.9,
@@ -126,9 +126,8 @@ const onboardingTourSteps = <OnboardingTourStep>[
   OnboardingTourStep(
     index: 6,
     route: RouteNames.emergency,
-    title: 'Emergency',
-    message:
-        'In emergencies, MEDCLUES helps you access SOS assistance and notify trusted contacts quickly.',
+    title: (l10n) => l10n.tourEmergencyTitle,
+    message: (l10n) => l10n.tourEmergencyDesc,
     icon: Icons.emergency_rounded,
     target: OnboardingTarget(
       top: 0.34,

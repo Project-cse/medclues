@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../../constants/app_colors.dart';
 import '../../models/lab_model.dart';
 import '../../services/api_service.dart';
 import '../../services/lab_service.dart';
-import '../../widgets/common/app_loader.dart';
+import '../../utils/theme_context.dart';
 import '../../widgets/common/avatar_image.dart';
+import '../../widgets/skeleton/list_card_skeleton.dart';
 
 final labServiceProvider = Provider<LabService>((ref) => LabService(ref.watch(apiServiceProvider)));
 
@@ -74,34 +74,40 @@ class _LabsListScreenState extends ConsumerState<LabsListScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text('Labs', style: GoogleFonts.poppins(fontWeight: FontWeight.w700)),
-        backgroundColor: Colors.white,
-        foregroundColor: AppColors.textPrimary,
-        elevation: 0,
       ),
       body: Column(
         children: [
-          _filtersBar(),
+          _filtersBar(context),
           Expanded(
             child: async.when(
-              loading: () => const AppLoader(),
-              error: (e, _) => Center(child: Text(e.toString())),
+              loading: () => ListView.builder(
+                padding: const EdgeInsets.only(top: 8),
+                itemCount: 5,
+                itemBuilder: (_, __) => const ListCardSkeleton(),
+              ),
+              error: (e, _) => Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Text(e.toString(), style: TextStyle(color: context.secondaryText)),
+                ),
+              ),
               data: (labs) {
                 final filtered = _filter(labs);
                 if (filtered.isEmpty) {
                   return Center(
                     child: Text(
                       'No labs match your filters',
-                      style: GoogleFonts.poppins(color: AppColors.textSecondary),
+                      style: GoogleFonts.poppins(color: context.secondaryText),
                     ),
                   );
                 }
                 return RefreshIndicator(
-                  color: AppColors.logoTeal,
+                  color: context.cs.primary,
                   onRefresh: () async => ref.invalidate(labsListProvider),
                   child: ListView.builder(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                     itemCount: filtered.length,
-                    itemBuilder: (_, i) => _labCard(filtered[i]),
+                    itemBuilder: (_, i) => _labCard(context, filtered[i]),
                   ),
                 );
               },
@@ -112,7 +118,7 @@ class _LabsListScreenState extends ConsumerState<LabsListScreen> {
     );
   }
 
-  Widget _filtersBar() {
+  Widget _filtersBar(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
       child: Column(
@@ -121,12 +127,22 @@ class _LabsListScreenState extends ConsumerState<LabsListScreen> {
           TextField(
             controller: _search,
             onChanged: (_) => setState(() {}),
-            style: GoogleFonts.poppins(fontSize: 14),
+            style: GoogleFonts.poppins(fontSize: 14, color: context.primaryText),
             decoration: InputDecoration(
               hintText: 'Search for labs or health tests...',
-              hintStyle: GoogleFonts.poppins(fontSize: 13, color: AppColors.textSecondary),
-              prefixIcon: const Icon(Icons.search, color: AppColors.textSecondary, size: 22),
+              hintStyle: GoogleFonts.poppins(fontSize: 13, color: context.hintText),
+              prefixIcon: Icon(Icons.search, color: context.secondaryText, size: 22),
+              filled: true,
+              fillColor: context.isDark ? const Color(0xFF1A1A1A) : context.cardColor,
               contentPadding: const EdgeInsets.symmetric(vertical: 12),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: context.borderColor),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: context.borderColor),
+              ),
             ),
           ),
           const SizedBox(height: 12),
@@ -136,18 +152,35 @@ class _LabsListScreenState extends ConsumerState<LabsListScreen> {
               fontSize: 10,
               fontWeight: FontWeight.w700,
               letterSpacing: 0.6,
-              color: AppColors.textSecondary,
+              color: context.secondaryText,
             ),
           ),
           const SizedBox(height: 6),
           DropdownButtonFormField<String>(
             initialValue: _testType,
             isExpanded: true,
-            decoration: const InputDecoration(
-              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            dropdownColor: context.cardColor,
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: context.isDark ? const Color(0xFF1A1A1A) : context.cardColor,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: context.borderColor),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: context.borderColor),
+              ),
             ),
-            style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600),
-            items: _testTypes.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
+            style: GoogleFonts.poppins(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: context.primaryText,
+            ),
+            items: _testTypes
+                .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+                .toList(),
             onChanged: (v) => setState(() => _testType = v ?? 'All Tests'),
           ),
         ],
@@ -155,16 +188,11 @@ class _LabsListScreenState extends ConsumerState<LabsListScreen> {
     );
   }
 
-  Widget _labCard(LabModel lab) {
+  Widget _labCard(BuildContext context, LabModel lab) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border.withValues(alpha: 0.7)),
-        boxShadow: AppShadows.card,
-      ),
+      decoration: context.cardDecoration(radius: 16),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -176,12 +204,16 @@ class _LabsListScreenState extends ConsumerState<LabsListScreen> {
               children: [
                 Text(
                   lab.name,
-                  style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w700),
+                  style: GoogleFonts.poppins(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: context.primaryText,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   lab.address,
-                  style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary),
+                  style: GoogleFonts.poppins(fontSize: 12, color: context.secondaryText),
                 ),
                 if (lab.availableTests.isNotEmpty) ...[
                   const SizedBox(height: 8),
@@ -190,7 +222,7 @@ class _LabsListScreenState extends ConsumerState<LabsListScreen> {
                     style: GoogleFonts.poppins(
                       fontSize: 11,
                       fontWeight: FontWeight.w500,
-                      color: AppColors.logoTeal,
+                      color: context.cs.primary,
                     ),
                   ),
                 ],
@@ -200,7 +232,7 @@ class _LabsListScreenState extends ConsumerState<LabsListScreen> {
                   style: GoogleFonts.poppins(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    color: lab.isOpen ? const Color(0xFF16A34A) : AppColors.error,
+                    color: lab.isOpen ? const Color(0xFF16A34A) : context.cs.error,
                   ),
                 ),
               ],

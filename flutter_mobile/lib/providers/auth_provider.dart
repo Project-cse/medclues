@@ -4,6 +4,7 @@ import '../helpers/storage_helper.dart';
 import '../helpers/token_helper.dart';
 import '../models/user_model.dart';
 import '../services/api_service.dart';
+import '../services/push_notification_service.dart';
 import '../utils/app_exception.dart';
 import 'service_providers.dart';
 
@@ -59,6 +60,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       state = AuthState.unauthenticated();
     } else {
       state = AuthState.authenticated(user);
+      await _afterAuth();
     }
   }
 
@@ -69,6 +71,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final user = await _ref.read(authRepositoryProvider).login(email, password);
       await _ref.read(storageHelperProvider).clearPendingNewUser(user.id);
       state = AuthState.authenticated(user);
+      await _afterAuth();
       return true;
     } catch (e) {
       final msg = e is AppException ? e.message : e.toString().replaceFirst('Exception: ', '');
@@ -120,6 +123,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         await storage.clearPendingNewUser(result.user.id);
       }
       state = AuthState.authenticated(result.user);
+      await _afterAuth();
       return true;
     } catch (e) {
       final msg = e is AppException ? e.message : e.toString().replaceFirst('Exception: ', '');
@@ -130,8 +134,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
+  Future<void> _afterAuth() async {
+    await PushNotificationService.instance.init();
+    await PushNotificationService.instance.syncTokenWithBackend();
+  }
+
   Future<void> logout() async {
     final userId = state.user?.id;
+    await PushNotificationService.instance.unregisterToken();
     await _ref.read(authRepositoryProvider).logout();
     if (userId != null && userId.isNotEmpty) {
       await _ref.read(storageHelperProvider).clearPendingNewUser(userId);

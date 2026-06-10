@@ -125,7 +125,13 @@ async def doctor_end_video_call(appointmentId: int, req: Request, doc_id: int = 
 
 @router.get("/{doctor_id}/slots")
 async def get_doctor_schedule_slots(doctor_id: str, mode: str = "offline"):
-    return await doctor_slot_controller.get_doctor_slots(doctor_id, mode)
+    from fastapi.responses import JSONResponse
+
+    data = await doctor_slot_controller.get_doctor_slots(doctor_id, mode)
+    return JSONResponse(
+        content=data,
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+    )
 
 # Public doctor details endpoint. Supports numeric ids and embedded ids like "emb_56".
 @router.get("/{docId}")

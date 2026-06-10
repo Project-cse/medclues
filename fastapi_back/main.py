@@ -3,19 +3,24 @@ import uvicorn
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from app.config.config import settings
+from app.config.config import settings, validate_settings, cors_allowed_origins
+from app.utils.app_logger import get_logger
+
+log = get_logger("medclues.api")
+validate_settings()
 from app.config.db import db
 from contextlib import asynccontextmanager
-print("Importing routes...")
+log.info("Importing routes...")
 from app.routes import (
     admin_routes, doctor_routes, user_routes, appointment_routes,
     blood_bank_routes, lab_routes, hospital_routes,
     health_record_routes, emergency_routes, ai_routes,
     job_application_routes, otp_routes, specialty_routes,
     location_routes, dean_routes, super_appointment_routes,
-    payments_routes, charts_routes, auth_routes,
+    payments_routes, charts_routes, auth_routes, health_routes,
 )
-print("Routes imported.")
+from app.middleware.request_logging import RequestLoggingMiddleware
+log.info("Routes imported.")
 import cloudinary
 import cloudinary.uploader
 import os
@@ -32,33 +37,71 @@ cloudinary.config(
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup logic
-    print("Starting FastAPI application...")
-    print("Connecting to DB in lifespan...")
+    log.info("Starting FastAPI application...")
+    log.info("Connecting to DB in lifespan...")
     success = await db.connect()
     if not success:
-        print("Warning: PostgreSQL not connected — login/API will retry on first request.")
+        log.warning("PostgreSQL not connected — login/API will retry on first request.")
     else:
-        print("PostgreSQL connected.")
+        log.info("PostgreSQL connected.")
         # Auto-create DEAN table if it doesn't exist
         try:
             from app.models import dean_model
-            print("Preparing DEAN table...")
+            log.info("Preparing DEAN table...")
             await dean_model.create_deans_table()
-            print("DEAN table ready")
+            log.info("DEAN table ready")
         except Exception as _e:
-            print(f"Could not create deans table: {_e}")
+            log.warning("Could not create deans table: %s", _e)
         try:
             from app.models import appointment_model
             await appointment_model.ensure_booking_id_column()
-            print("Appointments booking_id column ready")
+            log.info("Appointments booking_id column ready")
         except Exception as _e:
-            print(f"Could not ensure booking_id column: {_e}")
+            log.warning("Could not ensure booking_id column: %s", _e)
         try:
             from app.models import refresh_token_model
             await refresh_token_model.ensure_refresh_tokens_table()
-            print("Refresh tokens table ready")
+            log.info("Refresh tokens table ready")
         except Exception as _e:
-            print(f"Could not ensure refresh_tokens table: {_e}")
+            log.warning("Could not ensure refresh_tokens table: %s", _e)
+        try:
+            from app.models import payment_transaction_model
+            await payment_transaction_model.ensure_payment_transactions_table()
+            log.info("Payment transactions table ready")
+        except Exception as _e:
+            log.warning("Could not ensure payment_transactions table: %s", _e)
+        try:
+            from app.models import emergency_event_model
+            await emergency_event_model.ensure_emergency_events_table()
+            log.info("Emergency events table ready")
+        except Exception as _e:
+            log.warning("Could not ensure emergency_events table: %s", _e)
+        try:
+            from app.models import audit_log_model
+            await audit_log_model.ensure_audit_logs_table()
+            log.info("Audit logs table ready")
+        except Exception as _e:
+            log.warning("Could not ensure audit_logs table: %s", _e)
+        try:
+            from app.db.migration_runner import run_pending_migrations
+            applied = await run_pending_migrations()
+            if applied:
+                log.info("SQL migrations applied: %s", ", ".join(applied))
+            else:
+                log.info("SQL migrations up to date")
+        except Exception as _e:
+            log.warning("Could not run SQL migrations: %s", _e)
+        try:
+            from app.models import fcm_token_model
+            await fcm_token_model.ensure_fcm_tokens_table()
+            log.info("FCM tokens table ready")
+        except Exception as _e:
+            log.warning("Could not ensure fcm_tokens table: %s", _e)
+        try:
+            from app.services import fcm_service
+            fcm_service._ensure_firebase()
+        except Exception as _e:
+            log.warning("Firebase Admin init skipped: %s", _e)
         try:
             from app.models import doctor_slot_model
             from app.services import doctor_slot_service
@@ -68,22 +111,22 @@ async def lifespan(app: FastAPI):
             async def _warm_doctor_slots():
                 try:
                     await doctor_slot_service.ensure_all_doctors_scheduled()
-                    print("Doctor slots schedule ready")
+                    log.info("Doctor slots schedule ready")
                 except Exception as warm_err:
-                    print(f"Doctor slots warm-up failed: {warm_err}")
+                    log.warning("Doctor slots warm-up failed: %s", warm_err)
 
             asyncio.create_task(_warm_doctor_slots())
-            print("Doctor slots schema ready (schedule warming in background)")
+            log.info("Doctor slots schema ready (schedule warming in background)")
         except Exception as _e:
-            print(f"Could not ensure doctor slots: {_e}")
+            log.warning("Could not ensure doctor slots: %s", _e)
     try:
         from app.services.telegram_polling import start_telegram_bot
         asyncio.create_task(start_telegram_bot())
     except Exception as tg_err:
-        print(f"[Telegram] Could not start bot: {tg_err}")
+        log.warning("Telegram bot could not start: %s", tg_err)
     yield
     # Shutdown logic
-    print("Stopping FastAPI application...")
+    log.info("Stopping FastAPI application...")
     try:
         from app.services.telegram_polling import stop_telegram_bot
         await stop_telegram_bot()
@@ -99,41 +142,38 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS Middleware for Frontend Compatibility
-# CORS Middleware
-origins = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    "http://localhost:5174",
-    "http://127.0.0.1:5174",
-    "http://localhost:5175",
-    "http://localhost:5176",
-    "http://localhost:5177",
-    "http://localhost:5178",
-    "http://localhost:5179",
-    "http://localhost:5180",
-]
-
-# Flutter web / dev servers use random ports; allow any localhost port in DEBUG.
-_cors_kwargs = (
-    {
+# CORS — DEBUG: any localhost port; production: explicit allowlist only (no wildcard).
+_cors_common = {
+    "allow_credentials": True,
+    "allow_methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    "allow_headers": [
+        "Authorization",
+        "Content-Type",
+        "token",
+        "Token",
+        "atoken",
+        "dtoken",
+        "deantoken",
+        "x-auth-storage",
+        "x-client-platform",
+    ],
+}
+if settings.DEBUG:
+    _cors_kwargs = {
+        **_cors_common,
         "allow_origin_regex": r"https?://(localhost|127\.0\.0\.1)(:\d+)?",
-        "allow_credentials": True,
-        "allow_methods": ["*"],
-        "allow_headers": ["*"],
     }
-    if settings.DEBUG
-    else {
-        "allow_origins": ["*"],
-        "allow_credentials": True,
-        "allow_methods": ["*"],
-        "allow_headers": ["*"],
+else:
+    _cors_kwargs = {
+        **_cors_common,
+        "allow_origins": cors_allowed_origins(),
     }
-)
 
 app.add_middleware(CORSMiddleware, **_cors_kwargs)
+app.add_middleware(RequestLoggingMiddleware)
 
 # Register Routers
+app.include_router(health_routes.router)
 app.include_router(admin_routes.router)
 app.include_router(doctor_routes.router)
 app.include_router(user_routes.router)
@@ -186,7 +226,7 @@ from fastapi.encoders import jsonable_encoder
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    print(f"Validation Error: {exc.errors()}")
+    log.warning("Validation error on %s %s", request.method, request.url.path)
     return JSONResponse(
         status_code=422,
         content=jsonable_encoder({"success": False, "message": "Validation Error", "detail": exc.errors()})
@@ -210,7 +250,7 @@ async def root():
 # Global Error Handler
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    print(f"Global Error: {str(exc)}")
+    log.error("Unhandled error on %s %s: %s", request.method, request.url.path, type(exc).__name__)
     return JSONResponse(
         status_code=500,
         content={"success": False, "message": "Internal server error."}

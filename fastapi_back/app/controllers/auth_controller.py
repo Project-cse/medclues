@@ -10,7 +10,10 @@ from app.config.db import db
 from app.services import email_service
 from app.services import token_service
 from app.utils import password_reset_storage
+from app.utils.app_logger import get_logger
 from app.utils.refresh_cookie import get_refresh_from_cookie
+
+log = get_logger(__name__)
 from app.models import user_model, admin_model, doctor_model, dean_model, refresh_token_model
 from app.controllers.user_controller import get_password_hash
 
@@ -69,7 +72,7 @@ async def forgot_password(email: str, role: str):
         return {"success": True, "message": "OTP sent successfully"}
 
     if settings.DEBUG:
-        print(f"[DEV] Password reset OTP for {email}: {otp}")
+        log.warning("Password reset OTP generated for %s (dev only — not logged)", email)
         return {
             "success": True,
             "message": "OTP generated (email delivery failed — use dev_otp in development)",
@@ -219,11 +222,18 @@ async def refresh_tokens(refresh_token: str | None, role: str, request=None):
         return {"success": False, "message": "Invalid or expired refresh token"}
 
     token_hash = token_service.hash_refresh_token(refresh_token.strip())
-    row = await refresh_token_model.find_active_by_hash(token_hash)
+    row = await refresh_token_model.find_by_hash(token_hash)
     if not row:
         return {"success": False, "message": "Refresh token revoked or not found"}
 
     if row.get("revoked_at"):
+        # Reuse of a rotated/revoked refresh token — possible theft; invalidate all sessions.
+        log.warning(
+            "Refresh token reuse detected for user_id=%s role=%s — revoking all sessions",
+            row.get("user_id"),
+            row.get("role"),
+        )
+        await refresh_token_model.revoke_all_for_user(row["user_id"], row["role"])
         return {"success": False, "message": "Refresh token revoked"}
 
     expires_at = row.get("expires_at")
@@ -279,6 +289,25 @@ async def refresh_tokens(refresh_token: str | None, role: str, request=None):
     )
 
     return token_service.build_login_response(access, new_refresh)
+
+
+async def logout_all(role: str, request=None, user_id: int | None = None, email: str | None = None):
+    """Revoke all refresh tokens for the authenticated user."""
+    role = (role or "").strip().lower()
+    if role not in token_service.VALID_ROLES:
+        return {"success": False, "message": "Invalid role"}
+
+    if role == "admin":
+        key = str((email or "")).strip().lower()
+        if not key:
+            return {"success": False, "message": "Admin email required"}
+    else:
+        if user_id is None:
+            return {"success": False, "message": "User id required"}
+        key = str(user_id)
+
+    await refresh_token_model.revoke_all_for_user(key, role)
+    return {"success": True, "message": "Logged out from all devices"}
 
 
 async def logout(refresh_token: str | None, role: str, request=None):

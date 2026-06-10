@@ -1,9 +1,18 @@
-import '../../constants/app_colors.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+
+import '../../constants/app_colors.dart';
 
 abstract final class EmergencyConstants {
   /// When true, ambulance/police/fire tel: calls are blocked (testing only).
-  static const testingMode = true;
+  /// Release builds: false (real calls). Debug: true unless overridden.
+  /// Override: `--dart-define=EMERGENCY_TESTING=true|false`
+  static bool get testingMode {
+    const override = String.fromEnvironment('EMERGENCY_TESTING');
+    if (override == 'true') return true;
+    if (override == 'false') return false;
+    return kDebugMode;
+  }
 
   static const ambulance = '108';
   static const police = '100';

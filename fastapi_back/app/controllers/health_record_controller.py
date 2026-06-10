@@ -5,6 +5,7 @@ from datetime import datetime
 from fastapi import UploadFile
 from typing import List, Optional
 from app.models import health_record_model, appointment_model
+from app.services import audit_service
 from app.utils.formatters import format_health_record
 
 async def create_health_record(
@@ -101,7 +102,14 @@ async def _get_record_file_meta(user_id: int, record_id: int, file_index: int):
     return record, attachments[file_index]
 
 
-async def stream_record_file(user_id: int, record_id: int, file_index: int = 0):
+async def stream_record_file(
+    user_id: int,
+    record_id: int,
+    file_index: int = 0,
+    *,
+    ip_address: str | None = None,
+    user_agent: str | None = None,
+):
     """Fetch file bytes for inline viewing (bypasses browser Cloudinary PDF issues)."""
     try:
         from app.services.cloudinary_delivery import fetch_file_bytes
@@ -109,6 +117,17 @@ async def stream_record_file(user_id: int, record_id: int, file_index: int = 0):
         _, file_meta = await _get_record_file_meta(user_id, record_id, file_index)
         if not file_meta:
             return {"success": False, "message": "Record or file not found"}
+
+        await audit_service.log_access(
+            action="health_record.download",
+            resource="health_records",
+            resource_id=record_id,
+            actor_id=user_id,
+            actor_role="patient",
+            ip_address=ip_address,
+            user_agent=user_agent,
+            metadata={"fileIndex": file_index, "fileName": file_meta.get("fileName")},
+        )
 
         content, content_type, filename = await fetch_file_bytes(file_meta)
         return {
@@ -121,13 +140,32 @@ async def stream_record_file(user_id: int, record_id: int, file_index: int = 0):
         return {"success": False, "message": str(e)}
 
 
-async def get_record_file_view_url(user_id: int, record_id: int, file_index: int = 0):
+async def get_record_file_view_url(
+    user_id: int,
+    record_id: int,
+    file_index: int = 0,
+    *,
+    ip_address: str | None = None,
+    user_agent: str | None = None,
+):
     try:
         from app.services.cloudinary_delivery import get_viewable_url
 
         _, file_meta = await _get_record_file_meta(user_id, record_id, file_index)
         if not file_meta:
             return {"success": False, "message": "Record or file not found"}
+
+        await audit_service.log_access(
+            action="health_record.view_url",
+            resource="health_records",
+            resource_id=record_id,
+            actor_id=user_id,
+            actor_role="patient",
+            ip_address=ip_address,
+            user_agent=user_agent,
+            metadata={"fileIndex": file_index, "fileName": file_meta.get("fileName")},
+        )
+
         view_url = get_viewable_url(file_meta)
         if not view_url:
             return {"success": False, "message": "No viewable URL for this file"}
@@ -144,10 +182,29 @@ async def get_record_file_view_url(user_id: int, record_id: int, file_index: int
 
 async def get_health_records(user_id: int, params: dict):
     try:
-        params['userId'] = user_id
+        from app.utils.pagination import parse_pagination, pagination_meta, with_pagination
+
+        params["userId"] = user_id
+        limit, offset = parse_pagination(
+            params.get("limit"),
+            params.get("offset"),
+        )
+        if limit is not None:
+            params["limit"] = limit
+            params["offset"] = offset
+        total = await health_record_model.count_health_records(params)
         records = await health_record_model.get_health_records(params)
         formatted_records = [format_health_record(r) for r in records]
-        return {"success": True, "records": formatted_records}
+        payload = {"success": True, "records": formatted_records}
+        return with_pagination(
+            payload,
+            pagination_meta(
+                total=total,
+                limit=limit,
+                offset=offset,
+                returned=len(formatted_records),
+            ),
+        )
     except Exception as e:
         return {"success": False, "message": str(e)}
 
@@ -173,11 +230,28 @@ async def delete_health_record(user_id: int, record_id: int):
     except Exception as e:
         return {"success": False, "message": str(e)}
 
-async def get_patient_records_for_doctor(doc_id: int, appointment_id: int):
+async def get_patient_records_for_doctor(
+    doc_id: int,
+    appointment_id: int,
+    *,
+    ip_address: str | None = None,
+    user_agent: str | None = None,
+):
     try:
         appointment = await appointment_model.get_appointment_by_id(appointment_id)
         if not appointment or appointment['doctor_id'] != doc_id:
             return {"success": False, "message": "Unauthorized access"}
+
+        await audit_service.log_access(
+            action="health_record.list_for_appointment",
+            resource="appointments",
+            resource_id=appointment_id,
+            actor_id=doc_id,
+            actor_role="doctor",
+            ip_address=ip_address,
+            user_agent=user_agent,
+            metadata={"patientUserId": appointment.get("user_id")},
+        )
 
         records = await health_record_model.get_health_records_by_user_id(appointment['user_id'])
         formatted_records = [format_health_record(r) for r in records]

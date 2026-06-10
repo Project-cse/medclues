@@ -6,13 +6,14 @@ import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../l10n/app_localizations.dart';
 import 'appointment_receipt_pdf.dart';
 
 class AppointmentReceiptActions {
   const AppointmentReceiptActions._();
 
-  static Future<void> downloadOrSharePdf(AppointmentReceiptData receipt) async {
-    final bytes = await buildAppointmentReceiptPdf(receipt);
+  static Future<void> downloadOrSharePdf(AppointmentReceiptData receipt, AppLocalizations l10n) async {
+    final bytes = await buildAppointmentReceiptPdf(receipt, l10n);
     final name = 'MediChain_Receipt_${receipt.bookingId}.pdf';
     if (kIsWeb) {
       await Printing.layoutPdf(onLayout: (_) async => bytes, name: name);
@@ -21,8 +22,8 @@ class AppointmentReceiptActions {
     await Printing.sharePdf(bytes: bytes, filename: name);
   }
 
-  static Future<void> shareReceipt(AppointmentReceiptData receipt) async {
-    final bytes = await buildAppointmentReceiptPdf(receipt);
+  static Future<void> shareReceipt(AppointmentReceiptData receipt, AppLocalizations l10n) async {
+    final bytes = await buildAppointmentReceiptPdf(receipt, l10n);
     final text =
         'MediChain+ Appointment\nBooking ID: ${receipt.bookingId.toUpperCase()}\n'
         'Token: ${receipt.tokenNumber ?? '—'}\n'
@@ -71,8 +72,8 @@ class AppointmentReceiptActions {
     }
   }
 
-  static Future<void> printReceipt(AppointmentReceiptData receipt) async {
-    final bytes = await buildAppointmentReceiptPdf(receipt);
+  static Future<void> printReceipt(AppointmentReceiptData receipt, AppLocalizations l10n) async {
+    final bytes = await buildAppointmentReceiptPdf(receipt, l10n);
     await Printing.layoutPdf(onLayout: (_) async => bytes);
   }
 }

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../constants/app_colors.dart';
+import '../../l10n/l10n_extension.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/patient_provider.dart';
 import '../../routes/route_names.dart';
@@ -14,18 +15,18 @@ import '../../widgets/common/avatar_image.dart';
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
 
-  static const _menu = [
-    _MenuItem(Icons.person_outline, 'Personal Information', Color(0xFF0EA5E9), Color(0xFFEFF6FF), RouteNames.personalInfo),
-    _MenuItem(Icons.payments_outlined, 'Payments', Color(0xFF10B981), Color(0xFFECFDF5), RouteNames.payments),
-    _MenuItem(Icons.settings_outlined, 'Settings', Color(0xFF64748B), Color(0xFFF1F5F9), RouteNames.settings),
-    _MenuItem(Icons.emergency, 'Emergency Settings', Color(0xFFDC2626), Color(0xFFFEE2E2), RouteNames.emergencySettings),
-    _MenuItem(Icons.help_outline, 'Help & Support', Color(0xFF0EA5E9), Color(0xFFEFF6FF), RouteNames.help),
-  ];
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     final profile = ref.watch(patientProfileProvider);
     final cs = Theme.of(context).colorScheme;
+    final menu = [
+      _MenuItem(Icons.person_outline, l10n.profilePersonalInfo, const Color(0xFF0EA5E9), const Color(0xFFEFF6FF), RouteNames.personalInfo),
+      _MenuItem(Icons.payments_outlined, l10n.profilePayments, const Color(0xFF10B981), const Color(0xFFECFDF5), RouteNames.payments),
+      _MenuItem(Icons.settings_outlined, l10n.profileSettings, const Color(0xFF64748B), const Color(0xFFF1F5F9), RouteNames.settings),
+      _MenuItem(Icons.emergency, l10n.settingsEmergency, const Color(0xFFDC2626), const Color(0xFFFEE2E2), RouteNames.emergencySettings),
+      _MenuItem(Icons.help_outline, l10n.profileHelp, const Color(0xFF0EA5E9), const Color(0xFFEFF6FF), RouteNames.help),
+    ];
 
     return Scaffold(
       body: profile.when(
@@ -40,7 +41,7 @@ class ProfileScreen extends ConsumerWidget {
                 const SizedBox(height: 12),
                 TextButton(
                   onPressed: () => ref.invalidate(patientProfileProvider),
-                  child: const Text('Retry'),
+                  child: Text(l10n.commonRetry),
                 ),
               ],
             ),
@@ -53,7 +54,7 @@ class ProfileScreen extends ConsumerWidget {
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
               children: [
                 Text(
-                  'Profile',
+                  l10n.profileTitle,
                   style: GoogleFonts.poppins(
                     fontSize: 28,
                     fontWeight: FontWeight.w700,
@@ -76,7 +77,7 @@ class ProfileScreen extends ConsumerWidget {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      p.phone?.isNotEmpty == true ? p.phone! : 'Phone not set',
+                      p.phone?.isNotEmpty == true ? p.phone! : l10n.validationPhoneRequired,
                       textAlign: TextAlign.center,
                       style: GoogleFonts.poppins(fontSize: 14, color: cs.onSurfaceVariant),
                     ),
@@ -88,7 +89,7 @@ class ProfileScreen extends ConsumerWidget {
                     ),
                     const SizedBox(height: 10),
                     Text(
-                      'Edit photo & details in Personal Information',
+                      l10n.profilePersonalInfo,
                       textAlign: TextAlign.center,
                       style: GoogleFonts.poppins(fontSize: 12, color: cs.onSurfaceVariant),
                     ),
@@ -111,14 +112,14 @@ class ProfileScreen extends ConsumerWidget {
                     ],
                   ),
                   child: Column(
-                    children: _menu.asMap().entries.map((e) {
+                    children: menu.asMap().entries.map((e) {
                       final item = e.value;
                       return InkWell(
                         onTap: () => context.push(item.route),
                         child: Container(
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
-                            border: e.key < _menu.length - 1
+                            border: e.key < menu.length - 1
                                 ? Border(bottom: BorderSide(color: cs.outline))
                                 : null,
                           ),
@@ -165,7 +166,7 @@ class ProfileScreen extends ConsumerWidget {
                     },
                     icon: const Icon(Icons.logout, color: AppColors.error),
                     label: Text(
-                      'Logout',
+                      l10n.profileLogout,
                       style: GoogleFonts.poppins(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,

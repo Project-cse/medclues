@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../models/blood_bank_model.dart';
+import '../../utils/theme_context.dart';
 import '../../widgets/blood/blood_type_circle_tile.dart';
 
 /// Full blood stock view after tapping a bank from the list.
@@ -16,12 +17,7 @@ class BloodBankDetailScreen extends StatelessWidget {
     final location = bank.city.isNotEmpty ? bank.city : bank.address;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        surfaceTintColor: Colors.transparent,
-        elevation: 0,
-        foregroundColor: const Color(0xFF1E293B),
         title: Text(
           'Blood Availability',
           style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 17),
@@ -34,17 +30,7 @@ class BloodBankDetailScreen extends StatelessWidget {
           children: [
             Container(
               padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.04),
-                    blurRadius: 16,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
+              decoration: context.cardDecoration(radius: 20),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -57,21 +43,21 @@ class BloodBankDetailScreen extends StatelessWidget {
                           style: GoogleFonts.poppins(
                             fontSize: 18,
                             fontWeight: FontWeight.w700,
-                            color: const Color(0xFF1E293B),
+                            color: context.primaryText,
                           ),
                         ),
                         if (location.isNotEmpty) ...[
                           const SizedBox(height: 8),
                           Row(
                             children: [
-                              const Icon(Icons.location_on_outlined, size: 16, color: Color(0xFF64748B)),
+                              Icon(Icons.location_on_outlined, size: 16, color: context.secondaryText),
                               const SizedBox(width: 6),
                               Expanded(
                                 child: Text(
                                   location,
                                   style: GoogleFonts.poppins(
                                     fontSize: 13,
-                                    color: const Color(0xFF64748B),
+                                    color: context.secondaryText,
                                   ),
                                 ),
                               ),
@@ -81,18 +67,14 @@ class BloodBankDetailScreen extends StatelessWidget {
                       ],
                     ),
                   ),
-                  if (bank.partner) _partnerChip(),
+                  if (bank.partner) _partnerChip(context),
                 ],
               ),
             ),
             const SizedBox(height: 24),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 28),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: const Color(0xFFF1F5F9)),
-              ),
+              decoration: context.cardDecoration(radius: 24),
               child: BloodAvailabilityGrid(bank: bank),
             ),
             if (bank.phone != null && bank.phone!.isNotEmpty) ...[
@@ -118,20 +100,22 @@ class BloodBankDetailScreen extends StatelessWidget {
     );
   }
 
-  Widget _partnerChip() {
+  Widget _partnerChip(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: const Color(0xFFEEF2FF),
+        color: context.isDark ? const Color(0xFF1E3A5F) : const Color(0xFFEEF2FF),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: const Color(0xFFC7D2FE)),
+        border: Border.all(
+          color: context.isDark ? context.borderColor : const Color(0xFFC7D2FE),
+        ),
       ),
       child: Text(
         'Partner',
         style: GoogleFonts.poppins(
           fontSize: 10,
           fontWeight: FontWeight.w700,
-          color: const Color(0xFF4F46E5),
+          color: context.isDark ? context.cs.primary : const Color(0xFF4F46E5),
         ),
       ),
     );

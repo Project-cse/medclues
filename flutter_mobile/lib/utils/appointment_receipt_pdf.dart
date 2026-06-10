@@ -4,6 +4,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../config/app_config.dart';
+import '../l10n/app_localizations.dart';
 import 'receipt_location_helper.dart';
 
 /// Appointment receipt data for PDF / share actions.
@@ -64,7 +65,7 @@ String pdfSafe(String? value) {
       .replaceAll(RegExp(r'[^\x09\x0A\x0D\x20-\x7E]'), '');
 }
 
-Future<Uint8List> buildAppointmentReceiptPdf(AppointmentReceiptData data) async {
+Future<Uint8List> buildAppointmentReceiptPdf(AppointmentReceiptData data, AppLocalizations l10n) async {
   final doc = pw.Document();
 
   final hospital = pdfSafe(
@@ -97,7 +98,7 @@ Future<Uint8List> buildAppointmentReceiptPdf(AppointmentReceiptData data) async 
       build: (context) => [
         pw.Text(pdfSafe(AppConfig.appName), style: titleStyle.copyWith(fontSize: 18)),
         pw.SizedBox(height: 4),
-        pw.Text('Appointment Receipt', style: labelStyle.copyWith(fontSize: 11)),
+        pw.Text(pdfSafe(l10n.receiptAppointmentReceipt), style: labelStyle.copyWith(fontSize: 11)),
         pw.SizedBox(height: 16),
         _confirmationBanner(
           bg: greenBanner,
@@ -106,6 +107,7 @@ Future<Uint8List> buildAppointmentReceiptPdf(AppointmentReceiptData data) async 
           iconBg: greenIconBg,
           titleStyle: titleStyle,
           labelStyle: labelStyle,
+          l10n: l10n,
         ),
         pw.SizedBox(height: 16),
         _ticketCard(
@@ -116,13 +118,14 @@ Future<Uint8List> buildAppointmentReceiptPdf(AppointmentReceiptData data) async 
           border: border,
           titleStyle: titleStyle,
           labelStyle: labelStyle,
+          l10n: l10n,
         ),
         pw.SizedBox(height: 16),
         _detailCard(
           border: border,
           rows: [
             _detailRow(
-              label: 'Doctor',
+              label: l10n.receiptDoctor,
               title: pdfSafe(data.doctorName),
               subtitle: pdfSafe(data.specialization),
               labelStyle: labelStyle,
@@ -130,15 +133,15 @@ Future<Uint8List> buildAppointmentReceiptPdf(AppointmentReceiptData data) async 
               subtitleStyle: subtitleStyle,
             ),
             _detailRow(
-              label: 'Date & Time',
+              label: l10n.receiptDateTime,
               title: dateTimeLine,
-              subtitle: pdfSafe('Patient: ${data.patientName}'),
+              subtitle: pdfSafe('${l10n.receiptPatient}: ${data.patientName}'),
               labelStyle: labelStyle,
               titleStyle: titleStyle,
               subtitleStyle: subtitleStyle,
             ),
             _detailRow(
-              label: 'Hospital',
+              label: l10n.receiptHospital,
               title: hospital,
               labelStyle: labelStyle,
               titleStyle: titleStyle,
@@ -146,7 +149,7 @@ Future<Uint8List> buildAppointmentReceiptPdf(AppointmentReceiptData data) async 
             ),
             if (loc.hasRoom)
               _detailRow(
-                label: 'Room No.',
+                label: l10n.receiptLocation,
                 title: pdfSafe(loc.roomNo),
                 labelStyle: labelStyle,
                 titleStyle: titleStyle,
@@ -154,7 +157,7 @@ Future<Uint8List> buildAppointmentReceiptPdf(AppointmentReceiptData data) async 
               ),
             if (loc.hasFloor)
               _detailRow(
-                label: 'Floor / Location',
+                label: l10n.receiptLocation,
                 title: pdfSafe(loc.floorOrLocation),
                 labelStyle: labelStyle,
                 titleStyle: titleStyle,
@@ -162,7 +165,7 @@ Future<Uint8List> buildAppointmentReceiptPdf(AppointmentReceiptData data) async 
               ),
             if (data.amount != null)
               _detailRow(
-                label: 'Fee',
+                label: l10n.receiptAmount,
                 title: 'Rs.${data.amount!.toStringAsFixed(0)}',
                 subtitle: pdfSafe(data.status),
                 labelStyle: labelStyle,
@@ -173,7 +176,7 @@ Future<Uint8List> buildAppointmentReceiptPdf(AppointmentReceiptData data) async 
         ),
         pw.SizedBox(height: 20),
         pw.Text(
-          'Present this receipt at reception. Staff scan QR or enter Booking ID.',
+          pdfSafe(l10n.receiptAppointmentReceipt),
           style: labelStyle.copyWith(fontSize: 10),
         ),
         pw.SizedBox(height: 4),
@@ -192,6 +195,7 @@ pw.Widget _confirmationBanner({
   required PdfColor iconBg,
   required pw.TextStyle titleStyle,
   required pw.TextStyle labelStyle,
+  required AppLocalizations l10n,
 }) {
   return pw.Container(
     width: double.infinity,
@@ -229,12 +233,12 @@ pw.Widget _confirmationBanner({
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
               pw.Text(
-                'Your appointment is confirmed',
+                pdfSafe(l10n.receiptConfirmed),
                 style: titleStyle.copyWith(fontSize: 13, color: textColor),
               ),
               pw.SizedBox(height: 2),
               pw.Text(
-                'Thank you! We look forward to seeing you.',
+                pdfSafe(l10n.receiptStatusConfirmed),
                 style: labelStyle.copyWith(fontSize: 10),
               ),
             ],
@@ -266,6 +270,7 @@ pw.Widget _ticketCard({
   required PdfColor border,
   required pw.TextStyle titleStyle,
   required pw.TextStyle labelStyle,
+  required AppLocalizations l10n,
 }) {
   final bookingId = pdfSafe(data.bookingId).toUpperCase();
   final dashColor = PdfColor.fromInt(0xFF93C5FD);
@@ -296,7 +301,7 @@ pw.Widget _ticketCard({
                       crossAxisAlignment: pw.CrossAxisAlignment.center,
                       children: [
                         pw.Text(
-                          '* TOKEN NUMBER *',
+                          pdfSafe(l10n.receiptToken),
                           style: labelStyle.copyWith(
                             fontSize: 8,
                             fontWeight: pw.FontWeight.bold,
@@ -314,7 +319,7 @@ pw.Widget _ticketCard({
                         _dashedLinePdf(dashColor),
                         pw.SizedBox(height: 6),
                         pw.Text(
-                          'Show this token at the clinic',
+                          pdfSafe(l10n.receiptToken),
                           style: labelStyle.copyWith(fontSize: 8),
                           textAlign: pw.TextAlign.center,
                         ),
@@ -337,7 +342,7 @@ pw.Widget _ticketCard({
                   padding: const pw.EdgeInsets.symmetric(vertical: 8, horizontal: 6),
                   color: tokenFooter,
                   child: pw.Text(
-                    'Please arrive 15 mins early',
+                    pdfSafe(l10n.receiptDateTime),
                     style: titleStyle.copyWith(fontSize: 9, color: PdfColors.white),
                     textAlign: pw.TextAlign.center,
                   ),
@@ -382,7 +387,7 @@ pw.Widget _ticketCard({
                 ),
                 pw.SizedBox(height: 6),
                 pw.Text(
-                  'SCAN AT RECEPTION',
+                  pdfSafe(l10n.receiptBookingId),
                   style: labelStyle.copyWith(
                     fontSize: 8,
                     fontWeight: pw.FontWeight.bold,
@@ -402,7 +407,7 @@ pw.Widget _ticketCard({
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
                       pw.Text(
-                        'Secure & Verified',
+                        pdfSafe(l10n.receiptStatus),
                         style: labelStyle.copyWith(
                           fontSize: 8,
                           fontWeight: pw.FontWeight.bold,
@@ -410,7 +415,7 @@ pw.Widget _ticketCard({
                         ),
                       ),
                       pw.Text(
-                        'This QR is unique to your appointment',
+                        pdfSafe(l10n.receiptAppointmentReceipt),
                         style: labelStyle.copyWith(fontSize: 7, color: tokenBlue),
                       ),
                     ],

@@ -12,13 +12,17 @@ from app.config.config import settings
 VALID_ROLES = frozenset({"patient", "doctor", "dean", "admin"})
 
 
-def _secret() -> str:
-    return settings.JWT_SECRET.strip('"').strip("'")
+def _access_secret() -> str:
+    return (settings.JWT_SECRET or "").strip('"').strip("'")
+
+
+def _refresh_secret() -> str:
+    return (settings.REFRESH_TOKEN_SECRET or settings.JWT_SECRET or "").strip('"').strip("'")
 
 
 def hash_refresh_token(raw_token: str) -> str:
     """HMAC-SHA256 with server secret — prevents rainbow-table attacks on DB leaks."""
-    secret = _secret().encode("utf-8")
+    secret = _refresh_secret().encode("utf-8")
     return hmac.new(secret, raw_token.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
@@ -50,7 +54,7 @@ def create_access_token(
         payload["hospital_id"] = hospital_id
     else:
         payload["id"] = user_id
-    return jwt.encode(payload, _secret(), algorithm="HS256")
+    return jwt.encode(payload, _access_secret(), algorithm="HS256")
 
 
 def create_refresh_token(
@@ -79,12 +83,27 @@ def create_refresh_token(
     else:
         payload["id"] = user_id
         user_key = str(user_id)
-    raw = jwt.encode(payload, _secret(), algorithm="HS256")
+    raw = jwt.encode(payload, _refresh_secret(), algorithm="HS256")
     return raw, jti, user_key
 
 
+def decode_access_token(raw_token: str) -> dict:
+    return jwt.decode(raw_token, _access_secret(), algorithms=["HS256"])
+
+
+def decode_refresh_token(raw_token: str) -> dict:
+    return jwt.decode(raw_token, _refresh_secret(), algorithms=["HS256"])
+
+
 def decode_token(raw_token: str) -> dict:
-    return jwt.decode(raw_token, _secret(), algorithms=["HS256"])
+    """Decode access or refresh token (tries refresh secret first for refresh tokens)."""
+    try:
+        payload = jwt.decode(raw_token, _refresh_secret(), algorithms=["HS256"])
+        if payload.get("token_type") == "refresh":
+            return payload
+    except JWTError:
+        pass
+    return jwt.decode(raw_token, _access_secret(), algorithms=["HS256"])
 
 
 def verify_access_payload(payload: dict) -> None:

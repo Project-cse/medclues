@@ -32,6 +32,27 @@
 
   <title>medichain_mobile</title>
   <link rel="manifest" href="manifest.json">
+  <style>
+    /* Keep auth inputs clean on web — no grey autofill/focus blocks */
+    input:-webkit-autofill,
+    input:-webkit-autofill:hover,
+    input:-webkit-autofill:focus,
+    input:-webkit-autofill:active,
+    textarea:-webkit-autofill,
+    textarea:-webkit-autofill:hover,
+    textarea:-webkit-autofill:focus,
+    textarea:-webkit-autofill:active {
+      -webkit-box-shadow: 0 0 0 1000px #ffffff inset !important;
+      box-shadow: 0 0 0 1000px #ffffff inset !important;
+      -webkit-text-fill-color: #1f2937 !important;
+      caret-color: #2563eb !important;
+      transition: background-color 99999s ease-in-out 0s;
+    }
+    input:focus,
+    textarea:focus {
+      outline: none !important;
+    }
+  </style>
 </head>
 <body>
   <script>

@@ -1,8 +1,8 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 Future<void> openReportBytes(
   Uint8List bytes,
@@ -14,8 +14,12 @@ Future<void> openReportBytes(
   final path = '${dir.path}/$safeName';
   final file = File(path);
   await file.writeAsBytes(bytes);
-  final uri = Uri.file(path);
-  if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-    throw Exception('Could not open report');
+
+  final result = await OpenFilex.open(
+    path,
+    type: mimeType,
+  );
+  if (result.type != ResultType.done) {
+    throw Exception(result.message.isNotEmpty ? result.message : 'Could not open report');
   }
 }

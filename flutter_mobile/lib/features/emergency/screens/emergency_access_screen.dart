@@ -11,6 +11,8 @@ import '../models/emergency_case_model.dart';
 import '../providers/emergency_provider.dart';
 import '../services/emergency_sos_timer_service.dart';
 import '../utils/emergency_symptom_utils.dart';
+import '../../../l10n/l10n_extension.dart';
+import '../../../widgets/common/language_selector.dart';
 import '../widgets/emergency_action_button.dart';
 import '../widgets/emergency_home_button.dart';
 
@@ -160,9 +162,10 @@ class _EmergencyAccessScreenState extends ConsumerState<EmergencyAccessScreen> {
       appBar: AppBar(
         backgroundColor: EmergencyConstants.emergencyRed,
         foregroundColor: Colors.white,
-        title: const Text('Emergency'),
+        title: Text(context.l10n.emergencyTitle),
         leading: EmergencyHomeButton(onBeforeExit: _stopTimer),
         actions: [
+          const LanguageSelectorCompact(),
           IconButton(
             icon: const Icon(Icons.settings),
             onPressed: _openSettings,
@@ -185,6 +188,7 @@ class _EmergencyAccessScreenState extends ConsumerState<EmergencyAccessScreen> {
   }
 
   Widget _buildInitial() {
+    final l10n = context.l10n;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -199,7 +203,7 @@ class _EmergencyAccessScreenState extends ConsumerState<EmergencyAccessScreen> {
               const Icon(Icons.emergency, color: Colors.white, size: 48),
               const SizedBox(height: 12),
               Text(
-                'Emergency Mode Activated',
+                l10n.emergencyTitle,
                 textAlign: TextAlign.center,
                 style: GoogleFonts.poppins(
                   fontSize: 22,
@@ -209,7 +213,7 @@ class _EmergencyAccessScreenState extends ConsumerState<EmergencyAccessScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Are you able to respond?',
+                l10n.emergencyRespond,
                 textAlign: TextAlign.center,
                 style: GoogleFonts.poppins(fontSize: 16, color: Colors.white.withValues(alpha: 0.9)),
               ),
@@ -221,28 +225,28 @@ class _EmergencyAccessScreenState extends ConsumerState<EmergencyAccessScreen> {
         const SizedBox(height: 8),
         Text(
           _timerActive
-              ? 'If you do nothing, SOS will activate automatically.'
-              : 'Auto-SOS timer stopped. Choose an option below.',
+              ? l10n.emergencyAccessCountdown(_secondsLeft)
+              : l10n.emergencyCancelSos,
           textAlign: TextAlign.center,
           style: GoogleFonts.poppins(fontSize: 13, color: EmergencyConstants.emergencyText),
         ),
         const Spacer(),
         EmergencyActionButton(
-          label: 'I Am Critical',
-          subtitle: 'Immediate SOS — ambulance & contacts',
+          label: l10n.emergencyCritical,
+          subtitle: l10n.emergencyCallAmbulance,
           icon: Icons.warning_amber_rounded,
           onTap: _onCritical,
         ),
         EmergencyActionButton(
-          label: 'I Can Respond',
-          subtitle: 'Select symptoms for guided help',
+          label: l10n.emergencyRespond,
+          subtitle: l10n.emergencySelectSymptoms,
           icon: Icons.healing,
           filled: false,
           onTap: _onCanRespond,
         ),
         EmergencyActionButton(
-          label: 'Help Someone Else',
-          subtitle: 'Assist another person in distress',
+          label: l10n.emergencyHelpOthers,
+          subtitle: l10n.emergencyHelp,
           icon: Icons.people_alt,
           filled: false,
           onTap: _onHelpSomeoneElse,
@@ -252,6 +256,7 @@ class _EmergencyAccessScreenState extends ConsumerState<EmergencyAccessScreen> {
   }
 
   Widget _timerBanner() {
+    final l10n = context.l10n;
     final stopped = !_timerActive;
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
@@ -274,7 +279,7 @@ class _EmergencyAccessScreenState extends ConsumerState<EmergencyAccessScreen> {
           ),
           const SizedBox(width: 12),
           Text(
-            stopped ? 'Timer stopped' : 'Auto SOS in $_secondsLeft s',
+            stopped ? l10n.emergencyCancelSos : l10n.emergencyAccessCountdown(_secondsLeft),
             style: GoogleFonts.poppins(
               fontSize: 20,
               fontWeight: FontWeight.w700,
@@ -287,11 +292,12 @@ class _EmergencyAccessScreenState extends ConsumerState<EmergencyAccessScreen> {
   }
 
   Widget _buildSymptoms({required bool isHelper}) {
+    final l10n = context.l10n;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          'What symptoms are you experiencing?',
+          l10n.emergencySelectSymptoms,
           style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 16),
@@ -311,37 +317,38 @@ class _EmergencyAccessScreenState extends ConsumerState<EmergencyAccessScreen> {
         ),
         TextButton(
           onPressed: _onBackToInitial,
-          child: const Text('Back'),
+          child: Text(l10n.commonBack),
         ),
       ],
     );
   }
 
   Widget _buildHelper() {
+    final l10n = context.l10n;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          'How severe is their condition?',
+          l10n.emergencySeverityModerate,
           style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 16),
         EmergencyActionButton(
-          label: 'Critical',
-          subtitle: 'Call ambulance immediately',
+          label: l10n.emergencySeverityCritical,
+          subtitle: l10n.emergencyCallAmbulance,
           icon: Icons.warning_amber_rounded,
           onTap: () => _onHelperSeverity(EmergencySeverity.critical),
         ),
         EmergencyActionButton(
-          label: 'Moderate',
-          subtitle: 'Video doctor & hospitals',
+          label: l10n.emergencySeverityModerate,
+          subtitle: l10n.emergencyConnectDoctors,
           icon: Icons.video_call,
           filled: false,
           onTap: () => _onHelperSeverity(EmergencySeverity.moderate),
         ),
         EmergencyActionButton(
-          label: 'Minor',
-          subtitle: 'Suggest normal consultation',
+          label: l10n.emergencySeverityMinor,
+          subtitle: l10n.emergencyScheduleVisit,
           icon: Icons.info_outline,
           filled: false,
           onTap: () => _onHelperSeverity(EmergencySeverity.minor),
@@ -349,7 +356,7 @@ class _EmergencyAccessScreenState extends ConsumerState<EmergencyAccessScreen> {
         const Spacer(),
         TextButton(
           onPressed: _onBackToInitial,
-          child: const Text('Back'),
+          child: Text(l10n.commonBack),
         ),
       ],
     );

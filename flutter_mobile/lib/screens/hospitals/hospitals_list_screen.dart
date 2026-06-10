@@ -139,7 +139,7 @@ class _HospitalsListScreenState extends ConsumerState<HospitalsListScreen> {
     final hospitalsAsync = ref.watch(hospitalsListProvider);
 
     return Scaffold(
-      backgroundColor: PremiumHospitalDirectoryTheme.background,
+      backgroundColor: PremiumHospitalDirectoryTheme.background(context),
       body: Column(
         children: [
           PremiumHospitalDirectoryHeader(
@@ -175,7 +175,7 @@ class _HospitalsListScreenState extends ConsumerState<HospitalsListScreen> {
                       Text(
                         e.toString(),
                         textAlign: TextAlign.center,
-                        style: GoogleFonts.inter(color: PremiumHospitalDirectoryTheme.textSecondary),
+                        style: GoogleFonts.inter(color: PremiumHospitalDirectoryTheme.textSecondary(context)),
                       ),
                       const SizedBox(height: 12),
                       TextButton(
@@ -329,7 +329,7 @@ class _EmptyState extends StatelessWidget {
             Icon(
               Icons.local_hospital_outlined,
               size: 48,
-              color: PremiumHospitalDirectoryTheme.textSecondary.withValues(alpha: 0.45),
+              color: PremiumHospitalDirectoryTheme.textSecondary(context).withValues(alpha: 0.45),
             ),
             const SizedBox(height: 16),
             Text(
@@ -337,7 +337,7 @@ class _EmptyState extends StatelessWidget {
               textAlign: TextAlign.center,
               style: GoogleFonts.inter(
                 fontSize: 14,
-                color: PremiumHospitalDirectoryTheme.textSecondary,
+                color: PremiumHospitalDirectoryTheme.textSecondary(context),
                 height: 1.4,
               ),
             ),

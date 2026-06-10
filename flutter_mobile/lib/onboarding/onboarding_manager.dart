@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../features/emergency/providers/emergency_provider.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/healthcare/premium_healthcare_theme.dart';
 import 'onboarding_tour_steps.dart';
@@ -56,7 +57,7 @@ class _OnboardingManagerState extends ConsumerState<OnboardingManager> {
         widget.child,
         Positioned.fill(
           child: Material(
-            color: PremiumHealthcareTheme.background,
+            color: PremiumHealthcareTheme.background(context),
             child: OnboardingShell(child: page),
           ),
         ),
@@ -83,6 +84,7 @@ class _OnboardingManagerState extends ConsumerState<OnboardingManager> {
     ref.listen<AuthState>(authProvider, (prev, next) {
       if (next.status == AuthStatus.authenticated && prev?.status != AuthStatus.authenticated) {
         ref.read(onboardingProvider.notifier).load();
+        ref.read(emergencySettingsProvider.notifier).syncRemoteContactsFromApi();
       }
     });
 

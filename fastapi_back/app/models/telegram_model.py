@@ -20,6 +20,15 @@ async def ensure_telegram_schema() -> None:
     await db.execute(
         "CREATE INDEX IF NOT EXISTS idx_telegram_user_links_user_id ON telegram_user_links(user_id)"
     )
+    await db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS telegram_link_codes (
+            code TEXT PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            expires_at TIMESTAMPTZ NOT NULL
+        )
+        """
+    )
 
 
 async def get_link_by_chat_id(chat_id: int) -> Optional[Dict[str, Any]]:
@@ -43,6 +52,11 @@ async def link_chat_to_user(
     user_id: int,
     telegram_username: Optional[str] = None,
 ) -> Dict[str, Any]:
+    await db.execute(
+        "DELETE FROM telegram_user_links WHERE user_id = $1 AND chat_id <> $2",
+        int(user_id),
+        int(chat_id),
+    )
     sql = """
         INSERT INTO telegram_user_links (chat_id, user_id, telegram_username)
         VALUES ($1, $2, $3)
@@ -61,3 +75,33 @@ async def unlink_chat(chat_id: int) -> bool:
         chat_id,
     )
     return row is not None
+
+
+async def create_link_code(user_id: int, code: str, expires_at) -> None:
+    await db.execute(
+        "DELETE FROM telegram_link_codes WHERE user_id = $1",
+        int(user_id),
+    )
+    await db.execute(
+        """
+        INSERT INTO telegram_link_codes (code, user_id, expires_at)
+        VALUES ($1, $2, $3)
+        """,
+        code,
+        int(user_id),
+        expires_at,
+    )
+
+
+async def consume_link_code(code: str) -> Optional[int]:
+    row = await db.fetch_row(
+        """
+        DELETE FROM telegram_link_codes
+        WHERE code = $1 AND expires_at > NOW()
+        RETURNING user_id
+        """,
+        code.strip(),
+    )
+    if not row:
+        return None
+    return int(row["user_id"])

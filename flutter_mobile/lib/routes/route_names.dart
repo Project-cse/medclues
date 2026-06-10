@@ -2,6 +2,7 @@ class RouteNames {
   RouteNames._();
 
   static const splash = '/';
+  static const permissionsSetup = '/permissions-setup';
   static const login = '/login';
   static const signup = '/signup';
   static const forgotPassword = '/forgot-password';

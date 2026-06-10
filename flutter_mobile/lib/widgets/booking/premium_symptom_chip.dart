@@ -20,45 +20,32 @@ class PremiumSymptomChip extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
+        duration: const Duration(milliseconds: 180),
         curve: Curves.easeOutCubic,
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+        height: 44,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: selected ? PremiumBookingTheme.chipSelectedBg : PremiumBookingTheme.white,
+          gradient: selected ? PremiumBookingTheme.selectedGradient : null,
+          color: selected ? null : PremiumBookingTheme.white(context),
           borderRadius: BorderRadius.circular(PremiumBookingTheme.chipRadius),
           border: Border.all(
-            color: selected ? PremiumBookingTheme.accentBlue : PremiumBookingTheme.border,
-            width: selected ? 1.5 : 1,
+            color: selected
+                ? PremiumBookingTheme.primaryBlue
+                : PremiumBookingTheme.border(context),
           ),
         ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                label,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.inter(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: selected ? PremiumBookingTheme.accentBlue : PremiumBookingTheme.text,
-                  height: 1.2,
-                ),
-              ),
-            ),
-            if (selected) ...[
-              const SizedBox(width: 6),
-              Container(
-                width: 18,
-                height: 18,
-                decoration: const BoxDecoration(
-                  color: PremiumBookingTheme.accentBlue,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.check, size: 12, color: Colors.white),
-              ),
-            ],
-          ],
+        child: Text(
+          label,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+          style: GoogleFonts.inter(
+            fontSize: 11,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+            color: selected ? Colors.white : PremiumBookingTheme.text(context),
+            height: 1.15,
+          ),
         ),
       ),
     );

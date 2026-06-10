@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../helpers/storage_helper.dart';
+import '../../l10n/l10n_extension.dart';
 import '../../providers/doctor_provider.dart';
 import '../../widgets/cards/doctor_card.dart';
 import '../../widgets/common/app_empty_state.dart';
@@ -46,6 +47,7 @@ class _SearchDoctorsScreenState extends ConsumerState<SearchDoctorsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final results = _query.isEmpty ? null : ref.watch(doctorSearchProvider(_query));
     final recent = ref.watch(storageHelperProvider).getRecentSearches();
 
@@ -54,16 +56,16 @@ class _SearchDoctorsScreenState extends ConsumerState<SearchDoctorsScreen> {
         title: TextField(
           controller: _controller,
           autofocus: true,
-          decoration: const InputDecoration(hintText: 'Search doctors', border: InputBorder.none),
+          decoration: InputDecoration(hintText: l10n.doctorsSearch, border: InputBorder.none),
           onChanged: _onChanged,
         ),
       ),
       body: _query.isEmpty
           ? ListView(
               children: [
-                const Padding(
+                Padding(
                   padding: EdgeInsets.all(16),
-                  child: Text('Recent searches', style: TextStyle(fontWeight: FontWeight.w600)),
+                  child: Text(l10n.doctorsRecentSearches, style: const TextStyle(fontWeight: FontWeight.w600)),
                 ),
                 ...recent.map((q) => ListTile(title: Text(q), onTap: () {
                       _controller.text = q;
@@ -73,7 +75,7 @@ class _SearchDoctorsScreenState extends ConsumerState<SearchDoctorsScreen> {
             )
           : results!.when(
               data: (docs) => docs.isEmpty
-                  ? const AppEmptyState(title: 'No results')
+                  ? AppEmptyState(title: l10n.doctorsNoResults)
                   : ListView.builder(
                       itemCount: docs.length,
                       itemBuilder: (_, i) => DoctorCard(doctor: docs[i], index: i),

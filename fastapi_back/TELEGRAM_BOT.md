@@ -11,7 +11,13 @@ python main.py
 
 Console should show: `[Telegram] Bot started: @your_bot_username`
 
-## Link account (in Telegram)
+## Link account (recommended — MediChain+ app)
+
+1. Log in to the **MediChain+** app (Google or email).
+2. **Settings → Connect Telegram** → tap **Connect Telegram**.
+3. Telegram opens; tap **Start** — account links automatically (no password in chat).
+
+Legacy (not recommended):
 
 ```
 /login your@email.com your_password
@@ -40,7 +46,9 @@ Telegram allows **only one** `getUpdates` connection per bot token.
   TELEGRAM_BOT_ENABLED=false
   ```
 
-  on the machine that should **not** poll.
+  on the machine that should **not** poll (e.g. local `.env`).
+
+  On **Render**, set `TELEGRAM_BOT_ENABLED=true` and `TELEGRAM_BOT_USERNAME=YourBotUsername`.
 
 - For local development, stop the remote bot or disable it and run FastAPI locally with `TELEGRAM_BOT_ENABLED=true`.
 

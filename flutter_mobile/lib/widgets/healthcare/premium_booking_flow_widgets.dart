@@ -85,14 +85,14 @@ class PremiumFlowBackButton extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.arrow_back_rounded, size: 20, color: PremiumHealthcareTheme.text),
+            Icon(Icons.arrow_back_rounded, size: 20, color: PremiumHealthcareTheme.text(context)),
             const SizedBox(width: 6),
             Text(
               'Back',
               style: GoogleFonts.inter(
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
-                color: PremiumHealthcareTheme.text,
+                color: PremiumHealthcareTheme.text(context),
               ),
             ),
           ],
@@ -129,7 +129,7 @@ class PremiumSectionTitleRow extends StatelessWidget {
           style: GoogleFonts.inter(
             fontSize: 18,
             fontWeight: FontWeight.w700,
-            color: PremiumHealthcareTheme.text,
+            color: PremiumHealthcareTheme.text(context),
           ),
         ),
       ],
@@ -161,10 +161,10 @@ class PremiumWhoOptionCard extends StatelessWidget {
         width: double.infinity,
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
-          color: PremiumHealthcareTheme.white,
+          color: PremiumHealthcareTheme.white(context),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: PremiumHealthcareTheme.border),
-          boxShadow: PremiumHealthcareTheme.fieldShadow,
+          border: Border.all(color: PremiumHealthcareTheme.border(context)),
+          boxShadow: PremiumHealthcareTheme.fieldShadow(context),
         ),
         child: Row(
           children: [
@@ -187,7 +187,7 @@ class PremiumWhoOptionCard extends StatelessWidget {
                     style: GoogleFonts.inter(
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
-                      color: PremiumHealthcareTheme.text,
+                      color: PremiumHealthcareTheme.text(context),
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -196,13 +196,13 @@ class PremiumWhoOptionCard extends StatelessWidget {
                     style: GoogleFonts.inter(
                       fontSize: 13,
                       fontWeight: FontWeight.w400,
-                      color: PremiumHealthcareTheme.textSecondary,
+                      color: PremiumHealthcareTheme.textSecondary(context),
                     ),
                   ),
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right_rounded, color: PremiumHealthcareTheme.textSecondary),
+            Icon(Icons.chevron_right_rounded, color: PremiumHealthcareTheme.textSecondary(context)),
           ],
         ),
       ),

@@ -1,38 +1,41 @@
 from fastapi import APIRouter, Request, Depends
 from fastapi.responses import StreamingResponse
-from typing import Optional
 import httpx
 import json
 from app.controllers import ai_controller
 from app.middleware.auth import auth_user
 from app.config.config import settings
+from app.utils.app_logger import get_logger
 
 router = APIRouter(prefix="/api/ai", tags=["AI Assistant"])
+log = get_logger(__name__)
 
 _cached_token = None
 
 async def get_medichain_bot_token():
     global _cached_token
+    if not settings.MEDICHAIN_BOT_BASE_URL or not settings.MEDICHAIN_BOT_API_KEY:
+        log.warning("MediChain Bot not configured")
+        return None
     try:
         async with httpx.AsyncClient() as client:
             res = await client.post(
                 f"{settings.MEDICHAIN_BOT_BASE_URL}/api/v1/external/auth/token",
                 json={
                     "api_key": settings.MEDICHAIN_BOT_API_KEY,
-                    "password": settings.MEDICHAIN_BOT_PASSWORD
+                    "password": settings.MEDICHAIN_BOT_PASSWORD,
                 },
                 headers={"Content-Type": "application/json"},
-                timeout=10.0
+                timeout=10.0,
             )
             if res.status_code == 200:
                 data = res.json()
                 _cached_token = data.get("access_token")
                 return _cached_token
-            else:
-                print(f"Auth request failed with status {res.status_code}: {res.text}")
-                return None
+            log.warning("MediChain Bot auth failed with status %s", res.status_code)
+            return None
     except Exception as e:
-        print(f"Error authenticating with MediChain Bot: {e}")
+        log.error("MediChain Bot auth error: %s", type(e).__name__)
         return _cached_token
 
 @router.post("/chat/stream")
@@ -51,9 +54,9 @@ async def ai_chat_stream(req: Request):
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json"
         }
+        # Never send DATABASE_URL or internal credentials to external AI services.
         payload = {
-            "database_name": "MEDICHAIN",
-            "database_url": settings.DATABASE_URL,
+            "database_name": "MEDCLUES",
             "message": message
         }
         
@@ -69,8 +72,8 @@ async def ai_chat_stream(req: Request):
                     async for chunk in response.aiter_text():
                         yield chunk
             except Exception as e:
-                print(f"Error during streaming proxy: {e}")
-                yield f"data: {json.dumps({'content': f'Connection lost: {str(e)}'})}\n\n"
+                log.error("AI stream error: %s", type(e).__name__)
+                yield f"data: {json.dumps({'content': 'Connection lost. Please try again.'})}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
@@ -97,4 +100,3 @@ async def get_doctor_slots(doc_id: int):
 @router.get("/appointments-context")
 async def get_appointments_context(user_id: int = Depends(auth_user)):
     return await ai_controller.get_user_appointments_context(user_id)
-

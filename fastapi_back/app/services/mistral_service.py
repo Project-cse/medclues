@@ -6,10 +6,12 @@ from mistralai.client import Mistral
 # Initialize Mistral AI client
 from app.config.config import settings
 
-MISTRAL_API_KEY = settings.MISTRAL_API_KEY or os.getenv('MISTRAL_API_KEY', 'yTXgl26YgEUx0NeDkgQPlRHL7TmClmMy')
-mistral_client = Mistral(api_key=MISTRAL_API_KEY)
+MISTRAL_API_KEY = settings.MISTRAL_API_KEY or os.getenv('MISTRAL_API_KEY')
+mistral_client = Mistral(api_key=MISTRAL_API_KEY) if MISTRAL_API_KEY else None
 
 async def generate_chat_completion(user_message, conversation_history=None, system_prompt='', model='mistral-medium-latest'):
+    if not mistral_client:
+        return {"success": False, "message": "Mistral API not configured"}
     if conversation_history is None:
         conversation_history = []
         

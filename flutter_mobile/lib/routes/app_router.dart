@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../helpers/storage_helper.dart';
 import '../onboarding/onboarding_tour_steps.dart';
 import '../onboarding/providers/onboarding_provider.dart';
 import '../providers/auth_provider.dart';
@@ -25,6 +26,7 @@ import '../screens/profile/about_screen.dart';
 import '../screens/profile/help_screen.dart';
 import '../screens/profile/terms_screen.dart';
 import '../screens/profile/payments_screen.dart';
+import '../widgets/common/force_light_theme.dart';
 import '../features/emergency/screens/emergency_access_screen.dart';
 import '../features/emergency/screens/emergency_active_screen.dart';
 import '../features/emergency/screens/emergency_settings_screen.dart';
@@ -41,11 +43,13 @@ import '../screens/records/records_screen.dart';
 import '../screens/settings/settings_screen.dart';
 import '../screens/specialities/specialities_screen.dart';
 import '../brand/medclues_login_transition.dart';
+import '../screens/onboarding/permissions_setup_screen.dart';
 import '../screens/splash/splash_screen.dart';
+import '../l10n/l10n_extension.dart';
 import 'route_names.dart';
 import 'router_refresh.dart';
 
-final _rootKey = GlobalKey<NavigatorState>();
+final rootNavigatorKey = GlobalKey<NavigatorState>();
 
 String? _authRedirect(Ref ref, GoRouterState state) {
   final auth = ref.read(authProvider);
@@ -64,6 +68,10 @@ String? _authRedirect(Ref ref, GoRouterState state) {
   }
 
   if (auth.status == AuthStatus.authenticated) {
+    if (!ref.read(storageHelperProvider).isPermissionsSetupDone()) {
+      if (loc != RouteNames.permissionsSetup) return RouteNames.permissionsSetup;
+      return null;
+    }
     if (loc == RouteNames.login ||
         loc == RouteNames.signup ||
         loc == RouteNames.splash ||
@@ -92,8 +100,12 @@ String? _authRedirect(Ref ref, GoRouterState state) {
       loc == RouteNames.emergencyActive;
   if (isEmergencyRoute) return null;
 
+  if (loc == RouteNames.permissionsSetup) return null;
+
   if (auth.status == AuthStatus.unauthenticated || auth.status == AuthStatus.error) {
-    if (isAuthScreen || loc == RouteNames.splash) return null;
+    if (isAuthScreen || loc == RouteNames.splash || loc == RouteNames.permissionsSetup) {
+      return null;
+    }
     return RouteNames.login;
   }
 
@@ -105,12 +117,16 @@ final goRouterProvider = Provider<GoRouter>((ref) {
   final refresh = ref.watch(routerRefreshNotifierProvider);
 
   final router = GoRouter(
-    navigatorKey: _rootKey,
+    navigatorKey: rootNavigatorKey,
     initialLocation: RouteNames.splash,
     refreshListenable: refresh,
     redirect: (context, state) => _authRedirect(ref, state),
     routes: [
       GoRoute(path: RouteNames.splash, builder: (_, __) => const SplashScreen()),
+      GoRoute(
+        path: RouteNames.permissionsSetup,
+        builder: (_, __) => const PermissionsSetupScreen(),
+      ),
       GoRoute(
         path: RouteNames.login,
         pageBuilder: (context, state) => MedcluesLoginTransition.page(
@@ -220,9 +236,18 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           );
         },
       ),
-      GoRoute(path: RouteNames.emergency, builder: (_, __) => const EmergencyAccessScreen()),
-      GoRoute(path: RouteNames.emergencySettings, builder: (_, __) => const EmergencySettingsScreen()),
-      GoRoute(path: RouteNames.emergencyActive, builder: (_, __) => const EmergencyActiveScreen()),
+      GoRoute(
+        path: RouteNames.emergency,
+        builder: (_, __) => const ForceLightTheme(child: EmergencyAccessScreen()),
+      ),
+      GoRoute(
+        path: RouteNames.emergencySettings,
+        builder: (_, __) => const ForceLightTheme(child: EmergencySettingsScreen()),
+      ),
+      GoRoute(
+        path: RouteNames.emergencyActive,
+        builder: (_, __) => const ForceLightTheme(child: EmergencyActiveScreen()),
+      ),
     ],
   );
   ref.onDispose(router.dispose);
@@ -267,6 +292,7 @@ class _DashboardShellState extends State<DashboardShell> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final idx = _indexFromLocation(widget.location);
     return Scaffold(
       body: widget.child,
@@ -275,11 +301,15 @@ class _DashboardShellState extends State<DashboardShell> {
         onDestinationSelected: _onTap,
         elevation: 12,
         shadowColor: Theme.of(context).colorScheme.shadow.withValues(alpha: 0.12),
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Home'),
-          NavigationDestination(icon: Icon(Icons.calendar_today_outlined), selectedIcon: Icon(Icons.calendar_today), label: 'Appointments'),
-          NavigationDestination(icon: Icon(Icons.folder_outlined), selectedIcon: Icon(Icons.folder), label: 'Records'),
-          NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: 'Profile'),
+        destinations: [
+          NavigationDestination(icon: const Icon(Icons.home_outlined), selectedIcon: const Icon(Icons.home), label: l10n.navHome),
+          NavigationDestination(
+            icon: const Icon(Icons.calendar_today_outlined),
+            selectedIcon: const Icon(Icons.calendar_today),
+            label: l10n.navAppointments,
+          ),
+          NavigationDestination(icon: const Icon(Icons.folder_outlined), selectedIcon: const Icon(Icons.folder), label: l10n.navRecords),
+          NavigationDestination(icon: const Icon(Icons.person_outline), selectedIcon: const Icon(Icons.person), label: l10n.navProfile),
         ],
       ),
     );

@@ -15,13 +15,19 @@ extension MedcluesThemeContext on BuildContext {
   Color get hintText => isDark ? const Color(0xFF64748B) : AppColors.textHint;
   Color get borderColor => cs.outline;
   Color get highlightBg =>
-      isDark ? const Color(0xFF0C4A6E) : AppColors.brandBlueLight;
+      isDark ? const Color(0xFF1E3A5F) : AppColors.brandBlueLight;
   Color get chipSelectedBg =>
-      isDark ? const Color(0xFF0C4A6E) : AppColors.brandBlueLight;
-  Color get chipUnselectedBg => isDark ? cs.surface : AppColors.white;
+      isDark ? const Color(0xFF1E3A5F) : AppColors.brandBlueLight;
+  Color get chipUnselectedBg => isDark ? const Color(0xFF1A1A1A) : AppColors.white;
   Color get iconMuted => secondaryText;
   Color get shadowColor =>
       isDark ? Colors.black.withValues(alpha: 0.35) : AppColors.brandNavy.withValues(alpha: 0.08);
+
+  /// Shimmer / skeleton placeholders — subtle on true-black dark mode.
+  Color get skeletonBase => isDark ? const Color(0xFF1A1A1A) : const Color(0xFFE8EDF2);
+  Color get skeletonHighlight => isDark ? const Color(0xFF262626) : const Color(0xFFF1F5F9);
+  Color get skeletonLine => isDark ? const Color(0xFF333333) : const Color(0xFFCBD5E1);
+  Color get skeletonShimmer => isDark ? const Color(0xFF3A3A3A) : Colors.white;
 
   List<BoxShadow> get cardShadow => [
         BoxShadow(

@@ -17,6 +17,7 @@ class AuthInput extends StatefulWidget {
     this.onFocusChange,
     this.premium = true,
     this.bottomGap = 20,
+    this.autofillHints,
   });
 
   final String label;
@@ -30,18 +31,34 @@ class AuthInput extends StatefulWidget {
   final ValueChanged<bool>? onFocusChange;
   final bool premium;
   final double bottomGap;
+  final Iterable<String>? autofillHints;
 
   @override
   State<AuthInput> createState() => _AuthInputState();
 }
 
 class _AuthInputState extends State<AuthInput> {
+  final _focusNode = FocusNode();
   bool _focused = false;
 
-  void _setFocused(bool value) {
-    if (_focused == value) return;
-    setState(() => _focused = value);
-    widget.onFocusChange?.call(value);
+  @override
+  void initState() {
+    super.initState();
+    _focusNode.addListener(_onFocusChange);
+  }
+
+  @override
+  void dispose() {
+    _focusNode.removeListener(_onFocusChange);
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  void _onFocusChange() {
+    final focused = _focusNode.hasFocus;
+    if (_focused == focused) return;
+    setState(() => _focused = focused);
+    widget.onFocusChange?.call(focused);
   }
 
   @override
@@ -51,6 +68,30 @@ class _AuthInputState extends State<AuthInput> {
     final labelColor = widget.premium ? PremiumLoginTheme.text : const Color(0xFF1F2937);
     final borderColor = _focused ? PremiumLoginTheme.accentBlue : PremiumLoginTheme.inputBorder;
     final borderWidth = _focused ? 1.5 : 1.0;
+
+    final fieldTheme = Theme.of(context).copyWith(
+      splashColor: Colors.transparent,
+      highlightColor: Colors.transparent,
+      hoverColor: Colors.transparent,
+      textSelectionTheme: const TextSelectionThemeData(
+        cursorColor: PremiumLoginTheme.accentBlue,
+        selectionColor: Color(0x332563EB),
+        selectionHandleColor: PremiumLoginTheme.accentBlue,
+      ),
+      inputDecorationTheme: const InputDecorationTheme(
+        filled: true,
+        fillColor: PremiumLoginTheme.white,
+        hoverColor: Colors.transparent,
+        border: InputBorder.none,
+        enabledBorder: InputBorder.none,
+        focusedBorder: InputBorder.none,
+        errorBorder: InputBorder.none,
+        focusedErrorBorder: InputBorder.none,
+        disabledBorder: InputBorder.none,
+        contentPadding: EdgeInsets.zero,
+        isDense: true,
+      ),
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -68,52 +109,63 @@ class _AuthInputState extends State<AuthInput> {
               ),
             ),
           ),
-        Container(
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
           height: height,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(radius),
             border: Border.all(color: borderColor, width: borderWidth),
             color: PremiumLoginTheme.white,
           ),
+          clipBehavior: Clip.antiAlias,
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Row(
             children: [
               Icon(
                 widget.icon,
                 size: 20,
-                color: PremiumLoginTheme.textSecondary,
+                color: _focused ? PremiumLoginTheme.accentBlue : PremiumLoginTheme.textSecondary,
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: TextFormField(
-                  controller: widget.controller,
-                  obscureText: widget.obscureText,
-                  keyboardType: widget.keyboardType,
-                  validator: widget.validator,
-                  style: GoogleFonts.inter(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w500,
-                    color: PremiumLoginTheme.text,
-                  ),
-                  decoration: InputDecoration(
-                    hintText: widget.hintText,
-                    hintStyle: GoogleFonts.inter(
+                child: Theme(
+                  data: fieldTheme,
+                  child: TextFormField(
+                    controller: widget.controller,
+                    focusNode: _focusNode,
+                    obscureText: widget.obscureText,
+                    keyboardType: widget.keyboardType,
+                    validator: widget.validator,
+                    autofillHints: widget.autofillHints,
+                    autocorrect: false,
+                    enableSuggestions: !widget.obscureText,
+                    style: GoogleFonts.inter(
                       fontSize: 15,
-                      fontWeight: FontWeight.w400,
-                      color: PremiumLoginTheme.placeholder,
+                      fontWeight: FontWeight.w500,
+                      color: PremiumLoginTheme.text,
+                      height: 1.2,
                     ),
-                    border: InputBorder.none,
-                    enabledBorder: InputBorder.none,
-                    focusedBorder: InputBorder.none,
-                    errorBorder: InputBorder.none,
-                    focusedErrorBorder: InputBorder.none,
-                    disabledBorder: InputBorder.none,
-                    isDense: true,
-                    contentPadding: EdgeInsets.zero,
+                    cursorColor: PremiumLoginTheme.accentBlue,
+                    cursorHeight: 18,
+                    decoration: InputDecoration(
+                      hintText: widget.hintText,
+                      hintStyle: GoogleFonts.inter(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w400,
+                        color: PremiumLoginTheme.placeholder,
+                      ),
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      errorBorder: InputBorder.none,
+                      focusedErrorBorder: InputBorder.none,
+                      disabledBorder: InputBorder.none,
+                      filled: true,
+                      fillColor: PremiumLoginTheme.white,
+                      isCollapsed: true,
+                      contentPadding: EdgeInsets.zero,
+                    ),
                   ),
-                  onTap: () => _setFocused(true),
-                  onTapOutside: (_) => _setFocused(false),
-                  onEditingComplete: () => _setFocused(false),
                 ),
               ),
               if (widget.suffix != null) widget.suffix!,

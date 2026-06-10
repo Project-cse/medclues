@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../constants/profile_options.dart';
+import '../../l10n/l10n_extension.dart';
 import '../../models/patient_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/patient_provider.dart';
@@ -69,7 +70,7 @@ class _OnboardingProfileStepState extends ConsumerState<OnboardingProfileStep> {
       labelText: label,
       hintText: hint,
       filled: true,
-      fillColor: PremiumHealthcareTheme.white,
+      fillColor: PremiumHealthcareTheme.white(context),
       border: _inputBorder,
       enabledBorder: _inputBorder,
       focusedBorder: _inputBorder.copyWith(
@@ -87,11 +88,11 @@ class _OnboardingProfileStepState extends ConsumerState<OnboardingProfileStep> {
       lastDate: DateTime.now(),
       builder: (ctx, child) => Theme(
         data: Theme.of(ctx).copyWith(
-          colorScheme: const ColorScheme.light(
+          colorScheme: ColorScheme.light(
             primary: PremiumHealthcareTheme.primaryBlue,
             onPrimary: Colors.white,
             surface: Colors.white,
-            onSurface: PremiumHealthcareTheme.text,
+            onSurface: PremiumHealthcareTheme.text(context),
           ),
         ),
         child: child ?? const SizedBox.shrink(),
@@ -101,13 +102,14 @@ class _OnboardingProfileStepState extends ConsumerState<OnboardingProfileStep> {
   }
 
   Future<void> _save() async {
+    final l10n = context.l10n;
     setState(() => _error = null);
     if (_name.text.trim().isEmpty ||
         _phone.text.trim().isEmpty ||
         _gender == null ||
         _bloodGroup == null ||
         _dob == null) {
-      setState(() => _error = 'Please fill all required fields: name, phone, gender, date of birth, and blood group.');
+      setState(() => _error = l10n.commonError);
       return;
     }
 
@@ -181,7 +183,7 @@ class _OnboardingProfileStepState extends ConsumerState<OnboardingProfileStep> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: PremiumHealthcareTheme.background,
+      backgroundColor: PremiumHealthcareTheme.background(context),
       body: SafeArea(
         child: _ready
             ? _form()
@@ -191,25 +193,26 @@ class _OnboardingProfileStepState extends ConsumerState<OnboardingProfileStep> {
   }
 
   Widget _form() {
+    final l10n = context.l10n;
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Step 8/8', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: PremiumHealthcareTheme.secondaryBlue)),
+          Text(l10n.onboardingStep8of8, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: PremiumHealthcareTheme.secondaryBlue)),
           const SizedBox(height: 8),
-          Text('Complete Your Profile', style: GoogleFonts.inter(fontSize: 24, fontWeight: FontWeight.w700, color: PremiumHealthcareTheme.text)),
+          Text(l10n.onboardingCompleteProfile, style: GoogleFonts.inter(fontSize: 24, fontWeight: FontWeight.w700, color: PremiumHealthcareTheme.text(context))),
           const SizedBox(height: 8),
           Text(
-            'Complete your healthcare profile to continue.',
-            style: GoogleFonts.inter(fontSize: 14, height: 1.5, color: PremiumHealthcareTheme.textSecondary),
+            l10n.onboardingCompleteProfileDesc,
+            style: GoogleFonts.inter(fontSize: 14, height: 1.5, color: PremiumHealthcareTheme.textSecondary(context)),
           ),
           const SizedBox(height: 20),
-          _field('Full Name *', _name),
+          _field('${l10n.authFullName} *', _name),
           const SizedBox(height: 12),
-          _field('Email', _email, readOnly: true),
+          _field(l10n.authEmail, _email, readOnly: true),
           const SizedBox(height: 12),
-          _field('Phone Number *', _phone, keyboard: TextInputType.phone),
+          _field('${l10n.authPhone} *', _phone, keyboard: TextInputType.phone),
           const SizedBox(height: 12),
           _genderDropdown(),
           const SizedBox(height: 12),
@@ -217,7 +220,7 @@ class _OnboardingProfileStepState extends ConsumerState<OnboardingProfileStep> {
           const SizedBox(height: 12),
           _bloodDropdown(),
           const SizedBox(height: 12),
-          _field('Address (optional)', _address),
+          _field(l10n.profileAddress, _address),
           if (_error != null) ...[
             const SizedBox(height: 12),
             Container(
@@ -245,7 +248,7 @@ class _OnboardingProfileStepState extends ConsumerState<OnboardingProfileStep> {
               ),
               child: _saving
                   ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : Text('Complete Setup', style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 15)),
+                  : Text(l10n.onboardingCompleteSetup, style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 15)),
             ),
           ),
         ],
@@ -269,8 +272,8 @@ class _OnboardingProfileStepState extends ConsumerState<OnboardingProfileStep> {
       initialValue: _gender,
       isExpanded: true,
       menuMaxHeight: _menuMaxHeight,
-      decoration: _decoration('Gender *', hint: 'Select gender'),
-      style: GoogleFonts.inter(fontSize: 14, color: PremiumHealthcareTheme.text),
+      decoration: _decoration('${context.l10n.authGender} *', hint: context.l10n.authGender),
+      style: GoogleFonts.inter(fontSize: 14, color: PremiumHealthcareTheme.text(context)),
       borderRadius: BorderRadius.circular(12),
       dropdownColor: Colors.white,
       items: ProfileOptions.genderItems
@@ -286,8 +289,8 @@ class _OnboardingProfileStepState extends ConsumerState<OnboardingProfileStep> {
       initialValue: _bloodGroup,
       isExpanded: true,
       menuMaxHeight: _menuMaxHeight,
-      decoration: _decoration('Blood Group *', hint: 'Select blood group'),
-      style: GoogleFonts.inter(fontSize: 14, color: PremiumHealthcareTheme.text),
+      decoration: _decoration('${context.l10n.profileBloodGroup} *', hint: context.l10n.profileBloodGroup),
+      style: GoogleFonts.inter(fontSize: 14, color: PremiumHealthcareTheme.text(context)),
       borderRadius: BorderRadius.circular(12),
       dropdownColor: Colors.white,
       items: ProfileOptions.bloodGroups
@@ -298,19 +301,19 @@ class _OnboardingProfileStepState extends ConsumerState<OnboardingProfileStep> {
   }
 
   Widget _dobField() {
-    final label = _dob == null ? 'Select date' : DateFormat('dd MMM yyyy').format(_dob!);
+    final label = _dob == null ? context.l10n.authSelectDob : DateFormat('dd MMM yyyy').format(_dob!);
     return InkWell(
       onTap: _pickDob,
       borderRadius: BorderRadius.circular(12),
       child: InputDecorator(
-        decoration: _decoration('Date of Birth *').copyWith(
+        decoration: _decoration('${context.l10n.authDateOfBirth} *').copyWith(
           suffixIcon: const Icon(Icons.calendar_today_outlined, size: 20),
         ),
         child: Text(
           label,
           style: GoogleFonts.inter(
             fontSize: 14,
-            color: _dob == null ? PremiumHealthcareTheme.textSecondary : PremiumHealthcareTheme.text,
+            color: _dob == null ? PremiumHealthcareTheme.textSecondary(context) : PremiumHealthcareTheme.text(context),
           ),
         ),
       ),

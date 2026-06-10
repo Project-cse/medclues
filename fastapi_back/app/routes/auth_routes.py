@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Request, HTTPException, Depends
 from fastapi.responses import JSONResponse
 
 from app.controllers import auth_controller
+from app.middleware.auth import auth_user, auth_admin, auth_doctor, auth_dean
 from app.utils.auth_response import build_auth_response
 from app.utils.refresh_cookie import clear_refresh_cookie, uses_cookie_storage
 
@@ -73,4 +74,49 @@ async def logout(req: Request):
     response = JSONResponse(content=result)
     if uses_cookie_storage(req):
         clear_refresh_cookie(response, role)
+    return response
+
+
+@router.post("/logout-all")
+async def logout_all(req: Request, user_id: int = Depends(auth_user)):
+    body = await req.json()
+    role = (body.get("role") or "patient").strip().lower()
+    if role != "patient":
+        raise HTTPException(status_code=400, detail="Use role-specific logout-all for non-patient roles")
+    result = await auth_controller.logout_all(role=role, request=req, user_id=user_id)
+    response = JSONResponse(content=result)
+    if uses_cookie_storage(req):
+        clear_refresh_cookie(response, role)
+    return response
+
+
+@router.post("/logout-all/admin")
+async def logout_all_admin(req: Request, email: str = Depends(auth_admin)):
+    body = await req.json()
+    result = await auth_controller.logout_all(role="admin", request=req, email=email)
+    response = JSONResponse(content=result)
+    if uses_cookie_storage(req):
+        clear_refresh_cookie(response, "admin")
+    return response
+
+
+@router.post("/logout-all/doctor")
+async def logout_all_doctor(req: Request, doctor_id: int = Depends(auth_doctor)):
+    body = await req.json()
+    result = await auth_controller.logout_all(role="doctor", request=req, user_id=doctor_id)
+    response = JSONResponse(content=result)
+    if uses_cookie_storage(req):
+        clear_refresh_cookie(response, "doctor")
+    return response
+
+
+@router.post("/logout-all/dean")
+async def logout_all_dean(req: Request, dean_ctx: dict = Depends(auth_dean)):
+    body = await req.json()
+    result = await auth_controller.logout_all(
+        role="dean", request=req, user_id=dean_ctx.get("id")
+    )
+    response = JSONResponse(content=result)
+    if uses_cookie_storage(req):
+        clear_refresh_cookie(response, "dean")
     return response

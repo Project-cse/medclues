@@ -33,6 +33,40 @@ def normalize_doctor_ref(doc_id: Any) -> Tuple[str, int]:
     return text, num
 
 
+def normalize_booking_mode(mode_or_visit: Optional[str]) -> str:
+    """Map visitType/mode strings to doctor_slots mode (offline | online)."""
+    m = (mode_or_visit or "").lower().strip()
+    if m in ("online", "video"):
+        return "online"
+    if m in (
+        "offline",
+        "in-clinic",
+        "in_clinic",
+        "in-person",
+        "in_person",
+        "inperson",
+        "in clinic",
+        "in person",
+    ):
+        return "offline"
+    return m or "offline"
+
+
+def infer_slot_type_from_label(
+    slot_time: Optional[str], slot_type: Optional[str] = None
+) -> Optional[str]:
+    if slot_type in ("morning_opd", "evening_opd", "video"):
+        return slot_type
+    t = (slot_time or "").lower()
+    if not t:
+        return None
+    if "evening" in t or "6:00" in t or "18:" in t or "9:00 pm" in t:
+        return "evening_opd"
+    if "10:00" in t or "morning" in t or "1:00 pm" in t:
+        return "morning_opd"
+    return None
+
+
 def legacy_slot_date(d: date) -> str:
     return f"{d.day}_{d.month}_{d.year}"
 
@@ -222,30 +256,39 @@ async def get_public_slots(doctor_ref: str, mode: str) -> Dict[str, Any]:
             },
         )
 
+    block_order = ("morning_opd", "evening_opd")
     summaries = await doctor_slot_model.get_offline_block_summary(doctor_ref, start, end)
+    summary_by_day: Dict[str, Dict[str, Dict[str, Any]]] = {}
     for row in summaries:
         d: date = row["slot_date"]
         key = d.isoformat()
         slot_type = row["slot_type"]
-        meta = block_meta.get(slot_type)
-        rep_id = row.get("representative_slot_id")
-        avail = int(row.get("available_count") or 0)
-        if not meta or key not in days_map or avail <= 0 or rep_id is None:
-            continue
-        days_map[key]["blocks"].append(
-            {
-                "label": meta["label"],
-                "display": meta["display"],
-                "slot_type": slot_type,
-                "available_count": avail,
-                "total_count": meta["total_count"],
-                "bookable": True,
-                "representative_slot_id": rep_id,
-                "slot_id": rep_id,
-            }
-        )
+        summary_by_day.setdefault(key, {})[slot_type] = row
 
-    days_list = [days_map[k] for k in sorted(days_map.keys()) if days_map[k].get("blocks")]
+    for key, day_entry in days_map.items():
+        day_summaries = summary_by_day.get(key, {})
+        blocks: List[Dict[str, Any]] = []
+        for slot_type in block_order:
+            meta = block_meta[slot_type]
+            row = day_summaries.get(slot_type)
+            avail = int(row["available_count"]) if row else 0
+            total = int(row["total_count"]) if row else meta["total_count"]
+            rep_id = row.get("representative_slot_id") if row else None
+            blocks.append(
+                {
+                    "label": meta["label"],
+                    "display": meta["display"],
+                    "slot_type": slot_type,
+                    "available_count": avail,
+                    "total_count": total,
+                    "bookable": avail > 0 and rep_id is not None,
+                    "representative_slot_id": rep_id,
+                    "slot_id": rep_id,
+                }
+            )
+        day_entry["blocks"] = blocks
+
+    days_list = [days_map[k] for k in sorted(days_map.keys())]
     return {"success": True, "mode": mode, "days": days_list}
 
 
@@ -273,7 +316,7 @@ async def resolve_slot_for_booking(
     slot_date_str: Optional[str] = None,
 ) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
     doctor_ref, _ = normalize_doctor_ref(doctor_ref)
-    mode = (mode or "offline").lower()
+    mode = normalize_booking_mode(mode)
 
     if slot_id:
         slot = await doctor_slot_model.get_slot_by_id_for_update(int(slot_id))

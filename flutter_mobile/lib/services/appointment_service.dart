@@ -75,14 +75,19 @@ class AppointmentService {
         final display = '${m['display'] ?? m['label'] ?? ''}'.trim();
         if (display.isEmpty) continue;
         final slotId = (m['slot_id'] ?? m['representative_slot_id']) as num?;
+        final avail = (m['available_count'] as num?)?.toInt();
+        final total = (m['total_count'] as num?)?.toInt();
         slots.add(SlotModel(
           time: display,
           displayTime: display,
-          available: m['bookable'] != false && (m['available_count'] as num? ?? 1) > 0,
+          available: m['bookable'] != false && (avail ?? 1) > 0,
           slotId: slotId?.toInt(),
           slotType: m['slot_type']?.toString(),
+          availableCount: avail,
+          totalCount: total,
         ));
       }
+      slots.sort(compareOpdSlotOrder);
     }
     return slots;
   }
@@ -101,7 +106,11 @@ class AppointmentService {
     String mode = 'offline',
   }) async {
     final res = await _api.get<Map<String, dynamic>>(
-      ApiConfig.doctorScheduleSlots(doctorId, mode: mode),
+      ApiConfig.doctorScheduleSlots(doctorId),
+      queryParameters: {
+        'mode': mode,
+        '_': DateTime.now().millisecondsSinceEpoch,
+      },
     );
     final data = res.data ?? {};
     assertSuccess(data);
@@ -148,6 +157,8 @@ class AppointmentService {
     if (notes != null && notes.trim().isNotEmpty) {
       symptomList.add('Note: ${notes.trim()}');
     }
+    final resolvedSlotType = inferOpdSlotType(slotTime, slotType);
+    final resolvedMode = mode ?? (resolvedSlotType != null ? 'offline' : null);
     final formMap = <String, dynamic>{
       'docId': doctorId,
       'slotDate': slotDate,
@@ -155,9 +166,9 @@ class AppointmentService {
       'symptoms': jsonEncode(symptomList),
       'paymentMethod': paymentMethod,
       if (visitType != null) 'visitType': visitType,
-      if (mode != null) 'mode': mode,
+      if (resolvedMode != null) 'mode': resolvedMode,
       if (slotId != null) 'slotId': '$slotId',
-      if (slotType != null) 'slotType': slotType,
+      if (resolvedSlotType != null) 'slotType': resolvedSlotType,
       'actualPatient': jsonEncode(patientJson),
       if (hospitalName != null) 'hospitalName': hospitalName,
       if (location != null) 'location': location,

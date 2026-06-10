@@ -1,42 +1,61 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
-/// 2026 corporate healthcare booking — Apple Health / Practo tier tokens.
+import '../../themes/premium_theme_colors.dart';
+
+/// Corporate healthcare booking — clean borders, navy accents, restrained elevation.
 abstract final class PremiumBookingTheme {
   static const Color primaryBlue = Color(0xFF003B8E);
   static const Color accentBlue = Color(0xFF2563EB);
-  static const Color successGreen = Color(0xFF22C55E);
-  static const Color background = Color(0xFFF8FAFC);
-  static const Color white = Color(0xFFFFFFFF);
-  static const Color text = Color(0xFF1F2937);
-  static const Color textSecondary = Color(0xFF6B7280);
-  static const Color border = Color(0xFFE5E7EB);
-  static const Color chipSelectedBg = Color(0xFFEFF6FF);
-  static const Color securityBg = Color(0xFFF0F7FF);
+  static const Color successGreen = Color(0xFF16A34A);
   static const Color starGold = Color(0xFFF59E0B);
 
-  static const double horizontalPadding = 24;
-  static const double cardRadius = 24;
-  static const double chipRadius = 14;
-  static const double dateCardRadius = 20;
-  static const double buttonRadius = 18;
-  static const double buttonHeight = 60;
-  static const double sectionGap = 28;
+  static Color background(BuildContext context) =>
+      PremiumThemeColors.of(context).background;
+  static Color white(BuildContext context) =>
+      PremiumThemeColors.of(context).surface;
+  static Color text(BuildContext context) => PremiumThemeColors.of(context).text;
+  static Color textSecondary(BuildContext context) =>
+      PremiumThemeColors.of(context).textSecondary;
+  static Color border(BuildContext context) =>
+      PremiumThemeColors.of(context).border;
+  static Color chipSelectedBg(BuildContext context) =>
+      PremiumThemeColors.of(context).chipSelectedBg;
+  static Color securityBg(BuildContext context) =>
+      PremiumThemeColors.of(context).securityBg;
 
-  static List<BoxShadow> get cardShadow => [
-        BoxShadow(
-          color: Colors.black.withValues(alpha: 0.06),
-          blurRadius: 24,
-          offset: const Offset(0, 8),
-        ),
-      ];
+  static bool _isDark(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark;
 
-  static List<BoxShadow> get softShadow => [
-        BoxShadow(
-          color: Colors.black.withValues(alpha: 0.05),
-          blurRadius: 12,
-          offset: const Offset(0, 4),
-        ),
-      ];
+  static const double horizontalPadding = 20;
+  static const double cardRadius = 16;
+  static const double chipRadius = 10;
+  static const double dateCardRadius = 12;
+  static const double buttonRadius = 12;
+  static const double buttonHeight = 56;
+  static const double sectionGap = 24;
+
+  static List<BoxShadow> cardShadow(BuildContext context) {
+    if (_isDark(context)) return const [];
+    return [
+      BoxShadow(
+        color: Colors.black.withValues(alpha: 0.05),
+        blurRadius: 16,
+        offset: const Offset(0, 4),
+      ),
+    ];
+  }
+
+  static List<BoxShadow> softShadow(BuildContext context) {
+    if (_isDark(context)) return const [];
+    return [
+      BoxShadow(
+        color: Colors.black.withValues(alpha: 0.04),
+        blurRadius: 8,
+        offset: const Offset(0, 2),
+      ),
+    ];
+  }
 
   static const LinearGradient ctaGradient = LinearGradient(
     begin: Alignment.topLeft,
@@ -44,11 +63,65 @@ abstract final class PremiumBookingTheme {
     colors: [Color(0xFF003B8E), Color(0xFF002654)],
   );
 
+  static const LinearGradient selectedGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFF003B8E), Color(0xFF0047AB)],
+  );
+
   static List<BoxShadow> get ctaShadow => [
         BoxShadow(
-          color: primaryBlue.withValues(alpha: 0.32),
-          blurRadius: 20,
-          offset: const Offset(0, 8),
+          color: primaryBlue.withValues(alpha: 0.28),
+          blurRadius: 16,
+          offset: const Offset(0, 6),
         ),
       ];
+
+  /// Standard corporate card — bordered surface, restrained elevation.
+  static BoxDecoration corporateCard(BuildContext context) {
+    final dark = _isDark(context);
+    return BoxDecoration(
+      color: white(context),
+      borderRadius: BorderRadius.circular(cardRadius),
+      border: Border.all(
+        color: dark ? border(context) : border(context).withValues(alpha: 0.9),
+      ),
+      boxShadow: cardShadow(context),
+    );
+  }
+
+  /// Icon badge used in section card headers.
+  static BoxDecoration iconBadge(BuildContext context) {
+    return BoxDecoration(
+      color: chipSelectedBg(context),
+      borderRadius: BorderRadius.circular(10),
+      border: Border.all(
+        color: accentBlue.withValues(alpha: _isDark(context) ? 0.25 : 0.12),
+      ),
+    );
+  }
+
+  static TextStyle sectionTitleStyle(BuildContext context) => GoogleFonts.inter(
+        fontSize: 15,
+        fontWeight: FontWeight.w600,
+        color: text(context),
+        letterSpacing: -0.15,
+        height: 1.25,
+      );
+
+  static TextStyle sectionSubtitleStyle(BuildContext context) =>
+      GoogleFonts.inter(
+        fontSize: 12,
+        fontWeight: FontWeight.w400,
+        color: textSecondary(context),
+        height: 1.4,
+      );
+
+  static TextStyle corporateLabelStyle(BuildContext context) => GoogleFonts.inter(
+        fontSize: 11,
+        fontWeight: FontWeight.w600,
+        color: textSecondary(context),
+        letterSpacing: 0.6,
+        height: 1.2,
+      );
 }

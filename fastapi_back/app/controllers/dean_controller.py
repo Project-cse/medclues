@@ -51,7 +51,7 @@ async def login_dean(body: dict):
         if not is_bcrypt:
             try:
                 new_hash = _hash(password)
-                await dean_model.update_dean(dean["id"], {"password": new_hash, "password_text": password})
+                await dean_model.update_dean(dean["id"], {"password": new_hash})
                 print(f"[SECURITY] Successfully upgraded plain-text password to secure bcrypt hash for dean: {email}", flush=True)
             except Exception as hash_err:
                 print(f"[WARNING] Failed to secure dean password on login: {hash_err}", flush=True)
@@ -422,7 +422,6 @@ async def admin_create_dean(data: dict):
             "name": data.get("name") or hospital_name or "Hospital Admin",
             "email": data["email"].strip().lower(),
             "password": hashed,
-            "password_text": data["password"],
             "hospital_id": int(hospital_id),
         })
         return {"success": True, "message": "DEAN account created", "dean": {"id": dean["id"], "name": dean["name"]}}
@@ -452,7 +451,6 @@ async def admin_update_dean(dean_id: int, data: dict):
         if "email" in data: update_data["email"] = data["email"]
         if "password" in data:
             update_data["password"] = _hash(data["password"])
-            update_data["password_text"] = data["password"]
         
         await dean_model.update_dean(dean_id, update_data)
         return {"success": True, "message": "DEAN account updated"}

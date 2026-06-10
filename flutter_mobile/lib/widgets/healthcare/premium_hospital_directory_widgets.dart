@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../models/hospital_model.dart';
+import '../../themes/premium_theme_colors.dart';
 import '../../utils/hospital_display_utils.dart';
 import '../../utils/image_url_helper.dart';
 import '../../utils/location_utils.dart';
@@ -13,34 +14,43 @@ abstract final class PremiumHospitalDirectoryTheme {
   static const Color actionBlue = Color(0xFF2563EB);
   static const Color healthcareTeal = Color(0xFF00B8B0);
   static const Color emergencyRed = Color(0xFFE53935);
-  static const Color white = Color(0xFFFFFFFF);
-  static const Color background = Color(0xFFF5F7FA);
-  static const Color text = Color(0xFF0F172A);
-  static const Color textSecondary = Color(0xFF64748B);
-  static const Color border = Color(0xFFE2E8F0);
   static const Color verifiedGreen = Color(0xFF22C55E);
   static const Color starGold = Color(0xFFF59E0B);
+
+  static Color white(BuildContext context) =>
+      PremiumThemeColors.of(context).surface;
+  static Color background(BuildContext context) =>
+      PremiumThemeColors.of(context).background;
+  static Color text(BuildContext context) => PremiumThemeColors.of(context).text;
+  static Color textSecondary(BuildContext context) =>
+      PremiumThemeColors.of(context).textSecondary;
+  static Color border(BuildContext context) =>
+      PremiumThemeColors.of(context).border;
 
   static const double horizontalPadding = 16;
   static const double cardRadius = 20;
   static const double segmentRadius = 30;
 
-  static List<BoxShadow> get cardShadow => [
+  static List<BoxShadow> cardShadow(BuildContext context) => [
         BoxShadow(
           color: medicalBlue.withValues(alpha: 0.07),
           blurRadius: 24,
           offset: const Offset(0, 10),
         ),
         BoxShadow(
-          color: Colors.black.withValues(alpha: 0.04),
+          color: Colors.black.withValues(
+            alpha: Theme.of(context).brightness == Brightness.dark ? 0.35 : 0.04,
+          ),
           blurRadius: 8,
           offset: const Offset(0, 2),
         ),
       ];
 
-  static List<BoxShadow> get segmentShadow => [
+  static List<BoxShadow> segmentShadow(BuildContext context) => [
         BoxShadow(
-          color: Colors.black.withValues(alpha: 0.06),
+          color: Colors.black.withValues(
+            alpha: Theme.of(context).brightness == Brightness.dark ? 0.3 : 0.06,
+          ),
           blurRadius: 16,
           offset: const Offset(0, 4),
         ),
@@ -186,9 +196,9 @@ class PremiumHospitalSegmentedSwitch extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(4),
         decoration: BoxDecoration(
-          color: PremiumHospitalDirectoryTheme.white,
+          color: PremiumHospitalDirectoryTheme.white(context),
           borderRadius: BorderRadius.circular(PremiumHospitalDirectoryTheme.segmentRadius),
-          boxShadow: PremiumHospitalDirectoryTheme.segmentShadow,
+          boxShadow: PremiumHospitalDirectoryTheme.segmentShadow(context),
         ),
         child: Row(
           children: [
@@ -297,10 +307,10 @@ class PremiumHospitalDirectoryCard extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 16),
       child: Container(
         decoration: BoxDecoration(
-          color: PremiumHospitalDirectoryTheme.white,
+          color: PremiumHospitalDirectoryTheme.white(context),
           borderRadius: BorderRadius.circular(PremiumHospitalDirectoryTheme.cardRadius),
-          border: Border.all(color: PremiumHospitalDirectoryTheme.border.withValues(alpha: 0.6)),
-          boxShadow: PremiumHospitalDirectoryTheme.cardShadow,
+          border: Border.all(color: PremiumHospitalDirectoryTheme.border(context).withValues(alpha: 0.6)),
+          boxShadow: PremiumHospitalDirectoryTheme.cardShadow(context),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -330,7 +340,7 @@ class PremiumHospitalDirectoryCard extends StatelessWidget {
                                     style: GoogleFonts.inter(
                                       fontSize: 15,
                                       fontWeight: FontWeight.w700,
-                                      color: PremiumHospitalDirectoryTheme.text,
+                                      color: PremiumHospitalDirectoryTheme.text(context),
                                       height: 1.2,
                                     ),
                                   ),
@@ -379,14 +389,14 @@ class PremiumHospitalDirectoryCard extends StatelessWidget {
                                       Icon(
                                         Icons.directions_car_filled_outlined,
                                         size: 11,
-                                        color: PremiumHospitalDirectoryTheme.textSecondary.withValues(alpha: 0.8),
+                                        color: PremiumHospitalDirectoryTheme.textSecondary(context).withValues(alpha: 0.8),
                                       ),
                                       const SizedBox(width: 3),
                                       Text(
                                         formatHospitalTravelTime(hospital.distanceKm!),
                                         style: GoogleFonts.inter(
                                           fontSize: 10,
-                                          color: PremiumHospitalDirectoryTheme.textSecondary,
+                                          color: PremiumHospitalDirectoryTheme.textSecondary(context),
                                         ),
                                       ),
                                     ],
@@ -407,7 +417,7 @@ class PremiumHospitalDirectoryCard extends StatelessWidget {
                                 style: GoogleFonts.inter(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w700,
-                                  color: PremiumHospitalDirectoryTheme.text,
+                                  color: PremiumHospitalDirectoryTheme.text(context),
                                 ),
                               ),
                             ],
@@ -421,7 +431,7 @@ class PremiumHospitalDirectoryCard extends StatelessWidget {
                               Icon(
                                 Icons.location_on_outlined,
                                 size: 14,
-                                color: PremiumHospitalDirectoryTheme.textSecondary.withValues(alpha: 0.85),
+                                color: PremiumHospitalDirectoryTheme.textSecondary(context).withValues(alpha: 0.85),
                               ),
                               const SizedBox(width: 4),
                               Expanded(
@@ -431,7 +441,7 @@ class PremiumHospitalDirectoryCard extends StatelessWidget {
                                   overflow: TextOverflow.ellipsis,
                                   style: GoogleFonts.inter(
                                     fontSize: 11,
-                                    color: PremiumHospitalDirectoryTheme.textSecondary,
+                                    color: PremiumHospitalDirectoryTheme.textSecondary(context),
                                     height: 1.45,
                                   ),
                                 ),
@@ -457,7 +467,7 @@ class PremiumHospitalDirectoryCard extends StatelessWidget {
                 ],
               ),
             ),
-            const Divider(height: 1, color: PremiumHospitalDirectoryTheme.border),
+            Divider(height: 1, color: PremiumHospitalDirectoryTheme.border(context)),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
               child: Row(
@@ -474,7 +484,7 @@ class PremiumHospitalDirectoryCard extends StatelessWidget {
                               style: GoogleFonts.inter(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w600,
-                                color: PremiumHospitalDirectoryTheme.textSecondary,
+                                color: PremiumHospitalDirectoryTheme.textSecondary(context),
                               ),
                             ),
                           ),
@@ -526,7 +536,7 @@ class PremiumHospitalDirectoryCard extends StatelessWidget {
                     ),
                   const SizedBox(width: 8),
                   Material(
-                    color: PremiumHospitalDirectoryTheme.background,
+                    color: PremiumHospitalDirectoryTheme.background(context),
                     borderRadius: BorderRadius.circular(10),
                     child: InkWell(
                       onTap: onDetails,
@@ -537,12 +547,12 @@ class PremiumHospitalDirectoryCard extends StatelessWidget {
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: PremiumHospitalDirectoryTheme.border),
+                          border: Border.all(color: PremiumHospitalDirectoryTheme.border(context)),
                         ),
-                        child: const Icon(
+                        child: Icon(
                           Icons.chevron_right_rounded,
                           size: 22,
-                          color: PremiumHospitalDirectoryTheme.textSecondary,
+                          color: PremiumHospitalDirectoryTheme.textSecondary(context),
                         ),
                       ),
                     ),
@@ -646,8 +656,8 @@ class PremiumHospitalDirectoryPagination extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
       decoration: BoxDecoration(
-        color: PremiumHospitalDirectoryTheme.white,
-        border: Border(top: BorderSide(color: PremiumHospitalDirectoryTheme.border)),
+        color: PremiumHospitalDirectoryTheme.white(context),
+        border: Border(top: BorderSide(color: PremiumHospitalDirectoryTheme.border(context))),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.04),
@@ -664,7 +674,7 @@ class PremiumHospitalDirectoryPagination extends StatelessWidget {
               style: GoogleFonts.inter(
                 fontSize: 11,
                 fontWeight: FontWeight.w500,
-                color: PremiumHospitalDirectoryTheme.textSecondary,
+                color: PremiumHospitalDirectoryTheme.textSecondary(context),
               ),
             ),
           ),
@@ -673,7 +683,7 @@ class PremiumHospitalDirectoryPagination extends StatelessWidget {
             enabled: canPrev,
             onTap: canPrev ? () => onPageChanged(currentPage - 1) : null,
           ),
-          ..._buildPageNumbers(totalPages),
+          ..._buildPageNumbers(context, totalPages),
           _PageArrow(
             icon: Icons.chevron_right_rounded,
             enabled: canNext,
@@ -684,7 +694,7 @@ class PremiumHospitalDirectoryPagination extends StatelessWidget {
     );
   }
 
-  List<Widget> _buildPageNumbers(int totalPages) {
+  List<Widget> _buildPageNumbers(BuildContext context, int totalPages) {
     final pages = <int>[];
     if (totalPages <= 5) {
       pages.addAll(List.generate(totalPages, (i) => i));
@@ -715,7 +725,7 @@ class PremiumHospitalDirectoryPagination extends StatelessWidget {
               style: GoogleFonts.inter(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
-                color: active ? Colors.white : PremiumHospitalDirectoryTheme.textSecondary,
+                color: active ? Colors.white : PremiumHospitalDirectoryTheme.textSecondary(context),
               ),
             ),
           ),
@@ -745,8 +755,8 @@ class _PageArrow extends StatelessWidget {
             icon,
             size: 22,
             color: enabled
-                ? PremiumHospitalDirectoryTheme.text
-                : PremiumHospitalDirectoryTheme.textSecondary.withValues(alpha: 0.35),
+                ? PremiumHospitalDirectoryTheme.text(context)
+                : PremiumHospitalDirectoryTheme.textSecondary(context).withValues(alpha: 0.35),
           ),
         ),
       ),
@@ -776,7 +786,7 @@ class PremiumHospitalFilterSheet extends StatefulWidget {
   }) {
     return showModalBottomSheet<({HospitalDirectorySort sort, bool emergencyOnly})>(
       context: context,
-      backgroundColor: PremiumHospitalDirectoryTheme.white,
+      backgroundColor: PremiumHospitalDirectoryTheme.white(context),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -809,7 +819,7 @@ class _PremiumHospitalFilterSheetState extends State<PremiumHospitalFilterSheet>
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: PremiumHospitalDirectoryTheme.border,
+                color: PremiumHospitalDirectoryTheme.border(context),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -820,7 +830,7 @@ class _PremiumHospitalFilterSheetState extends State<PremiumHospitalFilterSheet>
             style: GoogleFonts.inter(
               fontSize: 18,
               fontWeight: FontWeight.w700,
-              color: PremiumHospitalDirectoryTheme.text,
+              color: PremiumHospitalDirectoryTheme.text(context),
             ),
           ),
           const SizedBox(height: 16),
@@ -829,7 +839,7 @@ class _PremiumHospitalFilterSheetState extends State<PremiumHospitalFilterSheet>
             style: GoogleFonts.inter(
               fontSize: 13,
               fontWeight: FontWeight.w600,
-              color: PremiumHospitalDirectoryTheme.textSecondary,
+              color: PremiumHospitalDirectoryTheme.textSecondary(context),
             ),
           ),
           const SizedBox(height: 8),
@@ -857,7 +867,7 @@ class _PremiumHospitalFilterSheetState extends State<PremiumHospitalFilterSheet>
               style: GoogleFonts.inter(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
-                color: PremiumHospitalDirectoryTheme.text,
+                color: PremiumHospitalDirectoryTheme.text(context),
               ),
             ),
             value: _emergencyOnly,
@@ -899,7 +909,7 @@ class _FilterOptionChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: selected ? PremiumHospitalDirectoryTheme.medicalBlue : PremiumHospitalDirectoryTheme.background,
+      color: selected ? PremiumHospitalDirectoryTheme.medicalBlue : PremiumHospitalDirectoryTheme.background(context),
       borderRadius: BorderRadius.circular(20),
       child: InkWell(
         onTap: onTap,
@@ -909,7 +919,7 @@ class _FilterOptionChip extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: selected ? PremiumHospitalDirectoryTheme.medicalBlue : PremiumHospitalDirectoryTheme.border,
+              color: selected ? PremiumHospitalDirectoryTheme.medicalBlue : PremiumHospitalDirectoryTheme.border(context),
             ),
           ),
           child: Text(
@@ -917,7 +927,7 @@ class _FilterOptionChip extends StatelessWidget {
             style: GoogleFonts.inter(
               fontSize: 13,
               fontWeight: FontWeight.w600,
-              color: selected ? Colors.white : PremiumHospitalDirectoryTheme.text,
+              color: selected ? Colors.white : PremiumHospitalDirectoryTheme.text(context),
             ),
           ),
         ),

@@ -83,8 +83,44 @@ async def get_health_records(filters: dict):
         values.append(f"%{filters['search']}%")
         param_count += 1
 
-    sql += ' ORDER BY created_at DESC'
+    sql += " ORDER BY created_at DESC"
+
+    limit = filters.get("limit")
+    offset = int(filters.get("offset") or 0)
+    if limit is not None:
+        sql += f" LIMIT ${param_count}"
+        values.append(int(limit))
+        param_count += 1
+        sql += f" OFFSET ${param_count}"
+        values.append(max(0, offset))
+
     return await db.fetch_all(sql, *values)
+
+
+async def count_health_records(filters: dict) -> int:
+    sql = "SELECT COUNT(*)::int AS c FROM health_records WHERE 1=1"
+    values = []
+    param_count = 1
+
+    if filters.get("userId"):
+        sql += f" AND user_id = ${param_count}"
+        values.append(filters["userId"])
+        param_count += 1
+    if filters.get("docId"):
+        sql += f" AND doctor_id = ${param_count}"
+        values.append(filters["docId"])
+        param_count += 1
+    if filters.get("appointmentId"):
+        sql += f" AND appointment_id = ${param_count}"
+        values.append(filters["appointmentId"])
+        param_count += 1
+    if filters.get("recordType"):
+        sql += f" AND record_type = ${param_count}"
+        values.append(filters["recordType"])
+        param_count += 1
+
+    row = await db.fetch_row(sql, *values)
+    return int(row["c"]) if row else 0
 
 async def get_health_record_by_id(record_id: int):
     sql = 'SELECT * FROM health_records WHERE id = $1'

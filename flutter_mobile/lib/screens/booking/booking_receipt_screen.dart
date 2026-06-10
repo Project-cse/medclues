@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../constants/app_colors.dart';
+import '../../l10n/l10n_extension.dart';
 import '../../providers/appointment_provider.dart';
 import '../../providers/booking_state_provider.dart';
 import '../../providers/patient_provider.dart';
@@ -29,18 +30,19 @@ class _BookingReceiptScreenState extends ConsumerState<BookingReceiptScreen> {
   bool _busy = false;
 
   String _statusFromAppointment(dynamic a) {
-    if (a.cancelled) return 'Cancelled';
-    if (a.isCompleted) return 'Completed';
-    return 'Confirmed';
+    if (a.cancelled) return context.l10n.appointmentsCancelled;
+    if (a.isCompleted) return context.l10n.appointmentsCompleted;
+    return context.l10n.receiptStatusConfirmed;
   }
 
   Future<void> _run(Future<void> Function(AppointmentReceiptData) action, AppointmentReceiptData receipt) async {
+    final l10n = context.l10n;
     setState(() => _busy = true);
     try {
       await action(receipt);
-      if (mounted) AppSnackbar.show(context, 'Done', success: true);
+      if (mounted) AppSnackbar.show(context, l10n.commonDone, success: true);
     } catch (_) {
-      if (mounted) AppSnackbar.show(context, 'Could not process receipt');
+      if (mounted) AppSnackbar.show(context, l10n.commonError);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -48,6 +50,7 @@ class _BookingReceiptScreenState extends ConsumerState<BookingReceiptScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final draft = ref.watch(bookingDraftProvider);
     final apptAsync = ref.watch(appointmentDetailProvider(widget.appointmentId));
     final patient = ref.watch(patientProfileProvider);
@@ -60,7 +63,7 @@ class _BookingReceiptScreenState extends ConsumerState<BookingReceiptScreen> {
           onPressed: () => context.pop(),
         ),
         title: Text(
-          'Appointment Receipt',
+          l10n.receiptAppointmentReceipt,
           style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 17),
         ),
         centerTitle: true,
@@ -74,7 +77,7 @@ class _BookingReceiptScreenState extends ConsumerState<BookingReceiptScreen> {
                 : () {
                     final receipt = _buildReceiptData(apptAsync.valueOrNull, draft, patient.valueOrNull);
                     if (receipt != null) {
-                      _run(AppointmentReceiptActions.downloadOrSharePdf, receipt);
+                      _run((r) => AppointmentReceiptActions.downloadOrSharePdf(r, context.l10n), receipt);
                     }
                   },
           ),
@@ -112,7 +115,7 @@ class _BookingReceiptScreenState extends ConsumerState<BookingReceiptScreen> {
                   showConfirmationBanner: true,
                   onWhatsApp: _busy ? null : () => _run(AppointmentReceiptActions.shareWhatsApp, receipt),
                   onEmail: _busy ? null : () => _run(AppointmentReceiptActions.shareEmail, receipt),
-                  onPrint: _busy ? null : () => _run(AppointmentReceiptActions.printReceipt, receipt),
+                  onPrint: _busy ? null : () => _run((r) => AppointmentReceiptActions.printReceipt(r, context.l10n), receipt),
                 ),
               );
             },
@@ -129,7 +132,7 @@ class _BookingReceiptScreenState extends ConsumerState<BookingReceiptScreen> {
     return AppointmentReceiptData(
       bookingId: bookingId,
       tokenNumber: appt?.tokenNumber ?? draft?.tokenNumber,
-      patientName: appt?.patientName ?? draft?.patient.name ?? p?.name ?? 'Patient',
+      patientName: appt?.patientName ?? draft?.patient.name ?? p?.name ?? context.l10n.receiptPatient,
       doctorName: appt?.doctorName?.isNotEmpty == true ? appt!.doctorName : (draft?.doctor.name ?? ''),
       specialization: appt?.specialization?.isNotEmpty == true
           ? appt!.specialization
@@ -141,13 +144,14 @@ class _BookingReceiptScreenState extends ConsumerState<BookingReceiptScreen> {
         appt?.slotDate?.isNotEmpty == true ? appt!.slotDate : (draft?.date ?? ''),
       ),
       appointmentTime: appt?.slotTime?.isNotEmpty == true ? appt!.slotTime : (draft?.time ?? ''),
-      visitType: draft?.visitType ?? appt?.visitType ?? 'In-clinic',
-      status: appt != null ? _statusFromAppointment(appt) : 'Confirmed',
+      visitType: draft?.visitType ?? appt?.visitType ?? context.l10n.bookingInClinic,
+      status: appt != null ? _statusFromAppointment(appt) : context.l10n.receiptStatusConfirmed,
       amount: appt?.amount ?? draft?.doctor.consultationFee,
     );
   }
 
   Widget _noBookingIdFallback(dynamic appt, BookingDraft? draft) {
+    final l10n = context.l10n;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -157,12 +161,12 @@ class _BookingReceiptScreenState extends ConsumerState<BookingReceiptScreen> {
             Icon(Icons.receipt_long, size: 48, color: AppColors.textSecondary),
             const SizedBox(height: 16),
             Text(
-              'Receipt not available',
+              l10n.receiptAppointmentReceipt,
               style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 8),
             Text(
-              'This booking has no Booking ID yet. Book again with the updated backend.',
+              l10n.receiptBookingId,
               textAlign: TextAlign.center,
               style: GoogleFonts.poppins(color: AppColors.textSecondary, height: 1.4),
             ),

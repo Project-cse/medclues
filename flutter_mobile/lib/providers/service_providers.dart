@@ -15,15 +15,23 @@ import '../services/health_record_service.dart';
 import '../services/payment_service.dart';
 import '../services/speciality_service.dart';
 import '../services/consultation_service.dart';
+import '../services/telegram_link_service.dart';
 import '../services/api_service.dart';
+import '../features/emergency/services/emergency_api_service.dart';
 
 final authServiceProvider = Provider<AuthService>((ref) => AuthService(ref.watch(apiServiceProvider)));
 final doctorServiceProvider = Provider<DoctorService>((ref) => DoctorService(ref.watch(apiServiceProvider)));
 final specialityServiceProvider = Provider<SpecialityService>((ref) => SpecialityService(ref.watch(apiServiceProvider)));
 final patientServiceProvider = Provider<PatientService>((ref) => PatientService(ref.watch(apiServiceProvider)));
 final paymentServiceProvider = Provider<PaymentService>((ref) => PaymentService(ref.watch(apiServiceProvider)));
+final emergencyApiServiceProvider = Provider<EmergencyApiService>(
+  (ref) => EmergencyApiService(ref.watch(apiServiceProvider)),
+);
 final healthRecordServiceProvider = Provider<HealthRecordService>((ref) => HealthRecordService(ref.watch(apiServiceProvider)));
 final consultationServiceProvider = Provider<ConsultationService>((ref) => ConsultationService(ref.watch(apiServiceProvider)));
+final telegramLinkServiceProvider = Provider<TelegramLinkService>(
+  (ref) => TelegramLinkService(ref.watch(apiServiceProvider)),
+);
 
 final appointmentServiceProvider = Provider<AppointmentService>((ref) => AppointmentService(
       ref.watch(apiServiceProvider),

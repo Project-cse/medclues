@@ -24,15 +24,17 @@ class PremiumDateChip extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 220),
+        duration: const Duration(milliseconds: 200),
         curve: Curves.easeOutCubic,
-        width: 72,
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+        width: 68,
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
         decoration: BoxDecoration(
-          color: selected ? PremiumBookingTheme.primaryBlue : PremiumBookingTheme.white,
+          gradient: selected ? PremiumBookingTheme.selectedGradient : null,
+          color: selected ? null : PremiumBookingTheme.white(context),
           borderRadius: BorderRadius.circular(PremiumBookingTheme.dateCardRadius),
-          border: selected ? null : Border.all(color: PremiumBookingTheme.border),
-          boxShadow: selected ? PremiumBookingTheme.softShadow : null,
+          border: selected
+              ? null
+              : Border.all(color: PremiumBookingTheme.border(context)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -42,28 +44,33 @@ class PremiumDateChip extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: GoogleFonts.inter(
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                color: selected ? Colors.white.withValues(alpha: 0.9) : PremiumBookingTheme.textSecondary,
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.2,
+                color: selected
+                    ? Colors.white.withValues(alpha: 0.85)
+                    : PremiumBookingTheme.textSecondary(context),
               ),
             ),
             const SizedBox(height: 4),
             Text(
               '$dayNum',
               style: GoogleFonts.inter(
-                fontSize: 26,
+                fontSize: 22,
                 fontWeight: FontWeight.w700,
                 height: 1,
-                color: selected ? Colors.white : PremiumBookingTheme.text,
+                color: selected ? Colors.white : PremiumBookingTheme.text(context),
               ),
             ),
             const SizedBox(height: 2),
             Text(
               monthShort,
               style: GoogleFonts.inter(
-                fontSize: 11,
+                fontSize: 10,
                 fontWeight: FontWeight.w500,
-                color: selected ? Colors.white.withValues(alpha: 0.85) : PremiumBookingTheme.textSecondary,
+                color: selected
+                    ? Colors.white.withValues(alpha: 0.8)
+                    : PremiumBookingTheme.textSecondary(context),
               ),
             ),
           ],
@@ -83,18 +90,17 @@ class PremiumDateNavButton extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 44,
-        height: 44,
+        width: 40,
+        height: 40,
         decoration: BoxDecoration(
-          color: PremiumBookingTheme.white,
+          color: PremiumBookingTheme.white(context),
           shape: BoxShape.circle,
-          border: Border.all(color: PremiumBookingTheme.border),
-          boxShadow: PremiumBookingTheme.softShadow,
+          border: Border.all(color: PremiumBookingTheme.border(context)),
         ),
         child: const Icon(
           Icons.chevron_right_rounded,
           color: PremiumBookingTheme.primaryBlue,
-          size: 26,
+          size: 24,
         ),
       ),
     );

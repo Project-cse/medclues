@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../constants/app_colors.dart';
+import '../../l10n/l10n_extension.dart';
+import '../../utils/calendar_helper.dart';
 import '../../utils/theme_context.dart';
 import '../../models/appointment_model.dart';
 import '../../providers/appointment_provider.dart';
@@ -27,6 +29,7 @@ class _UpcomingAppointmentsScreenState extends ConsumerState<UpcomingAppointment
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final tab = ref.watch(appointmentsTabProvider);
     final providers = [
       ref.watch(upcomingAppointmentsProvider),
@@ -38,7 +41,7 @@ class _UpcomingAppointmentsScreenState extends ConsumerState<UpcomingAppointment
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('My Appointments', style: GoogleFonts.poppins(fontWeight: FontWeight.w700)),
+        title: Text(l10n.appointmentsMyTitle, style: GoogleFonts.poppins(fontWeight: FontWeight.w700)),
         centerTitle: false,
       ),
       body: Column(
@@ -59,7 +62,7 @@ class _UpcomingAppointmentsScreenState extends ConsumerState<UpcomingAppointment
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
             child: Text(
-              'Book New Appointment',
+              l10n.bookingBookAppointment,
               style: GoogleFonts.poppins(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
@@ -73,7 +76,7 @@ class _UpcomingAppointmentsScreenState extends ConsumerState<UpcomingAppointment
   }
 
   Widget _tabs(int tab) {
-    const labels = ['Upcoming', 'Completed', 'Cancelled'];
+    final labels = [context.l10n.appointmentsUpcoming, context.l10n.appointmentsCompleted, context.l10n.appointmentsCancelled];
     return Row(
       children: List.generate(labels.length, (i) {
         final selected = tab == i;
@@ -119,9 +122,9 @@ class _UpcomingAppointmentsScreenState extends ConsumerState<UpcomingAppointment
     return async.when(
       data: (list) {
         if (list.isEmpty) {
-          return const AppEmptyState(
-            title: 'No appointments',
-            subtitle: 'Book a new appointment to get started.',
+          return AppEmptyState(
+            title: context.l10n.appointmentsNoTitle,
+            subtitle: context.l10n.appointmentsNoSubtitle,
           );
         }
         final totalPages = totalPagesFor(list.length);
@@ -152,6 +155,19 @@ class _UpcomingAppointmentsScreenState extends ConsumerState<UpcomingAppointment
                       appointment: a,
                       showBadge: canCancel,
                       onTap: () => context.push('/appointments/${a.id}'),
+                      onAddToCalendar: canCancel
+                          ? () async {
+                              final ok = await CalendarHelper.addAppointmentToCalendar(a);
+                              if (!context.mounted) return;
+                              AppSnackbar.show(
+                                context,
+                                ok
+                                    ? context.l10n.appointmentsCalendarAdded
+                                    : context.l10n.appointmentsCalendarFailed,
+                                success: ok,
+                              );
+                            }
+                          : null,
                       onCancel: canCancel
                           ? () async {
                               try {
@@ -159,7 +175,7 @@ class _UpcomingAppointmentsScreenState extends ConsumerState<UpcomingAppointment
                                 if (!context.mounted) return;
                                 setState(() => _page = 0);
                                 ref.read(appointmentsTabProvider.notifier).state = 2;
-                                AppSnackbar.show(context, 'Appointment cancelled', success: true);
+                                AppSnackbar.show(context, context.l10n.appointmentsCancelledSuccess, success: true);
                               } catch (e) {
                                 if (context.mounted) {
                                   AppSnackbar.show(context, e.toString().replaceFirst('Exception: ', ''));
@@ -181,7 +197,8 @@ class _UpcomingAppointmentsScreenState extends ConsumerState<UpcomingAppointment
         );
       },
       loading: () => ListView.builder(
-        itemCount: 3,
+        padding: const EdgeInsets.only(top: 8),
+        itemCount: 4,
         itemBuilder: (_, __) => const AppointmentCardSkeleton(),
       ),
       error: (e, _) => Center(child: Text(e.toString())),

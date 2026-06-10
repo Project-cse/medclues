@@ -32,7 +32,7 @@ class PremiumBookingAppBar extends StatelessWidget implements PreferredSizeWidge
                 style: GoogleFonts.inter(
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
-                  color: PremiumBookingTheme.text,
+                  color: PremiumBookingTheme.text(context),
                   letterSpacing: -0.2,
                 ),
               ),
@@ -58,9 +58,9 @@ class _BackButton extends StatelessWidget {
         width: 44,
         height: 44,
         decoration: BoxDecoration(
-          color: PremiumBookingTheme.white,
-          borderRadius: BorderRadius.circular(14),
-          boxShadow: PremiumBookingTheme.softShadow,
+          color: PremiumBookingTheme.white(context),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: PremiumBookingTheme.border(context)),
         ),
         child: const Icon(
           Icons.arrow_back_ios_new_rounded,
@@ -84,21 +84,20 @@ class PremiumDoctorBookingCard extends StatelessWidget {
         : (doctor.experienceYears > 0 ? '${doctor.experienceYears} Years Experience' : null);
 
     return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: PremiumBookingTheme.white,
-        borderRadius: BorderRadius.circular(PremiumBookingTheme.cardRadius),
-        boxShadow: PremiumBookingTheme.cardShadow,
-      ),
+      padding: const EdgeInsets.all(18),
+      decoration: PremiumBookingTheme.corporateCard(context),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              border: Border.all(color: PremiumBookingTheme.border, width: 2),
+              border: Border.all(
+                color: PremiumBookingTheme.accentBlue.withValues(alpha: 0.2),
+                width: 2,
+              ),
             ),
-            child: AvatarImage(uri: resolveImageUrl(doctor.imageUrl), size: 72),
+            child: AvatarImage(uri: resolveImageUrl(doctor.imageUrl), size: 68),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -110,7 +109,7 @@ class PremiumDoctorBookingCard extends StatelessWidget {
                   style: GoogleFonts.inter(
                     fontSize: 17,
                     fontWeight: FontWeight.w700,
-                    color: PremiumBookingTheme.text,
+                    color: PremiumBookingTheme.text(context),
                     height: 1.2,
                   ),
                 ),
@@ -120,7 +119,7 @@ class PremiumDoctorBookingCard extends StatelessWidget {
                   style: GoogleFonts.inter(
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
-                    color: PremiumBookingTheme.textSecondary,
+                    color: PremiumBookingTheme.textSecondary(context),
                   ),
                 ),
                 if (exp != null) ...[
@@ -153,7 +152,7 @@ class PremiumDoctorBookingCard extends StatelessWidget {
                         style: GoogleFonts.inter(
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
-                          color: PremiumBookingTheme.text,
+                          color: PremiumBookingTheme.text(context),
                         ),
                       ),
                       if (doctor.reviewCount != null && doctor.reviewCount! > 0) ...[
@@ -163,7 +162,7 @@ class PremiumDoctorBookingCard extends StatelessWidget {
                           style: GoogleFonts.inter(
                             fontSize: 12,
                             fontWeight: FontWeight.w500,
-                            color: PremiumBookingTheme.textSecondary,
+                            color: PremiumBookingTheme.textSecondary(context),
                           ),
                         ),
                       ],
@@ -193,24 +192,26 @@ class PremiumBookingSectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (icon != null) ...[
-          Icon(icon, size: 20, color: PremiumBookingTheme.accentBlue),
-          const SizedBox(width: 8),
-        ],
-        Expanded(
-          child: Text(
-            title,
-            style: GoogleFonts.inter(
-              fontSize: 17,
-              fontWeight: FontWeight.w700,
-              color: PremiumBookingTheme.text,
-              letterSpacing: -0.2,
+        Row(
+          children: [
+            if (icon != null) ...[
+              Icon(icon, size: 18, color: PremiumBookingTheme.accentBlue),
+              const SizedBox(width: 8),
+            ],
+            Expanded(
+              child: Text(
+                title,
+                style: PremiumBookingTheme.sectionTitleStyle(context),
+              ),
             ),
-          ),
+            if (trailing != null) trailing!,
+          ],
         ),
-        if (trailing != null) trailing!,
+        const SizedBox(height: 10),
+        Divider(height: 1, color: PremiumBookingTheme.border(context)),
       ],
     );
   }
@@ -225,20 +226,30 @@ class PremiumViewCalendarAction extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.calendar_month_outlined, size: 18, color: PremiumBookingTheme.accentBlue),
-          const SizedBox(width: 6),
-          Text(
-            'View Calendar',
-            style: GoogleFonts.inter(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: PremiumBookingTheme.accentBlue,
-            ),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color: PremiumBookingTheme.chipSelectedBg(context),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: PremiumBookingTheme.accentBlue.withValues(alpha: 0.25),
           ),
-        ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.calendar_month_outlined, size: 16, color: PremiumBookingTheme.accentBlue),
+            const SizedBox(width: 6),
+            Text(
+              'View Calendar',
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: PremiumBookingTheme.accentBlue,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -261,12 +272,8 @@ class PremiumSymptomsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: PremiumBookingTheme.white,
-        borderRadius: BorderRadius.circular(PremiumBookingTheme.cardRadius),
-        boxShadow: PremiumBookingTheme.cardShadow,
-      ),
+      padding: const EdgeInsets.all(18),
+      decoration: PremiumBookingTheme.corporateCard(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -274,15 +281,12 @@ class PremiumSymptomsCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: PremiumBookingTheme.chipSelectedBg,
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                width: 36,
+                height: 36,
+                decoration: PremiumBookingTheme.iconBadge(context),
                 child: const Icon(
                   Icons.assignment_outlined,
-                  size: 22,
+                  size: 18,
                   color: PremiumBookingTheme.accentBlue,
                 ),
               ),
@@ -293,28 +297,21 @@ class PremiumSymptomsCard extends StatelessWidget {
                   children: [
                     Text(
                       'Select Your Symptoms',
-                      style: GoogleFonts.inter(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: PremiumBookingTheme.text,
-                      ),
+                      style: PremiumBookingTheme.sectionTitleStyle(context),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       'Choose symptoms relevant to $specialization',
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: PremiumBookingTheme.textSecondary,
-                        height: 1.35,
-                      ),
+                      style: PremiumBookingTheme.sectionSubtitleStyle(context),
                     ),
                   ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 16),
+          Divider(height: 1, color: PremiumBookingTheme.border(context)),
+          const SizedBox(height: 16),
           symptomsCardGrid(symptoms, selected, onToggle),
         ],
       ),
@@ -330,7 +327,7 @@ Widget symptomsCardGrid(
   return LayoutBuilder(
     builder: (context, constraints) {
       const cols = 3;
-      const gap = 10.0;
+      const gap = 8.0;
       final cellW = (constraints.maxWidth - gap * (cols - 1)) / cols;
       return Wrap(
         spacing: gap,
@@ -358,23 +355,20 @@ class PremiumSecurityCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: PremiumBookingTheme.securityBg,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: PremiumBookingTheme.accentBlue.withValues(alpha: 0.12)),
+        color: PremiumBookingTheme.securityBg(context),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: PremiumBookingTheme.accentBlue.withValues(alpha: 0.2)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: PremiumBookingTheme.white,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(Icons.shield_outlined, size: 22, color: PremiumBookingTheme.accentBlue),
+            width: 36,
+            height: 36,
+            decoration: PremiumBookingTheme.iconBadge(context),
+            child: const Icon(Icons.shield_outlined, size: 18, color: PremiumBookingTheme.accentBlue),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -395,7 +389,7 @@ class PremiumSecurityCard extends StatelessWidget {
                   style: GoogleFonts.inter(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
-                    color: PremiumBookingTheme.textSecondary,
+                    color: PremiumBookingTheme.textSecondary(context),
                     height: 1.4,
                   ),
                 ),
@@ -432,9 +426,20 @@ class PremiumBookAppointmentCta extends StatelessWidget {
         PremiumBookingTheme.horizontalPadding,
         20,
       ),
-      decoration: const BoxDecoration(
-        color: PremiumBookingTheme.white,
-        border: Border(top: BorderSide(color: PremiumBookingTheme.border)),
+      decoration: BoxDecoration(
+        color: PremiumBookingTheme.white(context),
+        border: Border(
+          top: BorderSide(color: PremiumBookingTheme.border(context)),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(
+              alpha: Theme.of(context).brightness == Brightness.dark ? 0.2 : 0.04,
+            ),
+            blurRadius: 12,
+            offset: const Offset(0, -4),
+          ),
+        ],
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -445,7 +450,7 @@ class PremiumBookAppointmentCta extends StatelessWidget {
             height: PremiumBookingTheme.buttonHeight,
             decoration: BoxDecoration(
               gradient: active ? PremiumBookingTheme.ctaGradient : null,
-              color: active ? null : PremiumBookingTheme.border,
+              color: active ? null : PremiumBookingTheme.border(context),
               borderRadius: BorderRadius.circular(PremiumBookingTheme.buttonRadius),
               boxShadow: active ? PremiumBookingTheme.ctaShadow : null,
             ),
@@ -467,7 +472,7 @@ class PremiumBookAppointmentCta extends StatelessWidget {
                             Icon(
                               Icons.event_available_rounded,
                               size: 22,
-                              color: active ? Colors.white : PremiumBookingTheme.textSecondary,
+                              color: active ? Colors.white : PremiumBookingTheme.textSecondary(context),
                             ),
                             const SizedBox(width: 10),
                             Text(
@@ -475,7 +480,7 @@ class PremiumBookAppointmentCta extends StatelessWidget {
                               style: GoogleFonts.inter(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w700,
-                                color: active ? Colors.white : PremiumBookingTheme.textSecondary,
+                                color: active ? Colors.white : PremiumBookingTheme.textSecondary(context),
                               ),
                             ),
                           ],

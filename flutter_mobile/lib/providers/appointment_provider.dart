@@ -24,7 +24,6 @@ final appointmentDetailProvider =
 /// Full 5-day schedule — one API call per doctor + mode (reused when switching dates).
 final doctorScheduleProvider = FutureProvider.autoDispose
     .family<Map<String, DaySlotsModel>, ({String doctorId, String mode})>((ref, params) {
-  ref.keepAlive();
   return ref
       .watch(appointmentRepositoryProvider)
       .doctorSchedule(params.doctorId, mode: params.mode);

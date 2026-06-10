@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../l10n/l10n_extension.dart';
 import '../../providers/patient_provider.dart';
 import '../../providers/service_providers.dart';
 import '../../themes/theme_form_styles.dart';
@@ -38,7 +39,7 @@ class _AddressScreenState extends ConsumerState<AddressScreen> {
           );
       ref.invalidate(patientProfileProvider);
       if (mounted) {
-        AppSnackbar.show(context, 'Address saved', success: true);
+        AppSnackbar.show(context, context.l10n.addressSaved, success: true);
         context.pop();
       }
     } catch (e) {
@@ -53,7 +54,7 @@ class _AddressScreenState extends ConsumerState<AddressScreen> {
     final profile = ref.watch(patientProfileProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Address')),
+      appBar: AppBar(title: Text(context.l10n.addressTitle)),
       body: profile.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text(e.toString())),
@@ -67,11 +68,11 @@ class _AddressScreenState extends ConsumerState<AddressScreen> {
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              _field(context, 'Address line 1', _line1, 'Street, area'),
+              _field(context, context.l10n.profileAddressLine1, _line1, context.l10n.profileAddressLine1),
               const SizedBox(height: 16),
-              _field(context, 'Address line 2', _line2, 'City, state, PIN'),
+              _field(context, context.l10n.profileAddressLine2, _line2, context.l10n.profileAddressLine2),
               const SizedBox(height: 24),
-              AppButton(label: 'Save Address', loading: _loading, onPressed: _save),
+              AppButton(label: context.l10n.commonSave, loading: _loading, onPressed: _save),
             ],
           );
         },

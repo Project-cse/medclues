@@ -7,6 +7,7 @@ import 'package:video_player/video_player.dart';
 
 import '../../brand/medclues_palette.dart';
 import '../../config/app_config.dart';
+import '../../helpers/storage_helper.dart';
 import '../../providers/auth_provider.dart';
 import '../../routes/route_names.dart';
 import '../../widgets/brand/medclues_logo_image.dart';
@@ -141,6 +142,11 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
 
     _handoffStarted = true;
     _video?.pause();
+  final permissionsDone = ref.read(storageHelperProvider).isPermissionsSetupDone();
+    if (!permissionsDone && !kIsWeb) {
+      context.go(RouteNames.permissionsSetup);
+      return;
+    }
     final dest = auth.status == AuthStatus.authenticated
         ? RouteNames.dashboard
         : RouteNames.login;

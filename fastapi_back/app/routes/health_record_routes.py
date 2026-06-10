@@ -5,6 +5,15 @@ from app.middleware.auth import auth_user, auth_doctor
 
 router = APIRouter(prefix="/api/health-records", tags=["Health Record"])
 
+
+def _client_ip(request: Request) -> str | None:
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    if request.client:
+        return request.client.host
+    return None
+
 @router.post("/create")
 async def create_health_record(
     record_type: str = Form(...),
@@ -34,5 +43,14 @@ async def delete_health_record(record_id: int, user_id: int = Depends(auth_user)
     return await health_record_controller.delete_health_record(user_id, record_id)
 
 @router.get("/patient-records/{appointment_id}")
-async def get_patient_records_for_doctor(appointment_id: int, doc_id: int = Depends(auth_doctor)):
-    return await health_record_controller.get_patient_records_for_doctor(doc_id, appointment_id)
+async def get_patient_records_for_doctor(
+    req: Request,
+    appointment_id: int,
+    doc_id: int = Depends(auth_doctor),
+):
+    return await health_record_controller.get_patient_records_for_doctor(
+        doc_id,
+        appointment_id,
+        ip_address=_client_ip(req),
+        user_agent=req.headers.get("User-Agent"),
+    )

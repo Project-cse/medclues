@@ -20,7 +20,7 @@ class HospitalDetailsScreen extends ConsumerWidget {
     final detail = ref.watch(hospitalDetailProvider(hospitalId));
 
     return Scaffold(
-      backgroundColor: PremiumHealthcareTheme.background,
+      backgroundColor: PremiumHealthcareTheme.background(context),
       appBar: const PremiumHospitalAppBar(),
       body: detail.when(
         loading: () => const AppLoader(),
@@ -33,7 +33,7 @@ class HospitalDetailsScreen extends ConsumerWidget {
                 Text(
                   e.toString(),
                   textAlign: TextAlign.center,
-                  style: GoogleFonts.inter(color: PremiumHealthcareTheme.textSecondary),
+                  style: GoogleFonts.inter(color: PremiumHealthcareTheme.textSecondary(context)),
                 ),
                 const SizedBox(height: 16),
                 TextButton(
@@ -90,7 +90,7 @@ class HospitalDetailsScreen extends ConsumerWidget {
                         'No doctors listed for this hospital yet.',
                         style: GoogleFonts.inter(
                           fontSize: 14,
-                          color: PremiumHealthcareTheme.textSecondary,
+                          color: PremiumHealthcareTheme.textSecondary(context),
                         ),
                       ),
                     ),

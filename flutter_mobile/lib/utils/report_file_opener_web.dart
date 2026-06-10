@@ -9,5 +9,19 @@ Future<void> openReportBytes(
   final type = mimeType ?? 'application/pdf';
   final blob = html.Blob([bytes], type);
   final url = html.Url.createObjectUrlFromBlob(blob);
-  html.window.open(url, '_blank');
+
+  // Anchor click is more reliable than window.open (popup blockers).
+  final anchor = html.AnchorElement(href: url)
+    ..target = '_blank'
+    ..rel = 'noopener';
+  if (!type.startsWith('application/pdf') && !type.startsWith('image/')) {
+    anchor.download = filename;
+  }
+  html.document.body?.children.add(anchor);
+  anchor.click();
+  anchor.remove();
+
+  Future<void>.delayed(const Duration(seconds: 60), () {
+    html.Url.revokeObjectUrl(url);
+  });
 }

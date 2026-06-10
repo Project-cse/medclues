@@ -7,13 +7,13 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../constants/app_colors.dart';
 import '../../utils/theme_context.dart';
+import '../../l10n/l10n_extension.dart';
 import '../../constants/home_specialities.dart';
 import '../../models/doctor_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/doctor_provider.dart';
 import '../../providers/service_providers.dart';
 import '../../routes/route_names.dart';
-import '../../utils/date_formatter.dart';
 import '../../utils/speciality_match.dart';
 import '../../widgets/common/app_snackbar.dart';
 import '../../widgets/home/hero_banner_illustration.dart';
@@ -56,15 +56,16 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 
   List<HomeSearchResultItem> _buildSearchResults(List<DoctorModel> doctors) {
+    final l10n = context.l10n;
     final q = _query.toLowerCase();
     if (q.isEmpty) return [];
     final out = <HomeSearchResultItem>[];
 
-    const services = [
-      ('Hospitals', RouteNames.hospitals, null),
+    final services = [
+      (l10n.dashboardHospitals, RouteNames.hospitals, null),
       ('Doctors', RouteNames.doctors, null),
-      ('Labs', RouteNames.labs, 'labs'),
-      ('Blood Banks', RouteNames.bloodBanks, 'blood'),
+      (l10n.dashboardLabs, RouteNames.labs, 'labs'),
+      (l10n.dashboardBloodBanks, RouteNames.bloodBanks, 'blood'),
       ('Emergency', RouteNames.emergency, null),
     ];
     for (final s in services) {
@@ -100,6 +101,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final user = ref.watch(authProvider).user;
     final topDoctors = ref.watch(topDoctorsProvider);
     final allDoctors = ref.watch(allDoctorsProvider);
@@ -126,7 +128,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                 child: Text(
-                  '${DateFormatter.greeting()}${displayName.isNotEmpty ? ', $displayName' : ''} 👋',
+                  '${l10n.dashboardGreeting}${displayName.isNotEmpty ? ', $displayName' : ''} 👋',
                   style: GoogleFonts.poppins(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
@@ -137,7 +139,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
                 child: Text(
-                  'Welcome Back!',
+                  l10n.dashboardGreeting,
                   style: GoogleFonts.poppins(
                     fontSize: 28,
                     fontWeight: FontWeight.w700,
@@ -151,7 +153,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 child: EmergencyHelpButton(),
               ).dashboardStagger(1),
               _quickAccessGrid(),
-              _sectionTitle('Specialities').dashboardStagger(2),
+              _sectionTitle(l10n.dashboardSpecialities).dashboardStagger(2),
               const SpecialityGrid().dashboardStagger(3),
               const SizedBox(height: 8),
               HomeSearchBar(
@@ -168,7 +170,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   },
                 ),
               if (!hasQuery) ...[
-                _sectionTitleRow('Top Doctors to Book', () => context.push(RouteNames.doctors)),
+                _sectionTitleRow(l10n.dashboardTopDoctors, () => context.push(RouteNames.doctors)),
                 _topDoctorsSection(topDoctors, allDoctors),
               ],
               const SizedBox(height: 24),
@@ -294,11 +296,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 
   Widget _quickAccessGrid() {
+    final l10n = context.l10n;
     final items = [
-      _QuickItem('Hospitals', Icons.business, const Color(0xFFDC2626), const Color(0xFFE0F2FE), () => context.push(RouteNames.hospitals)),
+      _QuickItem(l10n.dashboardHospitals, Icons.business, const Color(0xFFDC2626), const Color(0xFFE0F2FE), () => context.push(RouteNames.hospitals)),
       _QuickItem('Doctors', Icons.person, const Color(0xFF2563EB), const Color(0xFFE0F2FE), () => context.push(RouteNames.doctors)),
-      _QuickItem('Labs', Icons.science, const Color(0xFF0284C7), const Color(0xFFE0F2FE), () => context.push(RouteNames.labs)),
-      _QuickItem('Blood Banks', Icons.water_drop, const Color(0xFFDC2626), const Color(0xFFFEE2E2), () => context.push(RouteNames.bloodBanks)),
+      _QuickItem(l10n.dashboardLabs, Icons.science, const Color(0xFF0284C7), const Color(0xFFE0F2FE), () => context.push(RouteNames.labs)),
+      _QuickItem(l10n.dashboardBloodBanks, Icons.water_drop, const Color(0xFFDC2626), const Color(0xFFFEE2E2), () => context.push(RouteNames.bloodBanks)),
       const _QuickItem('Pharmacy', Icons.medical_information, Color(0xFFEA580C), Color(0xFFFFEDD5), null),
       const _QuickItem('Insurance', Icons.verified_user, Color(0xFF2563EB), Color(0xFFDBEAFE), null),
       _QuickItem('Emergency', Icons.warning, const Color(0xFFDC2626), const Color(0xFFFECACA), () => context.push(RouteNames.emergency)),
@@ -460,6 +463,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 
   Widget _sectionTitleRow(String title, VoidCallback onViewAll) {
+    final l10n = context.l10n;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
       child: Row(
@@ -472,7 +476,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           GestureDetector(
             onTap: onViewAll,
             child: Text(
-              'View All >',
+              '${l10n.dashboardViewAll} >',
               style: GoogleFonts.poppins(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,

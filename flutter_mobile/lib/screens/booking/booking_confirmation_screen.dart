@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../constants/app_colors.dart';
+import '../../l10n/l10n_extension.dart';
 import '../../providers/booking_state_provider.dart';
 import '../../routes/route_names.dart';
 import '../../utils/appointment_receipt_actions.dart';
@@ -40,24 +41,25 @@ class _BookingConfirmationScreenState extends ConsumerState<BookingConfirmationS
       appointmentDate: DateFormatter.formatSlotDate(draft.date),
       appointmentTime: draft.time,
       visitType: draft.visitType,
-      status: 'Confirmed',
+      status: context.l10n.receiptStatusConfirmed,
       amount: draft.doctor.consultationFee,
     );
   }
 
   Future<void> _runReceiptAction(Future<void> Function(AppointmentReceiptData) action) async {
+    final l10n = context.l10n;
     final draft = ref.read(bookingDraftProvider);
     final receipt = draft == null ? null : _receiptData(draft);
     if (receipt == null) {
-      AppSnackbar.show(context, 'Booking ID required for PDF/share. Restart backend from fastapi_back on port 5000.');
+      AppSnackbar.show(context, l10n.receiptBookingId);
       return;
     }
     setState(() => _busy = true);
     try {
       await action(receipt);
-      if (mounted) AppSnackbar.show(context, 'Done', success: true);
+      if (mounted) AppSnackbar.show(context, l10n.commonDone, success: true);
     } catch (_) {
-      if (mounted) AppSnackbar.show(context, 'Could not process receipt');
+      if (mounted) AppSnackbar.show(context, l10n.commonError);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -65,11 +67,12 @@ class _BookingConfirmationScreenState extends ConsumerState<BookingConfirmationS
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final draft = ref.watch(bookingDraftProvider);
     if (draft == null) {
       return Scaffold(
           body: Center(
-          child: TextButton(onPressed: () => context.go(RouteNames.dashboard), child: const Text('Go Home')),
+          child: TextButton(onPressed: () => context.go(RouteNames.dashboard), child: Text(l10n.navHome)),
         ),
       );
     }
@@ -86,7 +89,7 @@ class _BookingConfirmationScreenState extends ConsumerState<BookingConfirmationS
           onPressed: () => context.go(RouteNames.dashboard),
         ),
         title: Text(
-          'Appointment Receipt',
+          l10n.receiptAppointmentReceipt,
           style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 17),
         ),
         centerTitle: true,
@@ -96,7 +99,11 @@ class _BookingConfirmationScreenState extends ConsumerState<BookingConfirmationS
               icon: _busy
                   ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
                   : const Icon(Icons.download_outlined),
-              onPressed: _busy ? null : () => _runReceiptAction(AppointmentReceiptActions.downloadOrSharePdf),
+              onPressed: _busy
+                  ? null
+                  : () => _runReceiptAction(
+                        (r) => AppointmentReceiptActions.downloadOrSharePdf(r, context.l10n),
+                      ),
             ),
         ],
       ),
@@ -117,7 +124,7 @@ class _BookingConfirmationScreenState extends ConsumerState<BookingConfirmationS
               appointmentDate: DateFormatter.formatSlotDate(draft.date),
               appointmentTime: draft.time,
               visitType: draft.visitType,
-              status: 'Confirmed',
+              status: l10n.receiptStatusConfirmed,
               amountLabel: CurrencyFormatter.format(draft.doctor.consultationFee),
               showConfirmationBanner: true,
               onWhatsApp: hasBookingId && !_busy
@@ -127,7 +134,9 @@ class _BookingConfirmationScreenState extends ConsumerState<BookingConfirmationS
                   ? () => _runReceiptAction(AppointmentReceiptActions.shareEmail)
                   : null,
               onPrint: hasBookingId && !_busy
-                  ? () => _runReceiptAction(AppointmentReceiptActions.printReceipt)
+                  ? () => _runReceiptAction(
+                        (r) => AppointmentReceiptActions.printReceipt(r, context.l10n),
+                      )
                   : null,
             ),
             ),
@@ -135,7 +144,7 @@ class _BookingConfirmationScreenState extends ConsumerState<BookingConfirmationS
               Padding(
                 padding: const EdgeInsets.only(top: 12),
                 child: Text(
-                  'QR code appears when the server returns a Booking ID (BK…). Ensure fastapi_back is running on port 5000.',
+                  l10n.receiptBookingId,
                   textAlign: TextAlign.center,
                   style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary),
                 ),
@@ -147,7 +156,7 @@ class _BookingConfirmationScreenState extends ConsumerState<BookingConfirmationS
                 child: ElevatedButton.icon(
                   onPressed: () => context.push('/video-consult/$apptId'),
                   icon: const Icon(Icons.videocam),
-                  label: Text('Join Video Consult', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+                  label: Text(l10n.doctorVideoConsult, style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.specCircleFill,
                     foregroundColor: AppColors.brandNavy,
@@ -168,13 +177,13 @@ class _BookingConfirmationScreenState extends ConsumerState<BookingConfirmationS
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                 ),
-                child: Text('Go to Home', style: GoogleFonts.poppins(fontWeight: FontWeight.w700)),
+                child: Text(l10n.navHome, style: GoogleFonts.poppins(fontWeight: FontWeight.w700)),
               ),
             ),
             TextButton(
               onPressed: () => context.go(RouteNames.appointments),
               child: Text(
-                'View Appointments',
+                l10n.appointmentsTitle,
                 style: GoogleFonts.poppins(fontWeight: FontWeight.w600, color: AppColors.logoTeal),
               ),
             ),

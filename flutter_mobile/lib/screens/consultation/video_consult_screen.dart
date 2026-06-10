@@ -10,6 +10,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../constants/app_colors.dart';
+import '../../l10n/l10n_extension.dart';
 import '../../providers/service_providers.dart';
 import '../../services/consultation_service.dart';
 import '../../widgets/animations/connecting_doctor_overlay.dart';
@@ -230,6 +231,7 @@ class _VideoConsultScreenState extends ConsumerState<VideoConsultScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -238,12 +240,12 @@ class _VideoConsultScreenState extends ConsumerState<VideoConsultScreen> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Video Consult', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 16)),
+            Text(l10n.videoConsult, style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 16)),
             if (!_loading && _error == null)
               Text(
                 _callStartedAtMs != null
                     ? 'Call time $_callDurationLabel'
-                    : (_joined ? 'Waiting for doctor…' : 'Connecting…'),
+                    : (_joined ? l10n.videoWaitingDoctor : l10n.videoConnecting),
                 style: GoogleFonts.poppins(fontSize: 11, color: Colors.white70),
               ),
           ],
@@ -264,7 +266,7 @@ class _VideoConsultScreenState extends ConsumerState<VideoConsultScreen> {
                   children: [
                     _controlBtn(
                       icon: _muted ? Icons.mic_off : Icons.mic,
-                      label: _muted ? 'Unmute' : 'Mute',
+                      label: _muted ? l10n.videoUnmute : l10n.videoMute,
                       onTap: () async {
                         await _engine?.muteLocalAudioStream(!_muted);
                         setState(() => _muted = !_muted);
@@ -272,7 +274,7 @@ class _VideoConsultScreenState extends ConsumerState<VideoConsultScreen> {
                     ),
                     _controlBtn(
                       icon: _videoOff ? Icons.videocam_off : Icons.videocam,
-                      label: _videoOff ? 'Video on' : 'Video off',
+                      label: _videoOff ? l10n.videoCameraOn : l10n.videoCameraOff,
                       onTap: () async {
                         await _engine?.muteLocalVideoStream(!_videoOff);
                         setState(() => _videoOff = !_videoOff);
@@ -280,7 +282,7 @@ class _VideoConsultScreenState extends ConsumerState<VideoConsultScreen> {
                     ),
                     _controlBtn(
                       icon: Icons.call_end,
-                      label: 'End',
+                      label: l10n.videoEndConsult,
                       color: AppColors.error,
                       onTap: _leave,
                     ),
@@ -295,6 +297,7 @@ class _VideoConsultScreenState extends ConsumerState<VideoConsultScreen> {
   }
 
   Widget _buildBody() {
+    final l10n = context.l10n;
     if (_loading) {
       return const ConnectingDoctorOverlay();
     }
@@ -330,7 +333,7 @@ class _VideoConsultScreenState extends ConsumerState<VideoConsultScreen> {
               const SizedBox(height: 16),
               TextButton(
                 onPressed: () => context.pop(),
-                child: const Text('Go back', style: TextStyle(color: Colors.white)),
+                child: Text(l10n.videoGoBack, style: const TextStyle(color: Colors.white)),
               ),
             ],
           ),
@@ -383,12 +386,12 @@ class _VideoConsultScreenState extends ConsumerState<VideoConsultScreen> {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    _joined ? 'Waiting for doctor to join…' : 'Connecting to video room…',
+                    _joined ? l10n.videoWaiting : l10n.videoConnecting,
                     style: GoogleFonts.poppins(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Channel: ${_creds?.channel ?? ''}',
+                    '${l10n.videoChannel}: ${_creds?.channel ?? ''}',
                     style: GoogleFonts.poppins(color: Colors.white54, fontSize: 12),
                   ),
                 ],
@@ -429,7 +432,7 @@ class _VideoConsultScreenState extends ConsumerState<VideoConsultScreen> {
                   const Icon(Icons.call_end, color: Colors.redAccent, size: 56),
                   const SizedBox(height: 16),
                   Text(
-                    'Call ended',
+                    l10n.videoEndCall,
                     style: GoogleFonts.poppins(
                       color: Colors.white,
                       fontSize: 22,

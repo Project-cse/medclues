@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../constants/app_colors.dart';
+import '../../l10n/l10n_extension.dart';
 import '../../providers/booking_state_provider.dart';
 import '../../routes/route_names.dart';
 import '../../utils/date_formatter.dart';
@@ -16,6 +17,7 @@ class BookingSuccessScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     final draft = ref.watch(bookingDraftProvider);
 
     return Scaffold(
@@ -27,10 +29,10 @@ class BookingSuccessScreen extends ConsumerWidget {
             children: [
               const Spacer(),
               SuccessCelebration(
-                title: 'Payment Successful',
+                title: l10n.bookingPaymentSuccess,
                 subtitle: draft != null
-                    ? 'Appointment with Dr. ${draft.doctor.name} confirmed'
-                    : 'Your appointment is confirmed',
+                    ? '${l10n.bookingConsultationWith("Dr. ${draft.doctor.name}")} • ${l10n.receiptStatusConfirmed}'
+                    : l10n.receiptConfirmed,
                 child: draft == null
                     ? null
                     : Column(
@@ -55,7 +57,7 @@ class BookingSuccessScreen extends ConsumerWidget {
               ),
               const Spacer(),
               AppButton(
-                label: 'View Receipt',
+                label: l10n.receiptAppointmentReceipt,
                 onPressed: () {
                   final id = draft?.appointmentId;
                   if (id != null && id.isNotEmpty) {
@@ -67,7 +69,7 @@ class BookingSuccessScreen extends ConsumerWidget {
               ).animate(delay: 700.ms).fadeIn().slideY(begin: 0.1, end: 0),
               const SizedBox(height: 12),
               AppButton(
-                label: 'Go to Home',
+                label: l10n.navHome,
                 variant: AppButtonVariant.secondary,
                 onPressed: () => context.go(RouteNames.dashboard),
               ).animate(delay: 800.ms).fadeIn(),

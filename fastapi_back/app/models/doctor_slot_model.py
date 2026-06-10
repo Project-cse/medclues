@@ -165,23 +165,28 @@ async def get_offline_block_summary(
     from_date: date,
     to_date: date,
 ) -> List[Dict[str, Any]]:
-    """One query for all OPD block counts + representative slot ids (replaces per-day loops)."""
+    """OPD block totals + remaining capacity (includes full blocks with 0 available)."""
     return await db.query(
         """
         SELECT
           slot_date,
           slot_type,
-          COUNT(*)::int AS available_count,
-          MIN(id) AS representative_slot_id
+          COUNT(*) FILTER (WHERE status = 'available')::int AS available_count,
+          COUNT(*)::int AS total_count,
+          MIN(id) FILTER (WHERE status = 'available') AS representative_slot_id
         FROM doctor_slots
         WHERE doctor_ref = $1
           AND mode = 'offline'
           AND slot_date >= $2
           AND slot_date <= $3
-          AND status = 'available'
           AND slot_type IN ('morning_opd', 'evening_opd')
         GROUP BY slot_date, slot_type
-        ORDER BY slot_date, slot_type
+        ORDER BY slot_date,
+          CASE slot_type
+            WHEN 'morning_opd' THEN 0
+            WHEN 'evening_opd' THEN 1
+            ELSE 2
+          END
         """,
         doctor_ref,
         from_date,

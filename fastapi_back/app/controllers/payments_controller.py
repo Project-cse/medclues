@@ -5,15 +5,16 @@ from datetime import datetime, timezone
 import razorpay
 from app.config.config import settings
 from app.controllers import user_controller
-from app.models import appointment_model, doctor_model
+from app.models import appointment_model, doctor_model, payment_transaction_model as pt_model
+from app.utils.app_logger import get_logger
 
-razorpay_client = razorpay.Client(
-    auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET)
+log = get_logger(__name__)
+
+razorpay_client = (
+    razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET))
+    if settings.RAZORPAY_KEY_ID and settings.RAZORPAY_KEY_SECRET
+    else None
 )
-
-_pending_orders: dict[str, dict] = {}
-_checkout_tokens: dict[str, dict] = {}
-_payment_history: list[dict] = []
 
 
 def is_razorpay_test_mode() -> bool:
@@ -57,8 +58,14 @@ def _amount_to_paise(amount_raw) -> int:
     return int(round(value * 100))
 
 
+def _require_client():
+    if not razorpay_client:
+        raise RuntimeError("Razorpay not configured")
+
+
 async def create_order(amount_inr: float, currency: str = "INR", receipt: str | None = None):
     try:
+        _require_client()
         amount_paise = int(round(float(amount_inr) * 100))
         if amount_paise < 100:
             return {"success": False, "message": "Minimum amount is ₹1"}
@@ -74,12 +81,14 @@ async def create_order(amount_inr: float, currency: str = "INR", receipt: str | 
         order = razorpay_client.order.create(data=order_data)
         order_id = order.get("id")
         checkout_token = uuid.uuid4().hex
-        _pending_orders[order_id] = {
-            "amount_paise": amount_paise,
-            "doctor_name": "MediChain+ Payment",
-            "simple": True,
-        }
-        _checkout_tokens[checkout_token] = {"order_id": order_id}
+        await pt_model.create_pending(
+            razorpay_order_id=order_id,
+            amount_paise=amount_paise,
+            checkout_token=checkout_token,
+            currency=order.get("currency", currency),
+            doctor_name="MediChain+ Payment",
+            booking_metadata={"simple": True},
+        )
 
         return {
             "success": True,
@@ -95,6 +104,7 @@ async def create_order(amount_inr: float, currency: str = "INR", receipt: str | 
 
 async def create_appointment_order(user_id: int, body: dict):
     try:
+        _require_client()
         doctor_id = body.get("doctor_id")
         if not doctor_id:
             return {"success": False, "message": "doctor_id is required"}
@@ -131,30 +141,31 @@ async def create_appointment_order(user_id: int, body: dict):
         )
         order_id = order.get("id")
         appointment_id = f"pending_{order_id}"
-
-        _pending_orders[order_id] = {
-            "user_id": user_id,
-            "doctor_id": str(doctor_id),
-            "doctor_name": doctor_name,
-            "customer_name": (user.get("name") or "").strip(),
-            "customer_email": (user.get("email") or "").strip(),
-            "customer_phone": (user.get("phone") or "").strip(),
-            "appointment_date": body.get("appointment_date"),
-            "appointment_time": body.get("appointment_time"),
-            "visit_type": body.get("visit_type") or "online",
-            "mode": body.get("mode") or "online",
-            "slot_id": body.get("slot_id") or body.get("slotId"),
-            "slot_type": body.get("slot_type") or body.get("slotType"),
-            "notes": body.get("notes") or "",
-            "amount_paise": amount_paise,
-            "appointment_id": appointment_id,
-        }
-
         checkout_token = uuid.uuid4().hex
-        _checkout_tokens[checkout_token] = {
-            "order_id": order_id,
-            "user_id": user_id,
-        }
+
+        await pt_model.create_pending(
+            razorpay_order_id=order_id,
+            amount_paise=amount_paise,
+            checkout_token=checkout_token,
+            currency=body.get("currency", "INR"),
+            user_id=user_id,
+            doctor_id=str(doctor_id),
+            doctor_name=doctor_name,
+            customer_name=(user.get("name") or "").strip(),
+            customer_email=(user.get("email") or "").strip(),
+            customer_phone=(user.get("phone") or "").strip(),
+            appointment_id=appointment_id,
+            booking_metadata={
+                "doctor_id": str(doctor_id),
+                "appointment_date": body.get("appointment_date"),
+                "appointment_time": body.get("appointment_time"),
+                "visit_type": body.get("visit_type") or "online",
+                "mode": body.get("mode") or "online",
+                "slot_id": body.get("slot_id") or body.get("slotId"),
+                "slot_type": body.get("slot_type") or body.get("slotType"),
+                "notes": body.get("notes") or "",
+            },
+        )
 
         return {
             "success": True,
@@ -170,18 +181,13 @@ async def create_appointment_order(user_id: int, body: dict):
         return {"success": False, "message": str(e)}
 
 
-def _paid_record_for_order(order_id: str) -> dict | None:
-    for record in _payment_history:
-        if record.get("order_id") == order_id and record.get("status") == "paid":
-            return record
-    return None
-
-
 async def _resolve_pending_order(order_id: str) -> dict | None:
-    pending = _pending_orders.get(order_id)
-    if pending:
-        return pending
+    row = await pt_model.get_by_order_id(order_id)
+    if row:
+        return pt_model.row_to_pending(row)
+
     try:
+        _require_client()
         order = razorpay_client.order.fetch(order_id)
         notes = order.get("notes") or {}
         user_id = int(notes.get("user_id") or 0)
@@ -189,24 +195,17 @@ async def _resolve_pending_order(order_id: str) -> dict | None:
         if not user_id or not doctor_id:
             return None
         doc = await doctor_model.get_doctor_by_id(doctor_id)
-        slot_id = notes.get("slot_id") or ""
-        return {
-            "user_id": user_id,
-            "doctor_id": str(doctor_id),
-            "doctor_name": (doc or {}).get("name") or "Doctor",
-            "appointment_date": notes.get("appointment_date") or "",
-            "appointment_time": notes.get("appointment_time") or "",
-            "visit_type": notes.get("visit_type") or "online",
-            "mode": notes.get("mode") or "online",
-            "slot_id": int(slot_id) if str(slot_id).isdigit() else slot_id or None,
-            "slot_type": notes.get("slot_type") or None,
-            "notes": notes.get("booking_notes") or "",
-            "amount_paise": int(order.get("amount") or 0),
-            "appointment_id": f"pending_{order_id}",
-        }
+        restored = await pt_model.upsert_from_razorpay_notes(
+            razorpay_order_id=order_id,
+            amount_paise=int(order.get("amount") or 0),
+            notes=notes,
+            doctor_name=(doc or {}).get("name") or "Doctor",
+        )
+        if restored:
+            return pt_model.row_to_pending(restored)
     except Exception as e:
-        print(f"[WARNING] Could not restore pending order {order_id}: {e}")
-        return None
+        log.warning("Could not restore pending order %s: %s", order_id, e)
+    return None
 
 
 async def verify_signature(
@@ -215,6 +214,7 @@ async def verify_signature(
     razorpay_signature: str,
 ):
     try:
+        _require_client()
         params = {
             "razorpay_order_id": razorpay_order_id,
             "razorpay_payment_id": razorpay_payment_id,
@@ -227,6 +227,45 @@ async def verify_signature(
 
 
 async def _book_after_payment(user_id: int, pending: dict, razorpay_order_id: str, razorpay_payment_id: str):
+    claim = await pt_model.claim_for_fulfillment(razorpay_order_id)
+    kind = claim.get("kind")
+
+    if kind == "paid":
+        row = claim["row"]
+        return {
+            "success": True,
+            "appointment_id": row.get("appointment_id"),
+            "appointmentId": row.get("appointment_id"),
+            "message": "Payment already processed",
+            "payment": pt_model.row_to_payment_record(row),
+        }
+    if kind == "missing":
+        return {"success": False, "message": "Order not found or already processed"}
+    if kind == "failed":
+        return {"success": False, "message": "Payment previously failed"}
+    if kind == "processing":
+        existing = await pt_model.get_paid_by_order_id(razorpay_order_id)
+        if existing:
+            return {
+                "success": True,
+                "appointment_id": existing.get("appointment_id"),
+                "appointmentId": existing.get("appointment_id"),
+                "message": "Payment already processed",
+            }
+        return {
+            "success": False,
+            "message": "Payment is being processed, please retry shortly",
+        }
+
+    if pending.get("simple"):
+        paid_row = await pt_model.mark_paid(razorpay_order_id, razorpay_payment_id)
+        record = pt_model.row_to_payment_record(paid_row or {})
+        return {
+            "success": True,
+            "message": "Payment successful",
+            "payment": record,
+        }
+
     visit = pending.get("visit_type") or "online"
     mode = pending.get("mode") or ("online" if visit == "online" else "offline")
     book_body = {
@@ -242,62 +281,60 @@ async def _book_after_payment(user_id: int, pending: dict, razorpay_order_id: st
         book_body["slotId"] = pending["slot_id"]
     if pending.get("slot_type"):
         book_body["slotType"] = pending["slot_type"]
-    booked = await user_controller.book_appointment(user_id, book_body)
-    if not booked.get("success", True) and booked.get("message"):
-        return {"success": False, "message": booked.get("message")}
-
-    real_appointment_id = (
-        booked.get("appointmentId")
-        or booked.get("appointment_id")
-        or booked.get("id")
-        or pending.get("appointment_id")
-    )
 
     try:
-        await appointment_model.update_appointment(
-            int(real_appointment_id),
-            {
-                "payment": True,
-                "paymentStatus": "paid",
-                "transactionId": razorpay_payment_id,
-                "paymentMethod": "razorpay",
-            },
+        booked = await user_controller.book_appointment(user_id, book_body)
+        if not booked.get("success", True) and booked.get("message"):
+            await pt_model.release_claim(razorpay_order_id)
+            return {"success": False, "message": booked.get("message")}
+
+        real_appointment_id = (
+            booked.get("appointmentId")
+            or booked.get("appointment_id")
+            or booked.get("id")
+            or pending.get("appointment_id")
         )
+
+        try:
+            await appointment_model.update_appointment(
+                int(real_appointment_id),
+                {
+                    "payment": True,
+                    "paymentStatus": "paid",
+                    "transactionId": razorpay_payment_id,
+                    "paymentMethod": "razorpay",
+                },
+            )
+        except Exception as e:
+            log.warning("Could not mark appointment paid: %s", e)
+
+        try:
+            from app.controllers import consultation_controller
+            await consultation_controller.ensure_consultation_for_appointment(
+                user_id, int(real_appointment_id)
+            )
+        except Exception as consult_err:
+            log.warning("Video consultation session setup: %s", consult_err)
+
+        paid_row = await pt_model.mark_paid(
+            razorpay_order_id,
+            razorpay_payment_id,
+            str(real_appointment_id),
+        )
+        record = pt_model.row_to_payment_record(paid_row or {})
+
+        return {
+            "success": True,
+            "appointment_id": str(real_appointment_id),
+            "appointmentId": real_appointment_id,
+            "bookingId": booked.get("bookingId"),
+            "tokenNumber": booked.get("tokenNumber"),
+            "message": "Payment successful",
+            "payment": record,
+        }
     except Exception as e:
-        print(f"[WARNING] Could not mark appointment paid: {e}")
-
-    try:
-        from app.controllers import consultation_controller
-        await consultation_controller.ensure_consultation_for_appointment(
-            user_id, int(real_appointment_id)
-        )
-    except Exception as consult_err:
-        print(f"[WARNING] Video consultation session setup: {consult_err}")
-
-    record = {
-        "id": str(uuid.uuid4()),
-        "user_id": user_id,
-        "order_id": razorpay_order_id,
-        "payment_id": razorpay_payment_id,
-        "appointment_id": str(real_appointment_id),
-        "doctor_name": pending.get("doctor_name"),
-        "amount_paise": pending.get("amount_paise"),
-        "amount_inr": round((pending.get("amount_paise") or 0) / 100, 2),
-        "status": "paid",
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }
-    _payment_history.insert(0, record)
-    _pending_orders.pop(razorpay_order_id, None)
-
-    return {
-        "success": True,
-        "appointment_id": str(real_appointment_id),
-        "appointmentId": real_appointment_id,
-        "bookingId": booked.get("bookingId"),
-        "tokenNumber": booked.get("tokenNumber"),
-        "message": "Payment successful",
-        "payment": record,
-    }
+        await pt_model.release_claim(razorpay_order_id)
+        raise e
 
 
 async def verify_appointment_payment(
@@ -313,7 +350,7 @@ async def verify_appointment_payment(
     if not verified.get("success"):
         return verified
 
-    existing = _paid_record_for_order(razorpay_order_id)
+    existing = await pt_model.get_paid_by_order_id(razorpay_order_id)
     if existing:
         return {
             "success": True,
@@ -333,11 +370,12 @@ async def verify_appointment_payment(
 
 async def get_order_status(user_id: int, order_id: str):
     """Check Razorpay order status (paid / pending / failed)."""
-    pending = _pending_orders.get(order_id)
-    if pending and pending.get("user_id") not in (None, user_id):
+    row = await pt_model.get_by_order_id(order_id)
+    if row and row.get("user_id") not in (None, user_id):
         return {"success": False, "message": "Unauthorized"}
 
     try:
+        _require_client()
         order = razorpay_client.order.fetch(order_id)
         payments_res = razorpay_client.order.payments(order_id)
         items = payments_res.get("items") or []
@@ -348,6 +386,7 @@ async def get_order_status(user_id: int, order_id: str):
         amount_due = int(order.get("amount_due") or 0)
         paid = order_status == "paid" or captured is not None or amount_due == 0 and amount_paid > 0
 
+        pending = pt_model.row_to_pending(row) if row else None
         return {
             "success": True,
             "order_id": order_id,
@@ -357,8 +396,8 @@ async def get_order_status(user_id: int, order_id: str):
             "amount_paise": int(order.get("amount") or 0),
             "amount_paid_paise": amount_paid,
             "payment_id": (captured or {}).get("id"),
-            "pending_in_app": order_id in _pending_orders,
-            "doctor_name": (pending or {}).get("doctor_name"),
+            "pending_in_app": bool(row and row.get("status") == "pending"),
+            "doctor_name": (pending or {}).get("doctor_name") or (row or {}).get("doctor_name"),
         }
     except Exception as e:
         return {"success": False, "message": str(e)}
@@ -379,7 +418,7 @@ async def confirm_paid_order(user_id: int, order_id: str):
             "order_status": status.get("order_status"),
         }
 
-    existing = _paid_record_for_order(order_id)
+    existing = await pt_model.get_paid_by_order_id(order_id)
     if existing:
         return {
             "success": True,
@@ -415,8 +454,8 @@ async def complete_checkout_payment(
     razorpay_signature: str,
 ):
     """Called from hosted checkout page right after Razorpay success."""
-    meta = _checkout_tokens.get(checkout_token)
-    if not meta or meta.get("order_id") != razorpay_order_id:
+    row = await pt_model.get_by_checkout_token(checkout_token)
+    if not row or row.get("razorpay_order_id") != razorpay_order_id:
         return {"success": False, "message": "Invalid or expired checkout session"}
 
     verified = await verify_signature(
@@ -425,8 +464,8 @@ async def complete_checkout_payment(
     if not verified.get("success"):
         return verified
 
-    user_id = int(meta.get("user_id") or 0)
-    existing = _paid_record_for_order(razorpay_order_id)
+    user_id = int(row.get("user_id") or 0)
+    existing = await pt_model.get_paid_by_order_id(razorpay_order_id)
     if existing:
         return {
             "success": True,
@@ -454,34 +493,38 @@ async def record_failed_payment(
     error: str,
     user_id: int | None = None,
 ):
-    pending = _pending_orders.pop(order_id, None)
-    record = {
-        "id": str(uuid.uuid4()),
-        "user_id": user_id or (pending or {}).get("user_id"),
-        "order_id": order_id,
-        "appointment_id": appointment_id or (pending or {}).get("appointment_id"),
-        "doctor_name": (pending or {}).get("doctor_name"),
-        "amount_paise": (pending or {}).get("amount_paise"),
-        "amount_inr": round(((pending or {}).get("amount_paise") or 0) / 100, 2),
-        "status": "failed",
-        "error": error or "Payment failed",
-        "created_at": datetime.now(timezone.utc).isoformat(),
+    row = await pt_model.mark_failed(
+        order_id,
+        error or "Payment failed",
+        user_id=user_id,
+        appointment_id=appointment_id,
+    )
+    if not row:
+        pending = await pt_model.get_by_order_id(order_id)
+        record = {
+            "id": str(uuid.uuid4()),
+            "user_id": user_id or (pending or {}).get("user_id"),
+            "order_id": order_id,
+            "appointment_id": appointment_id or (pending or {}).get("appointment_id"),
+            "status": "failed",
+            "error": error or "Payment failed",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        return {"success": True, "message": "Payment failure recorded", "payment": record}
+    return {
+        "success": True,
+        "message": "Payment failure recorded",
+        "payment": pt_model.row_to_payment_record(row),
     }
-    _payment_history.insert(0, record)
-    return {"success": True, "message": "Payment failure recorded"}
 
 
-def get_checkout_html(checkout_token: str) -> str | None:
-    """Hosted Razorpay checkout page; books appointment on success via checkout-complete API."""
-    meta = _checkout_tokens.get(checkout_token)
-    if not meta:
+async def get_checkout_html(checkout_token: str) -> str | None:
+    row = await pt_model.get_by_checkout_token(checkout_token)
+    if not row or not settings.RAZORPAY_KEY_ID:
         return None
 
-    order_id = meta.get("order_id")
-    pending = _pending_orders.get(order_id)
-    if not pending or not settings.RAZORPAY_KEY_ID:
-        return None
-
+    pending = pt_model.row_to_pending(row)
+    order_id = row.get("razorpay_order_id")
     key = settings.RAZORPAY_KEY_ID
     amount = pending.get("amount_paise", 0)
     doctor_name = pending.get("doctor_name", "Doctor")
@@ -489,7 +532,6 @@ def get_checkout_html(checkout_token: str) -> str | None:
     prefill_name = _js_str(pending.get("customer_name") or "")
     prefill_email = _js_str(pending.get("customer_email") or "")
     prefill_contact = _js_str(pending.get("customer_phone") or "")
-
     checkout_token_js = _js_str(checkout_token)
 
     return f"""<!DOCTYPE html>
@@ -587,17 +629,23 @@ def get_checkout_html(checkout_token: str) -> str | None:
 </html>"""
 
 
-async def get_payment_history(user_id: int | None = None):
+async def get_payment_history(
+    user_id: int | None = None,
+    *,
+    limit: int | None = None,
+    offset: int = 0,
+):
+    from app.utils.pagination import paginate_items, pagination_meta, with_pagination
+
     seen_orders: set[str] = set()
     items: list[dict] = []
 
-    for p in _payment_history:
-        if user_id is not None and p.get("user_id") not in (None, user_id):
-            continue
-        oid = p.get("order_id")
-        if oid:
-            seen_orders.add(oid)
-        items.append(p)
+    if user_id is not None:
+        for row in await pt_model.list_for_user(user_id, limit=50):
+            oid = row.get("razorpay_order_id")
+            if oid:
+                seen_orders.add(oid)
+            items.append(pt_model.row_to_payment_record(row))
 
     if user_id is not None:
         try:
@@ -635,7 +683,73 @@ async def get_payment_history(user_id: int | None = None):
                     ),
                 })
         except Exception as e:
-            print(f"[WARNING] payment history DB merge: {e}")
+            log.warning("payment history DB merge: %s", e)
 
     items.sort(key=lambda x: x.get("created_at") or "", reverse=True)
-    return {"success": True, "payments": items[:50]}
+    effective_limit = limit if limit is not None else 50
+    total = len(items)
+    page = paginate_items(items, effective_limit, offset)
+    payload = {"success": True, "payments": page}
+    if limit is not None:
+        return with_pagination(
+            payload,
+            pagination_meta(
+                total=total,
+                limit=effective_limit,
+                offset=offset,
+                returned=len(page),
+            ),
+        )
+    return payload
+
+
+def verify_webhook_signature(body: bytes, signature: str) -> bool:
+    secret = (getattr(settings, "RAZORPAY_WEBHOOK_SECRET", None) or "").strip()
+    if not secret or not razorpay_client:
+        return False
+    try:
+        razorpay_client.utility.verify_webhook_signature(body.decode("utf-8"), signature, secret)
+        return True
+    except Exception:
+        return False
+
+
+async def handle_razorpay_webhook(payload: dict) -> dict:
+    """Process Razorpay webhook events (payment.captured / payment.failed)."""
+    event = payload.get("event") or ""
+    entity_container = payload.get("payload") or {}
+
+    if event == "payment.captured":
+        payment = (entity_container.get("payment") or {}).get("entity") or {}
+        order_id = payment.get("order_id")
+        payment_id = payment.get("id")
+        if not order_id or not payment_id:
+            return {"success": False, "message": "Missing order or payment id"}
+
+        existing = await pt_model.get_paid_by_order_id(order_id)
+        if existing:
+            return {"success": True, "message": "Already processed", "duplicate": True}
+
+        pending = await _resolve_pending_order(order_id)
+        if not pending:
+            return {"success": True, "message": "No booking metadata for order", "skipped": True}
+        if pending.get("simple"):
+            await pt_model.mark_paid(order_id, payment_id)
+            return {"success": True, "message": "Simple payment recorded"}
+
+        user_id = pending.get("user_id")
+        if not user_id:
+            return {"success": True, "message": "No user on order", "skipped": True}
+
+        result = await _book_after_payment(int(user_id), pending, order_id, payment_id)
+        return result
+
+    if event == "payment.failed":
+        payment = (entity_container.get("payment") or {}).get("entity") or {}
+        order_id = payment.get("order_id")
+        error = (payment.get("error_description") or payment.get("error_reason") or "Payment failed")
+        if order_id:
+            await pt_model.mark_failed(order_id, error)
+        return {"success": True, "message": "Failure recorded"}
+
+    return {"success": True, "message": f"Event ignored: {event}"}

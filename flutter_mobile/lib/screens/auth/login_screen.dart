@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../providers/auth_provider.dart';
 import '../../routes/route_names.dart';
+import '../../l10n/l10n_extension.dart';
 import '../../utils/app_exception.dart';
 import '../../utils/validators.dart';
 import '../../widgets/auth/auth_input.dart';
@@ -54,7 +55,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     } catch (e) {
       if (!mounted) return;
       final msg = e is AppException ? e.message : e.toString();
-      if (msg != 'Sign-in cancelled') {
+      if (msg != context.l10n.authSignInCancelled) {
         AppSnackbar.show(context, msg);
       }
     } finally {
@@ -63,11 +64,22 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
+    final l10n = context.l10n;
+    final email = _email.text.trim();
+    // Sign-in: only ensure fields are filled — do not re-validate password rules
+    // (saved/autofill passwords may not meet signup complexity).
+    if (Validators.loginEmail(email, l10n) != null) {
+      AppSnackbar.show(context, l10n.validationEmailRequired);
+      return;
+    }
+    if (Validators.loginPassword(_password.text, l10n) != null) {
+      AppSnackbar.show(context, l10n.validationPasswordRequired);
+      return;
+    }
     setState(() => _btnState = MorphButtonState.loading);
     try {
       final ok = await ref.read(authProvider.notifier).login(
-            _email.text.trim(),
+            email,
             _password.text,
           );
       if (!mounted) return;
@@ -89,15 +101,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return LoginScreenShell(
       child: Form(
         key: _formKey,
+        autovalidateMode: AutovalidateMode.disabled,
         child: Column(
           children: [
             const BrandLogoMark(),
             const SizedBox(height: 16),
             Text(
-              'Sign in to continue to your account',
+              l10n.authSignInTitle,
               textAlign: TextAlign.center,
               style: GoogleFonts.inter(
                 fontSize: 15,
@@ -121,17 +135,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   _userHeader(),
                   const SizedBox(height: 28),
                   AuthInput(
-                    label: 'Email Address',
+                    label: l10n.authEmail,
                     icon: Icons.mail_outline_rounded,
                     controller: _email,
                     keyboardType: TextInputType.emailAddress,
-                    hintText: 'Enter your email',
-                    validator: Validators.email,
+                    hintText: l10n.authEmailHint,
+                    autofillHints: const [AutofillHints.email],
                   ),
                   _passwordSection(),
                   const SizedBox(height: 28),
                   PremiumSignInButton(
-                    label: 'Sign In',
+                    label: l10n.authSignIn,
                     state: _btnState,
                     onPressed: _btnState == MorphButtonState.idle ? _submit : null,
                   ),
@@ -143,7 +157,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 14),
                           child: Text(
-                            'or',
+                            l10n.commonOr,
                             style: GoogleFonts.inter(
                               fontSize: 13,
                               fontWeight: FontWeight.w500,
@@ -187,9 +201,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     color: PremiumLoginTheme.textSecondary,
                   ),
                   children: [
-                    const TextSpan(text: "Don't have an account? "),
+                    TextSpan(text: l10n.authNoAccount),
                     TextSpan(
-                      text: 'Register',
+                      text: l10n.authRegister,
                       style: GoogleFonts.inter(
                         fontWeight: FontWeight.w700,
                         color: PremiumLoginTheme.accentBlue,
@@ -208,6 +222,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   Widget _userHeader() {
+    final l10n = context.l10n;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -230,7 +245,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'User',
+                l10n.authUser,
                 style: GoogleFonts.inter(
                   fontSize: 17,
                   fontWeight: FontWeight.w700,
@@ -240,7 +255,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               ),
               const SizedBox(height: 4),
               Text(
-                'Book appointments & view your health records',
+                l10n.authUserSubtitle,
                 style: GoogleFonts.inter(
                   fontSize: 13,
                   fontWeight: FontWeight.w400,
@@ -256,6 +271,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   Widget _passwordSection() {
+    final l10n = context.l10n;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -263,7 +279,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              'Password',
+              l10n.authPassword,
               style: GoogleFonts.inter(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
@@ -280,7 +296,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 context.push(path);
               },
               child: Text(
-                'Forgot Password?',
+                l10n.authForgotPassword,
                 style: GoogleFonts.inter(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
@@ -296,9 +312,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           icon: Icons.lock_outline_rounded,
           controller: _password,
           obscureText: !_showPwd,
-          hintText: 'Enter your password',
+          hintText: l10n.authPasswordHint,
           bottomGap: 0,
-          validator: Validators.password,
+          autofillHints: const [AutofillHints.password],
           suffix: GestureDetector(
             onTap: () => setState(() => _showPwd = !_showPwd),
             behavior: HitTestBehavior.opaque,

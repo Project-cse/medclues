@@ -1,19 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:shimmer/shimmer.dart';
 
-import '../../constants/app_colors.dart';
+import 'list_card_skeleton.dart';
 
 class AppointmentCardSkeleton extends StatelessWidget {
   const AppointmentCardSkeleton({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Shimmer.fromColors(
-      baseColor: AppColors.divider,
-      highlightColor: AppColors.surface,
-      child: Card(
-        child: Container(height: 120, margin: const EdgeInsets.only(bottom: 12)),
-      ),
+    return const ListCardSkeleton(
+      height: 120,
+      margin: EdgeInsets.symmetric(horizontal: 16, vertical: 6),
     );
   }
 }

@@ -3,9 +3,11 @@ import fastapi.security
 from jose import jwt, JWTError
 from app.config.config import settings
 from app.services.token_service import verify_access_payload
+from app.utils.app_logger import get_logger
 from datetime import datetime
 
 security = fastapi.security.HTTPBearer(auto_error=False)
+logger = get_logger(__name__)
 
 async def auth_user(request: Request, token: fastapi.security.HTTPAuthorizationCredentials = Depends(security)):
     # Try getting token from Bearer header OR from 'token' header
@@ -21,7 +23,7 @@ async def auth_user(request: Request, token: fastapi.security.HTTPAuthorizationC
             token_str = auth_header
         
     if not token_str:
-        print(f"⚠️ Auth Failed: No token found in headers. Headers: {dict(request.headers)}")
+        logger.warning("Auth failed: no token in request headers")
         raise HTTPException(status_code=401, detail="No token provided")
         
     try:
@@ -35,13 +37,12 @@ async def auth_user(request: Request, token: fastapi.security.HTTPAuthorizationC
             user_id = payload.get("userId")
             
         if user_id is None:
-            print(f"⚠️ Auth Failed: Token decoded but 'id' missing. Payload: {payload}")
+            logger.warning("Auth failed: token missing user id claim")
             raise HTTPException(status_code=401, detail="Invalid token")
             
         return user_id
     except JWTError as e:
-        print(f"❌ Auth JWT Error: {str(e)} for token: {token_str[:15]}...")
-        # If it's a "Signature verification failed", it's likely a secret mismatch
+        logger.warning("Auth JWT error: %s", str(e))
         raise HTTPException(status_code=401, detail="Not authorized, login again")
 
 async def auth_admin(request: Request, token: fastapi.security.HTTPAuthorizationCredentials = Depends(security)):
@@ -49,26 +50,21 @@ async def auth_admin(request: Request, token: fastapi.security.HTTPAuthorization
     token_str = token.credentials if token else None
     
     if not token_str:
-        # Debug: check all headers
         all_headers = dict(request.headers)
-        token_str = all_headers.get("atoken") or all_headers.get("atoken") or \
-                    all_headers.get("token") or all_headers.get("Token")
-        
-        # Manual case-insensitive find because .get() usually works but let's be sure
+        token_str = all_headers.get("atoken") or all_headers.get("token") or all_headers.get("Token")
         if not token_str:
             for k, v in all_headers.items():
                 if k.lower() in ["atoken", "token"]:
                     token_str = v
-                    print(f"[auth_admin] Found token in header: {k}", flush=True)
                     break
-        
+
     if not token_str:
         auth_header = request.headers.get("Authorization")
         if auth_header and not auth_header.startswith("Bearer "):
             token_str = auth_header
 
     if not token_str:
-        print("[auth_admin] No token in headers (atoken, token, Authorization)", flush=True)
+        logger.warning("Admin auth failed: no token in headers")
         raise HTTPException(status_code=401, detail="No admin token provided")
         
     try:
@@ -77,18 +73,17 @@ async def auth_admin(request: Request, token: fastapi.security.HTTPAuthorization
         verify_access_payload(payload)
         email = payload.get("email")
 
-        # Debug info
         expected_admin = getattr(settings, "ADMIN_EMAIL", None)
         if not expected_admin:
-            print("[auth_admin] ADMIN_EMAIL not configured in .env", flush=True)
+            logger.error("ADMIN_EMAIL not configured")
             raise HTTPException(status_code=500, detail="Server configuration error")
 
         if not email or str(email).strip().lower() != str(expected_admin).strip().lower():
-            print(f"[auth_admin] Unauthorized email: {email}", flush=True)
+            logger.warning("Admin auth failed: unauthorized email claim")
             raise HTTPException(status_code=401, detail="Not authorized as admin")
         return email
     except JWTError as e:
-        print(f"[auth_admin] JWT error: {e}", flush=True)
+        logger.warning("Admin auth JWT error: %s", str(e))
         raise HTTPException(status_code=401, detail="Not authorized, login again")
 
 async def auth_doctor(request: Request, token: fastapi.security.HTTPAuthorizationCredentials = Depends(security)):

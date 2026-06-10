@@ -1,13 +1,17 @@
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../l10n/l10n_extension.dart';
 import '../../constants/app_colors.dart';
 import '../../utils/theme_context.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/health_record_provider.dart';
 import '../../providers/service_providers.dart';
 import '../../services/health_record_service.dart';
+import '../../utils/validators.dart';
 import '../../widgets/common/app_loader.dart';
 import '../../utils/report_file_opener.dart';
 import '../../widgets/animations/upload_progress_button.dart';
@@ -51,44 +55,77 @@ class _RecordsScreenState extends ConsumerState<RecordsScreen> {
   }
 
   Future<void> _viewReport(HealthRecordItem record) async {
+    final l10n = context.l10n;
     if (record.files.isEmpty) {
-      AppSnackbar.show(context, 'No file attached to this report');
+      AppSnackbar.show(context, l10n.recordsNoFile);
       return;
     }
     if (record.id.isEmpty) {
-      AppSnackbar.show(context, 'Report id missing — refresh and try again');
+      AppSnackbar.show(context, l10n.recordsIdMissing);
       return;
     }
     if (_openingReport) return;
 
     setState(() => _openingReport = true);
+    if (!mounted) return;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          content: Row(
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(width: 20),
+              Expanded(child: Text(l10n.recordsOpening)),
+            ],
+          ),
+        ),
+      ),
+    );
+
     try {
-      final bytes = await ref
-          .read(healthRecordServiceProvider)
-          .downloadReportFile(record.id);
-      final fileName = _reportFileName(record);
-      await openReportBytes(
-        bytes,
-        fileName,
-        mimeType: _reportMimeType(fileName),
-      );
+      final service = ref.read(healthRecordServiceProvider);
+      if (kIsWeb) {
+        final url = record.primaryFileUrl ??
+            await service.fetchViewUrl(record.id);
+        final uri = Uri.parse(url);
+        final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+        if (!opened) {
+          throw Exception(l10n.recordsOpenFailed);
+        }
+      } else {
+        final bytes = await service.downloadReportFile(record.id);
+        final fileName = _reportFileName(record);
+        await openReportBytes(
+          bytes,
+          fileName,
+          mimeType: _reportMimeType(fileName),
+        );
+      }
     } catch (e) {
       if (mounted) {
         AppSnackbar.show(context, e.toString().replaceFirst('Exception: ', ''));
       }
     } finally {
-      if (mounted) setState(() => _openingReport = false);
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+        setState(() => _openingReport = false);
+      }
     }
   }
 
   Future<void> _pickAndUpload() async {
+    final l10n = context.l10n;
     final user = ref.read(authProvider).user;
     if (user == null) {
-      AppSnackbar.show(context, 'Please log in');
+      AppSnackbar.show(context, l10n.recordsLoginRequired);
       return;
     }
-    if (_title.text.trim().isEmpty) {
-      AppSnackbar.show(context, 'Enter a report title');
+    final titleError = Validators.reportTitle(_title.text, l10n);
+    if (titleError != null) {
+      AppSnackbar.show(context, titleError);
       return;
     }
 
@@ -118,7 +155,7 @@ class _RecordsScreenState extends ConsumerState<RecordsScreen> {
           _uploading = false;
           _uploadSuccess = true;
         });
-        AppSnackbar.show(context, 'Reports uploaded successfully', success: true);
+        AppSnackbar.show(context, l10n.recordsUploadSuccess, success: true);
         _title.clear();
         Future.delayed(const Duration(seconds: 2), () {
           if (mounted) setState(() => _uploadSuccess = false);
@@ -132,6 +169,7 @@ class _RecordsScreenState extends ConsumerState<RecordsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final records = ref.watch(healthRecordsProvider);
 
     return Scaffold(
@@ -143,7 +181,7 @@ class _RecordsScreenState extends ConsumerState<RecordsScreen> {
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
             children: [
               Text(
-                'Records',
+                l10n.recordsTitle,
                 style: GoogleFonts.poppins(
                   fontSize: 28,
                   fontWeight: FontWeight.w700,
@@ -152,7 +190,7 @@ class _RecordsScreenState extends ConsumerState<RecordsScreen> {
               ),
               const SizedBox(height: 6),
               Text(
-                'Store and share your medical documents securely',
+                l10n.recordsSubtitle,
                 style: GoogleFonts.poppins(fontSize: 14, color: context.secondaryText),
               ),
               const SizedBox(height: 24),
@@ -172,7 +210,7 @@ class _RecordsScreenState extends ConsumerState<RecordsScreen> {
                         ),
                         const SizedBox(width: 12),
                         Text(
-                          'Upload Report',
+                          l10n.recordsUpload,
                           style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w700),
                         ),
                       ],
@@ -182,8 +220,8 @@ class _RecordsScreenState extends ConsumerState<RecordsScreen> {
                       controller: _title,
                       style: GoogleFonts.poppins(fontSize: 15),
                       decoration: InputDecoration(
-                        labelText: 'Title',
-                        hintText: 'e.g. Blood test results',
+                        labelText: l10n.recordsTitleLabel,
+                        hintText: l10n.recordsTitleHint,
                         labelStyle: GoogleFonts.poppins(color: context.secondaryText),
                         hintStyle: GoogleFonts.poppins(color: context.hintText, fontSize: 14),
                       ),
@@ -193,14 +231,14 @@ class _RecordsScreenState extends ConsumerState<RecordsScreen> {
                       value: _recordType,
                       style: GoogleFonts.poppins(fontSize: 15, color: context.primaryText),
                       decoration: InputDecoration(
-                        labelText: 'Type',
+                        labelText: l10n.recordsType,
                         labelStyle: GoogleFonts.poppins(color: context.secondaryText),
                       ),
-                      items: const [
-                        DropdownMenuItem(value: 'lab_report', child: Text('Lab report')),
-                        DropdownMenuItem(value: 'prescription', child: Text('Prescription')),
-                        DropdownMenuItem(value: 'xray', child: Text('X-Ray / Scan')),
-                        DropdownMenuItem(value: 'other', child: Text('Other')),
+                      items: [
+                        DropdownMenuItem(value: 'lab_report', child: Text(l10n.recordsTypeLab)),
+                        DropdownMenuItem(value: 'prescription', child: Text(l10n.recordsTypePrescription)),
+                        DropdownMenuItem(value: 'xray', child: Text(l10n.recordsTypeXray)),
+                        DropdownMenuItem(value: 'other', child: Text(l10n.recordsTypeOther)),
                       ],
                       onChanged: (v) => setState(() => _recordType = v ?? 'lab_report'),
                     ),
@@ -220,7 +258,7 @@ class _RecordsScreenState extends ConsumerState<RecordsScreen> {
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
-                            'PDF, images, DOCX (max 10MB each)',
+                            l10n.recordsFileTypesHint(l10n.recordsMaxSize),
                             style: GoogleFonts.poppins(fontSize: 12, color: context.secondaryText),
                           ),
                         ),
@@ -231,7 +269,7 @@ class _RecordsScreenState extends ConsumerState<RecordsScreen> {
               ),
               const SizedBox(height: 24),
               Text(
-                'Your reports',
+                l10n.recordsYourReports,
                 style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 12),
@@ -245,8 +283,8 @@ class _RecordsScreenState extends ConsumerState<RecordsScreen> {
                   if (list.isEmpty) {
                     return _emptyState(
                       icon: Icons.folder_open_outlined,
-                      message: 'No reports uploaded yet',
-                      subtitle: 'Upload lab results, prescriptions, or scans above',
+                      message: l10n.recordsEmpty,
+                      subtitle: l10n.recordsEmptyUploadHint,
                     );
                   }
                   return Column(
@@ -313,7 +351,7 @@ class _RecordsScreenState extends ConsumerState<RecordsScreen> {
                       if (hasFile) ...[
                         const SizedBox(height: 10),
                         Text(
-                          'View report',
+                          context.l10n.recordsViewReport,
                           style: GoogleFonts.poppins(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
@@ -384,15 +422,16 @@ class _RecordsScreenState extends ConsumerState<RecordsScreen> {
   }
 
   String _formatType(String type) {
+    final l10n = context.l10n;
     switch (type) {
       case 'lab_report':
-        return 'Lab report';
+        return l10n.recordsTypeLab;
       case 'prescription':
-        return 'Prescription';
+        return l10n.recordsTypePrescription;
       case 'xray':
-        return 'X-Ray / Scan';
+        return l10n.recordsTypeXray;
       default:
-        return 'Other';
+        return l10n.recordsTypeOther;
     }
   }
 }

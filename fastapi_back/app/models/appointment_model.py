@@ -61,9 +61,30 @@ async def get_appointment_by_id(app_id: int):
     sql = 'SELECT * FROM appointments WHERE id = $1'
     return await db.fetch_row(sql, app_id)
 
-async def get_appointments_by_user_id(user_id: int):
-    sql = 'SELECT * FROM appointments WHERE user_id = $1 ORDER BY created_at DESC'
-    return await db.query(sql, user_id)
+async def count_appointments_by_user_id(user_id: int) -> int:
+    row = await db.fetch_row(
+        "SELECT COUNT(*)::int AS c FROM appointments WHERE user_id = $1",
+        user_id,
+    )
+    return int(row["c"]) if row else 0
+
+
+async def get_appointments_by_user_id(
+    user_id: int,
+    *,
+    limit: int | None = None,
+    offset: int = 0,
+):
+    if limit is None:
+        sql = "SELECT * FROM appointments WHERE user_id = $1 ORDER BY created_at DESC"
+        return await db.query(sql, user_id)
+    sql = """
+        SELECT * FROM appointments
+        WHERE user_id = $1
+        ORDER BY created_at DESC
+        LIMIT $2 OFFSET $3
+    """
+    return await db.query(sql, user_id, limit, offset)
 
 async def get_appointments_by_doctor_id(doc_id: int):
     sql = 'SELECT * FROM appointments WHERE doctor_id = $1 ORDER BY created_at DESC'

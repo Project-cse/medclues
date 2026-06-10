@@ -4,20 +4,44 @@ from fastapi import APIRouter, Depends, Request, UploadFile, File, Form
 from fastapi.responses import JSONResponse, StreamingResponse
 from app.controllers import user_controller
 from app.middleware.auth import auth_user
+from app.middleware.rate_limit import rate_limit_dependency
 from app.utils.auth_response import build_auth_response
 
 router = APIRouter(prefix="/api/user", tags=["User"])
 
+_login_limit = rate_limit_dependency("user_login", max_calls=30, window_seconds=3600)
+
+
+def _client_ip(request: Request) -> str | None:
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    if request.client:
+        return request.client.host
+    return None
+
 @router.post("/register")
 async def register_user(req: Request):
+    from app.schemas.auth import RegisterRequest
+    from app.utils.validation import validate_body
+
     body = await req.json()
-    result = await user_controller.register_user(body)
+    parsed = validate_body(RegisterRequest, body)
+    if hasattr(parsed, "status_code"):
+        return parsed
+    result = await user_controller.register_user(parsed.model_dump())
     return build_auth_response(result, "patient", req)
 
 @router.post("/login")
-async def login_user(req: Request):
+async def login_user(req: Request, _: None = Depends(_login_limit)):
+    from app.schemas.auth import LoginRequest
+    from app.utils.validation import validate_body
+
     body = await req.json()
-    result = await user_controller.login_user(body)
+    parsed = validate_body(LoginRequest, body)
+    if hasattr(parsed, "status_code"):
+        return parsed
+    result = await user_controller.login_user(parsed.model_dump())
     return build_auth_response(result, "patient", req)
 
 @router.post("/social-login")
@@ -104,8 +128,15 @@ async def book_appointment(
         return {"success": False, "message": f"Invalid request data: {str(e)}"}
 
 @router.get("/appointments")
-async def list_appointments(user_id: int = Depends(auth_user)):
-    return await user_controller.list_appointments(user_id)
+async def list_appointments(
+    user_id: int = Depends(auth_user),
+    limit: int | None = None,
+    offset: int = 0,
+):
+    from app.utils.pagination import parse_pagination
+
+    lim, off = parse_pagination(limit, offset)
+    return await user_controller.list_appointments(user_id, limit=lim, offset=off)
 
 @router.post("/cancel-appointment")
 async def cancel_appointment(req: Request, user_id: int = Depends(auth_user)):
@@ -162,21 +193,35 @@ async def delete_user_health_record(record_id: int, user_id: int = Depends(auth_
 
 @router.get("/health-records/{record_id}/view-url")
 async def get_health_record_view_url(
+    req: Request,
     record_id: int,
     fileIndex: int = 0,
     user_id: int = Depends(auth_user),
 ):
     from app.controllers import health_record_controller
-    return await health_record_controller.get_record_file_view_url(user_id, record_id, fileIndex)
+    return await health_record_controller.get_record_file_view_url(
+        user_id,
+        record_id,
+        fileIndex,
+        ip_address=_client_ip(req),
+        user_agent=req.headers.get("User-Agent"),
+    )
 
 @router.get("/health-records/{record_id}/file")
 async def stream_health_record_file(
+    req: Request,
     record_id: int,
     fileIndex: int = 0,
     user_id: int = Depends(auth_user),
 ):
     from app.controllers import health_record_controller
-    result = await health_record_controller.stream_record_file(user_id, record_id, fileIndex)
+    result = await health_record_controller.stream_record_file(
+        user_id,
+        record_id,
+        fileIndex,
+        ip_address=_client_ip(req),
+        user_agent=req.headers.get("User-Agent"),
+    )
     if not result.get("success"):
         status = 404 if "not found" in (result.get("message") or "").lower() else 502
         return JSONResponse(status_code=status, content=result)
@@ -266,12 +311,18 @@ async def add_emergency_contact(req: Request, user_id: int = Depends(auth_user))
 @router.post("/emergency-contacts/update")
 async def update_emergency_contact(req: Request, user_id: int = Depends(auth_user)):
     body = await req.json()
-    return await user_controller.update_emergency_contact(body.get('contactId'), body)
+    contact_id = body.get('contactId')
+    if not contact_id:
+        return {"success": False, "message": "contactId is required"}
+    return await user_controller.update_emergency_contact(user_id, int(contact_id), body)
 
 @router.post("/emergency-contacts/delete")
 async def delete_emergency_contact(req: Request, user_id: int = Depends(auth_user)):
     body = await req.json()
-    return await user_controller.delete_emergency_contact(body.get('contactId'))
+    contact_id = body.get('contactId')
+    if not contact_id:
+        return {"success": False, "message": "contactId is required"}
+    return await user_controller.delete_emergency_contact(user_id, int(contact_id))
 
 # Video Consultation
 from app.controllers import consultation_controller
@@ -314,3 +365,29 @@ async def user_end_video_call(appointmentId: int, req: Request, user_id: int = D
         except Exception:
             body = {}
     return await consultation_controller.end_video_call_for_user(user_id, appointmentId, body)
+
+
+@router.post("/fcm-token")
+async def register_fcm_token(req: Request, user_id: int = Depends(auth_user)):
+    body = await req.json()
+    return await user_controller.register_fcm_token(user_id, body)
+
+
+@router.delete("/fcm-token")
+async def remove_fcm_token(req: Request, user_id: int = Depends(auth_user)):
+    body = await req.json()
+    return await user_controller.remove_fcm_token(user_id, body)
+
+
+@router.post("/telegram/link-code")
+async def telegram_link_code(user_id: int = Depends(auth_user)):
+    from app.controllers import telegram_link_controller
+
+    return await telegram_link_controller.create_app_link_code(user_id)
+
+
+@router.get("/telegram/status")
+async def telegram_link_status(user_id: int = Depends(auth_user)):
+    from app.controllers import telegram_link_controller
+
+    return await telegram_link_controller.get_telegram_link_status(user_id)

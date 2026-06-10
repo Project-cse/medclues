@@ -14,6 +14,9 @@ class StorageHelper {
   static const String userKey = '@pms/user';
   static const String recentSearchesKey = '@pms/recent_searches';
   static const String darkModeKey = '@pms/dark_mode';
+  static const String themeModeKey = '@pms/theme_mode';
+  static const String localeKey = '@pms/app_locale';
+  static const String permissionsSetupKey = '@pms/permissions_setup_done';
   static String _tutorialKey(String userId, String suffix) => '@pms/tutorial/$suffix/$userId';
 
   /// Web uses HttpOnly cookies for refresh tokens (not readable by JavaScript).
@@ -24,6 +27,31 @@ class StorageHelper {
   bool getDarkMode() => _prefs.getBool(darkModeKey) ?? false;
 
   Future<void> setDarkMode(bool value) => _prefs.setBool(darkModeKey, value);
+
+  /// `system` | `light` | `dark` — defaults to system (follows phone setting).
+  String getThemePreference() {
+    final stored = _prefs.getString(themeModeKey);
+    if (stored != null) return stored;
+    // Migrate legacy bool toggle.
+    if (_prefs.containsKey(darkModeKey)) {
+      return getDarkMode() ? 'dark' : 'light';
+    }
+    return 'system';
+  }
+
+  Future<void> setThemePreference(String value) =>
+      _prefs.setString(themeModeKey, value);
+
+  /// `en` | `te` | `hi` — defaults to English.
+  String getLocale() => _prefs.getString(localeKey) ?? 'en';
+
+  Future<void> setLocale(String languageCode) =>
+      _prefs.setString(localeKey, languageCode);
+
+  bool isPermissionsSetupDone() => _prefs.getBool(permissionsSetupKey) ?? false;
+
+  Future<void> setPermissionsSetupDone(bool value) =>
+      _prefs.setBool(permissionsSetupKey, value);
 
   Future<String?> getAccessToken() async {
     if (_usePrefsForAccessOnWeb) return _prefs.getString(accessTokenKey);

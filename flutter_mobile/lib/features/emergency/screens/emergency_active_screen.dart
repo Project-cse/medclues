@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../../l10n/l10n_extension.dart';
 import '../../../routes/route_names.dart';
 import '../../../widgets/common/app_snackbar.dart';
 import '../emergency_constants.dart';
@@ -18,20 +19,22 @@ class EmergencyActiveScreen extends ConsumerWidget {
   const EmergencyActiveScreen({super.key});
 
   Future<void> _serviceCall(BuildContext context, String number, String label) async {
+    final l10n = context.l10n;
     if (EmergencyConstants.testingMode) {
       AppSnackbar.show(
         context,
-        'Testing mode: $label ($number) call disabled',
+        '${l10n.emergencyTestingBlocked}: $label ($number)',
       );
       return;
     }
     final ok = await launchEmergencyServiceCall(number: number, label: label);
     if (!ok && context.mounted) {
-      AppSnackbar.show(context, 'Could not place $label call');
+      AppSnackbar.show(context, l10n.emergencyCallFailed(label));
     }
   }
 
   Future<void> _shareAlertWhatsApp(BuildContext context, WidgetRef ref) async {
+    final l10n = context.l10n;
     final settings = await ref.read(emergencySettingsProvider.future);
     final session = ref.read(emergencySessionProvider);
     final notify = ref.read(emergencyNotificationProvider);
@@ -46,7 +49,7 @@ class EmergencyActiveScreen extends ConsumerWidget {
     if (contacts.isEmpty) {
       await notify.manualShare(msg);
       if (context.mounted) {
-        AppSnackbar.show(context, 'No relatives saved — shared via system sheet');
+        AppSnackbar.show(context, l10n.emergencyNoRelatives);
       }
     } else {
       await notify.openWhatsAppMessage(phone: contacts.first.phone, message: msg);
@@ -55,6 +58,7 @@ class EmergencyActiveScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     final session = ref.watch(emergencySessionProvider);
     final caseModel = session.activeCase;
     final severity = caseModel?.severity ?? EmergencySeverity.critical;
@@ -66,15 +70,15 @@ class EmergencyActiveScreen extends ConsumerWidget {
       appBar: AppBar(
         backgroundColor: EmergencyConstants.emergencyRed,
         foregroundColor: Colors.white,
-        title: const Text('Emergency Active'),
+        title: Text(l10n.emergencyActiveTitle),
         leading: const EmergencyHomeButton(),
       ),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(20),
           children: [
-            if (EmergencyConstants.testingMode) _testingBanner(),
-            _statusHeader(severity),
+            if (EmergencyConstants.testingMode) _testingBanner(context),
+            _statusHeader(context, severity),
             const SizedBox(height: 16),
             const EmergencyWhatsappContactsPanel(),
             if (hasContacts) const SizedBox(height: 8),
@@ -83,24 +87,24 @@ class EmergencyActiveScreen extends ConsumerWidget {
             if (severity == EmergencySeverity.minor) ..._minorActions(context),
             const SizedBox(height: 8),
             EmergencyActionButton(
-              label: 'WhatsApp Location Alert',
+              label: l10n.emergencyShareLocation,
               subtitle: hasContacts
-                  ? 'Send live location link to relatives'
-                  : 'No relatives saved — use share sheet',
+                  ? l10n.emergencyWhatsappAlert
+                  : l10n.emergencyNoRelatives,
               icon: Icons.share_location,
               filled: false,
               onTap: () => _shareAlertWhatsApp(context, ref),
             ),
             if (session.location != null)
               EmergencyActionButton(
-                label: 'Open My Location',
+                label: l10n.receiptLocation,
                 subtitle: session.location!.mapsLink,
                 icon: Icons.map,
                 filled: false,
                 onTap: () => ref.read(emergencyLocationProvider).openMapsLink(session.location!.mapsLink),
               ),
             EmergencyActionButton(
-              label: 'Emergency Settings',
+              label: l10n.emergencySettings,
               icon: Icons.settings,
               filled: false,
               onTap: () => context.push(RouteNames.emergencySettings),
@@ -111,7 +115,8 @@ class EmergencyActiveScreen extends ConsumerWidget {
     );
   }
 
-  Widget _testingBanner() {
+  Widget _testingBanner(BuildContext context) {
+    final l10n = context.l10n;
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: 12),
@@ -127,7 +132,7 @@ class EmergencyActiveScreen extends ConsumerWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'Testing mode: Ambulance, police & fire calls disabled. WhatsApp messages, location & relative phone calls work.',
+              l10n.emergencyTestingBlocked,
               style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF9A3412)),
             ),
           ),
@@ -136,11 +141,12 @@ class EmergencyActiveScreen extends ConsumerWidget {
     );
   }
 
-  Widget _statusHeader(EmergencySeverity severity) {
+  Widget _statusHeader(BuildContext context, EmergencySeverity severity) {
+    final l10n = context.l10n;
     final (title, color) = switch (severity) {
-      EmergencySeverity.critical => ('CRITICAL — Help is needed now', EmergencyConstants.emergencyRed),
-      EmergencySeverity.moderate => ('MODERATE — Seek medical attention', const Color(0xFFEA580C)),
-      EmergencySeverity.minor => ('MINOR — Monitor or book consultation', const Color(0xFF2563EB)),
+      EmergencySeverity.critical => (l10n.emergencySeverityCritical, EmergencyConstants.emergencyRed),
+      EmergencySeverity.moderate => (l10n.emergencySeverityModerate, const Color(0xFFEA580C)),
+      EmergencySeverity.minor => (l10n.emergencySeverityMinor, const Color(0xFF2563EB)),
     };
 
     return Container(
@@ -162,34 +168,35 @@ class EmergencyActiveScreen extends ConsumerWidget {
   }
 
   List<Widget> _criticalActions(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     return [
       EmergencyActionButton(
-        label: 'Call Ambulance',
+        label: l10n.emergencyCallAmbulance,
         subtitle: EmergencyConstants.testingMode
             ? '${EmergencyConstants.ambulance} (disabled in testing)'
             : EmergencyConstants.ambulance,
         icon: Icons.local_hospital,
-        onTap: () => _serviceCall(context, EmergencyConstants.ambulance, 'Ambulance'),
+        onTap: () => _serviceCall(context, EmergencyConstants.ambulance, l10n.emergencyAmbulance),
       ),
       EmergencyActionButton(
-        label: 'Call Police',
+        label: l10n.emergencyCallPoliceBtn,
         subtitle: EmergencyConstants.testingMode
             ? 'Disabled in testing'
             : '${EmergencyConstants.police} / ${EmergencyConstants.policeAlt}',
         icon: Icons.local_police,
-        onTap: () => _serviceCall(context, EmergencyConstants.police, 'Police'),
+        onTap: () => _serviceCall(context, EmergencyConstants.police, l10n.emergencyPolice),
       ),
       EmergencyActionButton(
-        label: 'Call Fire',
+        label: l10n.emergencyCallFireBtn,
         subtitle: EmergencyConstants.testingMode
             ? '${EmergencyConstants.fire} (disabled in testing)'
             : EmergencyConstants.fire,
         icon: Icons.local_fire_department,
         filled: false,
-        onTap: () => _serviceCall(context, EmergencyConstants.fire, 'Fire'),
+        onTap: () => _serviceCall(context, EmergencyConstants.fire, l10n.emergencyFire),
       ),
       EmergencyActionButton(
-        label: 'Nearby Hospitals',
+        label: l10n.emergencyNearbyHospitals,
         icon: Icons.place,
         filled: false,
         onTap: () => ref.read(emergencyLocationProvider).openNearbyHospitals(
@@ -200,15 +207,16 @@ class EmergencyActiveScreen extends ConsumerWidget {
   }
 
   List<Widget> _moderateActions(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     return [
       EmergencyActionButton(
-        label: 'Emergency Video Doctor',
-        subtitle: 'Connect to available doctors',
+        label: l10n.emergencyBookConsultation,
+        subtitle: l10n.emergencyConnectDoctors,
         icon: Icons.video_call,
         onTap: () => context.push('${RouteNames.doctors}?visit=online'),
       ),
       EmergencyActionButton(
-        label: 'Nearby Hospitals',
+        label: l10n.emergencyNearbyHospitals,
         icon: Icons.place,
         filled: false,
         onTap: () => ref.read(emergencyLocationProvider).openNearbyHospitals(
@@ -216,40 +224,41 @@ class EmergencyActiveScreen extends ConsumerWidget {
             ),
       ),
       EmergencyActionButton(
-        label: 'WhatsApp Message + Location',
-        subtitle: 'Send alert & live location link via WhatsApp',
+        label: l10n.emergencyShareLocation,
+        subtitle: l10n.emergencyWhatsappAlert,
         icon: Icons.chat,
         filled: false,
         onTap: () => _shareAlertWhatsApp(context, ref),
       ),
       EmergencyActionButton(
-        label: 'Call Ambulance',
+        label: l10n.emergencyCallAmbulance,
         subtitle: EmergencyConstants.testingMode
             ? '${EmergencyConstants.ambulance} (disabled in testing)'
             : EmergencyConstants.ambulance,
         icon: Icons.local_hospital,
         filled: false,
-        onTap: () => _serviceCall(context, EmergencyConstants.ambulance, 'Ambulance'),
+        onTap: () => _serviceCall(context, EmergencyConstants.ambulance, l10n.emergencyAmbulance),
       ),
     ];
   }
 
   List<Widget> _minorActions(BuildContext context) {
+    final l10n = context.l10n;
     return [
       EmergencyActionButton(
-        label: 'Book Normal Consultation',
-        subtitle: 'Schedule a non-emergency visit',
+        label: l10n.emergencyBookConsultation,
+        subtitle: l10n.emergencyScheduleVisit,
         icon: Icons.calendar_month,
         onTap: () => context.push(RouteNames.doctors),
       ),
       EmergencyActionButton(
-        label: 'Call Ambulance',
+        label: l10n.emergencyCallAmbulance,
         subtitle: EmergencyConstants.testingMode
             ? 'Disabled in testing'
             : 'If condition worsens',
         icon: Icons.local_hospital,
         filled: false,
-        onTap: () => _serviceCall(context, EmergencyConstants.ambulance, 'Ambulance'),
+        onTap: () => _serviceCall(context, EmergencyConstants.ambulance, l10n.emergencyAmbulance),
       ),
     ];
   }
