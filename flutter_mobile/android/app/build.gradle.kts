@@ -14,6 +14,7 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
+        isCoreLibraryDesugaringEnabled = true
     }
 
     defaultConfig {
@@ -57,4 +58,8 @@ flutter {
 // Exclude duplicate Agora native SDK (manifest namespace clash with iris-rtc).
 configurations.configureEach {
     exclude(group = "io.agora.rtc", module = "agora-special-full")
+}
+
+dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }
