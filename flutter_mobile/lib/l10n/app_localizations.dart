@@ -850,6 +850,24 @@ abstract class AppLocalizations {
   /// **'Hello'**
   String get dashboardGreeting;
 
+  /// No description provided for @dashboardGoodMorning.
+  ///
+  /// In en, this message translates to:
+  /// **'Good morning'**
+  String get dashboardGoodMorning;
+
+  /// No description provided for @dashboardGoodAfternoon.
+  ///
+  /// In en, this message translates to:
+  /// **'Good afternoon'**
+  String get dashboardGoodAfternoon;
+
+  /// No description provided for @dashboardGoodEvening.
+  ///
+  /// In en, this message translates to:
+  /// **'Good evening'**
+  String get dashboardGoodEvening;
+
   /// No description provided for @dashboardSearchHint.
   ///
   /// In en, this message translates to:
@@ -1779,6 +1797,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Opened Telegram bot. If linking fails, update the app server and try again.'**
   String get settingsTelegramServerPending;
+
+  /// No description provided for @settingsTelegramManageTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Telegram'**
+  String get settingsTelegramManageTitle;
+
+  /// No description provided for @settingsTelegramDisconnect.
+  ///
+  /// In en, this message translates to:
+  /// **'Disconnect'**
+  String get settingsTelegramDisconnect;
+
+  /// No description provided for @settingsTelegramDisconnectTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Disconnect Telegram?'**
+  String get settingsTelegramDisconnectTitle;
+
+  /// No description provided for @settingsTelegramDisconnectBody.
+  ///
+  /// In en, this message translates to:
+  /// **'You will stop receiving appointment and report alerts in Telegram. You can connect again anytime from your Profile.'**
+  String get settingsTelegramDisconnectBody;
+
+  /// No description provided for @settingsTelegramDisconnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Telegram disconnected'**
+  String get settingsTelegramDisconnected;
 
   /// No description provided for @recordsOpening.
   ///

@@ -391,3 +391,10 @@ async def telegram_link_status(user_id: int = Depends(auth_user)):
     from app.controllers import telegram_link_controller
 
     return await telegram_link_controller.get_telegram_link_status(user_id)
+
+
+@router.delete("/telegram/link")
+async def telegram_unlink(user_id: int = Depends(auth_user)):
+    from app.controllers import telegram_link_controller
+
+    return await telegram_link_controller.unlink_telegram_from_app(user_id)

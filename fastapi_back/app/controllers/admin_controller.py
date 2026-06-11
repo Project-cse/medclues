@@ -116,13 +116,16 @@ async def appointment_cancel(appointment_id: int, reason: Optional[str] = None):
             user = await user_model.get_user_by_id(appointment['user_id'])
             if user:
                 await email_service.send_appointment_rejection(
-                    user['email'], 
-                    user['name'], 
+                    user['email'],
+                    user['name'],
                     {
                         "doctorName": appointment.get('doctor_data', {}).get('name', 'Hospital Section'),
-                        "date": appointment['slot_date'],
-                        "reason": reason or "Administrative change"
-                    }
+                        "date": str(appointment.get('slot_date', '')).replace('_', '/'),
+                        "time": appointment.get('slot_time', ''),
+                        "tokenNumber": appointment.get('token_number', 'N/A'),
+                        "bookingId": f"#APT{appointment_id}",
+                        "reason": reason or "Administrative change",
+                    },
                 )
         except Exception as e:
             print(f"[WARNING] Admin rejection email error: {e}")

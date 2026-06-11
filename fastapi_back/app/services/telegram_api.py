@@ -24,6 +24,7 @@ class TelegramApi:
         *,
         parse_mode: Optional[str] = None,
         disable_web_page_preview: bool = True,
+        reply_markup: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         payload: Dict[str, Any] = {
             "chat_id": chat_id,
@@ -32,7 +33,25 @@ class TelegramApi:
         }
         if parse_mode:
             payload["parse_mode"] = parse_mode
+        if reply_markup:
+            payload["reply_markup"] = reply_markup
         return await self._post("sendMessage", payload)
+
+    async def answer_callback_query(
+        self,
+        callback_query_id: str,
+        text: Optional[str] = None,
+        *,
+        show_alert: bool = False,
+    ) -> Dict[str, Any]:
+        payload: Dict[str, Any] = {"callback_query_id": callback_query_id}
+        if text:
+            payload["text"] = text[:200]
+        payload["show_alert"] = show_alert
+        return await self._post("answerCallbackQuery", payload)
+
+    async def set_my_commands(self, commands: List[Dict[str, str]]) -> Dict[str, Any]:
+        return await self._post("setMyCommands", {"commands": commands})
 
     async def get_updates(
         self,
@@ -60,3 +79,23 @@ def get_telegram_api() -> Optional[TelegramApi]:
     if not token:
         return None
     return TelegramApi(token)
+
+
+async def register_bot_commands() -> None:
+    api = get_telegram_api()
+    if not api:
+        return
+    commands = [
+        {"command": "start", "description": "Welcome & main menu"},
+        {"command": "dashboard", "description": "Open app home page"},
+        {"command": "upcoming", "description": "Next appointments"},
+        {"command": "records", "description": "Health records"},
+        {"command": "profile", "description": "Your profile"},
+        {"command": "help", "description": "Help & support"},
+        {"command": "logout", "description": "Unlink account"},
+    ]
+    try:
+        await api.set_my_commands(commands)
+        print("[Telegram] Bot commands menu registered")
+    except Exception as e:
+        print(f"[WARNING] Telegram setMyCommands failed: {e}")

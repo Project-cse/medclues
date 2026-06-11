@@ -7,10 +7,12 @@ import '../../constants/app_colors.dart';
 import '../../l10n/l10n_extension.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/patient_provider.dart';
+import '../../providers/telegram_link_provider.dart';
 import '../../routes/route_names.dart';
 import '../../widgets/common/app_loader.dart';
 import '../../features/emergency/widgets/emergency_help_button.dart';
 import '../../widgets/common/avatar_image.dart';
+import '../../widgets/settings/telegram_connect_card.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -49,7 +51,10 @@ class ProfileScreen extends ConsumerWidget {
         ),
         data: (p) => SafeArea(
           child: RefreshIndicator(
-            onRefresh: () async => ref.invalidate(patientProfileProvider),
+            onRefresh: () async {
+              ref.invalidate(patientProfileProvider);
+              ref.invalidate(telegramLinkStatusProvider);
+            },
             child: ListView(
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
               children: [
@@ -96,6 +101,8 @@ class ProfileScreen extends ConsumerWidget {
                   ],
                 ),
                 const SizedBox(height: 28),
+                const TelegramConnectCard(forUnlinkedUsers: true),
+                const SizedBox(height: 16),
                 Container(
                   decoration: BoxDecoration(
                     color: cs.surface,

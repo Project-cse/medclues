@@ -124,6 +124,11 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(start_telegram_bot())
     except Exception as tg_err:
         log.warning("Telegram bot could not start: %s", tg_err)
+    try:
+        from app.services.appointment_reminder_service import start_reminder_scheduler
+        asyncio.create_task(start_reminder_scheduler())
+    except Exception as rem_err:
+        log.warning("Appointment reminder scheduler could not start: %s", rem_err)
     yield
     # Shutdown logic
     log.info("Stopping FastAPI application...")
@@ -167,6 +172,8 @@ else:
     _cors_kwargs = {
         **_cors_common,
         "allow_origins": cors_allowed_origins(),
+        # Flutter web dev (random localhost ports) against production API
+        "allow_origin_regex": r"https?://(localhost|127\.0\.0\.1)(:\d+)?",
     }
 
 app.add_middleware(CORSMiddleware, **_cors_kwargs)

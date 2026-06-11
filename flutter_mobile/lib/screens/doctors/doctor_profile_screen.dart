@@ -9,6 +9,9 @@ import '../../l10n/l10n_extension.dart';
 import '../../utils/theme_context.dart';
 import '../../providers/appointment_provider.dart';
 import '../../providers/doctor_provider.dart';
+import '../../providers/favorite_doctors_provider.dart';
+import '../../widgets/common/doctor_status_badge.dart';
+import '../../widgets/common/app_snackbar.dart';
 import '../../utils/currency_formatter.dart';
 import '../../utils/image_url_helper.dart';
 import '../../widgets/common/app_button.dart';
@@ -66,9 +69,29 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                     icon: const Icon(Icons.arrow_back),
                     onPressed: () => context.pop(),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.favorite_border, color: AppColors.error),
-                    onPressed: () {},
+                  Consumer(
+                    builder: (context, ref, _) {
+                      final favAsync = ref.watch(favoriteDoctorIdsProvider);
+                      final isFav = favAsync.value?.contains(doctorId) ?? false;
+                      return IconButton(
+                        icon: Icon(
+                          isFav ? Icons.favorite : Icons.favorite_border,
+                          color: AppColors.error,
+                        ),
+                        onPressed: () async {
+                          final nowFav = await ref
+                              .read(favoriteDoctorIdsProvider.notifier)
+                              .toggle(doctorId);
+                          if (context.mounted) {
+                            AppSnackbar.show(
+                              context,
+                              nowFav ? 'Added to favorites' : 'Removed from favorites',
+                              success: nowFav,
+                            );
+                          }
+                        },
+                      );
+                    },
                   ),
                 ],
               ),
@@ -127,6 +150,8 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                         ),
                       ),
                     ],
+                    const SizedBox(height: 10),
+                    DoctorStatusBadge(doctor: doctor),
                     if (doctor.hasRating) ...[
                       const SizedBox(height: 10),
                       Row(

@@ -175,10 +175,17 @@ class _UpcomingAppointmentsScreenState extends ConsumerState<UpcomingAppointment
                                 if (!context.mounted) return;
                                 setState(() => _page = 0);
                                 ref.read(appointmentsTabProvider.notifier).state = 2;
-                                AppSnackbar.show(context, context.l10n.appointmentsCancelledSuccess, success: true);
+                                AppSnackbar.show(
+                                  context,
+                                  context.l10n.appointmentsCancelledSuccess,
+                                  success: true,
+                                );
                               } catch (e) {
                                 if (context.mounted) {
-                                  AppSnackbar.show(context, e.toString().replaceFirst('Exception: ', ''));
+                                  AppSnackbar.show(
+                                    context,
+                                    e.toString().replaceFirst('Exception: ', ''),
+                                  );
                                 }
                               }
                             }

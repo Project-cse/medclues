@@ -32,6 +32,7 @@ import 'providers/theme_provider.dart';
 import 'onboarding/onboarding_manager.dart';
 import 'routes/app_router.dart';
 import 'services/api_service.dart';
+import 'widgets/deep_link_listener.dart';
 import 'services/push_notification_service.dart';
 import 'themes/app_theme.dart';
 import 'utils/web_safe_media_query.dart';
@@ -136,6 +137,7 @@ class MedcluesApp extends ConsumerWidget {
           child: body,
         );
         wrapped = OnboardingManager(child: wrapped);
+        wrapped = DeepLinkListener(child: wrapped);
         if (kIsWeb) {
           wrapped = WebSafeMediaQuery(child: wrapped);
         }

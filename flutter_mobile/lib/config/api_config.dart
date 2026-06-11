@@ -20,6 +20,9 @@ class ApiConfig {
 
     if (kIsWeb) {
       if (_dartDefineWebBaseUrl.isNotEmpty) return _dartDefineWebBaseUrl;
+      // Flutter web uses random ports (e.g. :62731). Production Render CORS blocks those;
+      // local FastAPI (DEBUG) allows any localhost port.
+      if (kDebugMode) return 'http://localhost:5000';
       final webUrl = _env('API_BASE_URL_WEB')?.trim();
       if (webUrl != null && webUrl.isNotEmpty) return webUrl;
       return 'http://localhost:5000';
@@ -68,6 +71,7 @@ class ApiConfig {
   static const String userFcmToken = '/api/user/fcm-token';
   static const String userTelegramLinkCode = '/api/user/telegram/link-code';
   static const String userTelegramStatus = '/api/user/telegram/status';
+  static const String userTelegramUnlink = '/api/user/telegram/link';
 
   // Health records
   static const String healthRecords = '/api/user/health-records';

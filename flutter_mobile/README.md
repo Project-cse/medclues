@@ -9,9 +9,11 @@ Flutter patient app for the MEDCLUES healthcare platform. Full API parity with `
 | Resource | URL |
 |----------|-----|
 | Production API | `https://medclues.onrender.com` |
+| Telegram bot | [@medcluesBot](https://t.me/medcluesBot) |
 | API docs (when running locally) | `http://localhost:5000/docs` |
 | Monorepo overview | [../README.md](../README.md) |
 | Backend deploy guide | [../BACKEND_GITHUB_DEPLOY.md](../BACKEND_GITHUB_DEPLOY.md) |
+| Telegram bot (backend) | [../fastapi_back/TELEGRAM_BOT.md](../fastapi_back/TELEGRAM_BOT.md) |
 
 ---
 
@@ -29,19 +31,22 @@ Flutter patient app for the MEDCLUES healthcare platform. Full API parity with `
 10. [Booking & Payments](#booking--payments)
 11. [Video Consultation](#video-consultation)
 12. [Health Records](#health-records)
-13. [Hospitals, Labs & Blood Banks](#hospitals-labs--blood-banks)
-14. [Emergency Module](#emergency-module)
-15. [Themes & Auth UI](#themes--auth-ui)
-16. [State Management](#state-management)
-17. [Services & API Layer](#services--api-layer)
-18. [Assets & Branding](#assets--branding)
-19. [Platform Support](#platform-support)
-20. [Form Validation](#form-validation)
-21. [Multi-Language (i18n)](#multi-language-i18n)
-22. [Google Play Store](#google-play-store)
-23. [Scripts & Tooling](#scripts--tooling)
-24. [Troubleshooting](#troubleshooting)
-25. [Related Documentation](#related-documentation)
+13. [Telegram Smart Assistant](#telegram-smart-assistant)
+14. [Push Notifications (FCM)](#push-notifications-fcm)
+15. [App Deep Links](#app-deep-links)
+16. [Hospitals, Labs & Blood Banks](#hospitals-labs--blood-banks)
+17. [Emergency Module](#emergency-module)
+18. [Themes & Auth UI](#themes--auth-ui)
+19. [State Management](#state-management)
+20. [Services & API Layer](#services--api-layer)
+21. [Assets & Branding](#assets--branding)
+22. [Platform Support](#platform-support)
+23. [Form Validation](#form-validation)
+24. [Multi-Language (i18n)](#multi-language-i18n)
+25. [Google Play Store](#google-play-store)
+26. [Scripts & Tooling](#scripts--tooling)
+27. [Troubleshooting](#troubleshooting)
+28. [Related Documentation](#related-documentation)
 
 ---
 
@@ -118,7 +123,8 @@ API_BASE_URL_WEB=https://medclues.onrender.com
 | `API_BASE_URL_WEB` | API URL for Chrome/web |
 | `GOOGLE_WEB_CLIENT_ID` | Google OAuth (Firebase Web client ID) |
 | `AGORA_APP_ID` | Agora video consult (optional; backend may also provide) |
-| `TELEGRAM_BOT_TOKEN` | Optional integration check |
+| `TELEGRAM_BOT_USERNAME` | Bot handle for Connect Telegram (default: `medcluesBot`) |
+| `TELEGRAM_BOT_TOKEN` | Optional — not required in app; backend holds the token |
 
 ### Platform API defaults
 
@@ -135,9 +141,14 @@ API_BASE_URL_WEB=https://medclues.onrender.com
 ### Override at build time
 
 ```bash
-flutter run --dart-define=API_BASE_URL=https://medclues.onrender.com
-flutter build apk --release --dart-define=API_BASE_URL=https://medclues.onrender.com
+flutter run --dart-define=API_BASE_URL=https://medclues.onrender.com --dart-define=TELEGRAM_BOT_USERNAME=medcluesBot
+
+flutter build apk --release \
+  --dart-define=API_BASE_URL=https://medclues.onrender.com \
+  --dart-define=TELEGRAM_BOT_USERNAME=medcluesBot
 ```
+
+> `TELEGRAM_BOT_USERNAME` must match the live bot (`@medcluesBot`) so **Settings → Connect Telegram** opens the correct chat.
 
 ---
 
@@ -211,10 +222,12 @@ cd flutter_mobile
 flutter clean
 flutter pub get
 dart run flutter_launcher_icons
-flutter build apk --release --dart-define=API_BASE_URL=https://medclues.onrender.com
+flutter build apk --release \
+  --dart-define=API_BASE_URL=https://medclues.onrender.com \
+  --dart-define=TELEGRAM_BOT_USERNAME=medcluesBot
 ```
 
-**Output:**
+**Output:** (~85 MB single APK)
 ```
 build/app/outputs/flutter-apk/app-release.apk
 ```
@@ -242,6 +255,8 @@ adb install -r build/app/outputs/flutter-apk/app-release.apk
 | ProGuard | `android/app/proguard-rules.pro` (Agora R8 rules included) |
 | Signing | Debug keystore by default — create release keystore before Play Store |
 | Cleartext HTTP | Enabled for local dev (`usesCleartextTraffic`) |
+| Core desugaring | Enabled for `flutter_local_notifications` (Java 8+ APIs) |
+| Deep link scheme | `mediclues://dashboard` (Telegram bot → app home) |
 
 ### Play Store bundle
 
@@ -278,14 +293,19 @@ flutter_mobile/
 │   │   ├── validators.dart          # Shared field validation rules
 │   │   ├── input_formatters.dart    # Keyboard input restrictions
 │   │   └── …                        # Formatters, JSON parser
-│   ├── services/                    # Dio API services (auth, booking, payments…)
+│   ├── services/                    # Dio API, FCM push, Telegram link, deep links
+│   │   ├── telegram_link_service.dart
+│   │   ├── push_notification_service.dart
+│   │   └── app_deep_link_service.dart
 │   ├── repositories/                # Auth, appointment, doctor, patient repos
 │   ├── providers/                   # Riverpod state
 │   ├── routes/                      # go_router, auth redirect, DashboardShell
 │   ├── screens/                     # Auth, dashboard, booking, profile, etc.
 │   ├── features/emergency/          # Standalone SOS module (no login required)
 │   ├── onboarding/                  # First-run wizard (8 steps)
-│   └── widgets/                     # Shared UI (auth, cards, animations, skeletons)
+│   └── widgets/                     # Shared UI, Telegram card, deep link listener
+│       ├── settings/telegram_connect_card.dart
+│       └── deep_link_listener.dart
 ├── assets/
 │   ├── config.env                   # Bundled API URL (required for web/APK)
 │   ├── images/medclues_logo.png     # App icon source (1024×1024)
@@ -402,11 +422,13 @@ First-login wizard (`lib/onboarding/`) — 8 steps including emergency contact a
 
 | Step | Content |
 |------|---------|
-| Emergency contact | `POST /api/user/emergency-contacts/add` |
+| Emergency contact | Saves **Contact 1** to backend + local storage (`EmergencyStorageService`) |
 | Profile | Patch patient profile |
-| Tutorial | In-app feature tour |
+| Tutorial | In-app feature tour; second emergency contact can be added later in Emergency settings |
 
 Progress synced via `PATCH /api/user/onboarding`.
+
+Permissions (notifications, location, camera) are requested **in context** when needed (booking, emergency, video) — not via a forced full-screen permissions gate on every launch.
 
 ---
 
@@ -474,7 +496,108 @@ Backend stores orders in PostgreSQL (`payment_transactions` table) — survives 
 | Screen | `records/records_screen.dart` (bottom nav) |
 | Upload | Multipart to backend → Cloudinary |
 | View | PDF/image via view-url or file stream endpoints |
+| Upload notify | Backend sends corporate email + Telegram alert when linked |
 | Dark mode | Supported (theme-aware skeletons) |
+
+---
+
+## Telegram Smart Assistant
+
+Official patient bot: **[@medcluesBot](https://t.me/medcluesBot)** — friendly menus, inline buttons, and real-time alerts when your account is linked.
+
+### Connect from the app
+
+1. Log in to MEDCLUES
+2. **Settings → Connect Telegram**
+3. Tap **Connect** — Telegram opens (`tg://` with Play Store fallback)
+4. Press **START** in the bot chat — account links without typing a password
+
+| File | Role |
+|------|------|
+| `lib/services/telegram_link_service.dart` | `POST /api/user/telegram/link-code`, status |
+| `lib/widgets/settings/telegram_connect_card.dart` | Settings UI + deep link launcher |
+| `lib/utils/telegram_launcher.dart` | Opens Telegram app or `t.me` fallback |
+
+### API endpoints
+
+| Action | Path |
+|--------|------|
+| Generate link code | `POST /api/user/telegram/link-code` |
+| Link status | `GET /api/user/telegram/status` |
+
+### Bot commands (after link)
+
+| Command | Action |
+|---------|--------|
+| `/start` | Welcome + main menu |
+| `/dashboard` | **Open app home** button (`mediclues://dashboard`) |
+| `/upcoming` | Next appointments |
+| `/records` | Health records list |
+| `/profile` | Your profile |
+| `/logout` | Unlink Telegram |
+
+### Real-time Telegram messages (backend)
+
+When linked, the bot also sends proactive messages for:
+
+- Appointment booked / cancelled
+- New health report uploaded
+- Appointment reminders (when scheduler is enabled)
+
+Requires backend `TELEGRAM_BOT_ENABLED=true` on Render (only **one** server may poll the bot token).
+
+### Config
+
+| Key | Default | Purpose |
+|-----|---------|---------|
+| `TELEGRAM_BOT_USERNAME` | `medcluesBot` | Deep link `https://t.me/medcluesBot?start=link_<code>` |
+| `--dart-define=TELEGRAM_BOT_USERNAME=...` | — | Override at APK build time |
+
+---
+
+## Push Notifications (FCM)
+
+Firebase Cloud Messaging for appointment alerts when the app is closed or in background.
+
+| File | Role |
+|------|------|
+| `lib/services/push_notification_service.dart` | Token register, foreground/background handlers |
+| `lib/services/app_permissions_service.dart` | Contextual notification permission |
+| `android/app/google-services.json` | Firebase Android config |
+
+| Action | Path |
+|--------|------|
+| Register FCM token | `POST /api/user/fcm-token` |
+
+Backend sends push on appointment book/cancel. Notification channel: `medclues_appointments`.
+
+---
+
+## App Deep Links
+
+Telegram **🏠 Open App Home** and similar buttons use the custom scheme:
+
+```
+mediclues://dashboard          → app home (/dashboard)
+mediclues://open/appointments  → appointments tab
+mediclues://open/records       → health records
+mediclues://open/doctors       → doctor list
+mediclues://open/profile       → profile
+```
+
+| File | Role |
+|------|------|
+| `lib/services/app_deep_link_service.dart` | URI → `go_router` navigation (`app_links` package) |
+| `lib/widgets/deep_link_listener.dart` | Starts listener at app boot |
+| `android/app/src/main/AndroidManifest.xml` | `mediclues` intent filters |
+
+**Test deep link (USB Android):**
+
+```bash
+adb shell am start -a android.intent.action.VIEW -d "mediclues://dashboard" com.medichain.medichain_mobile
+```
+
+> Deep links open the **native APK only**. Chrome/web does not handle `mediclues://` — use normal navigation in the web build.
 
 ---
 
@@ -612,6 +735,10 @@ Persisted via `themeModeProvider` in `lib/providers/theme_provider.dart`.
 | `health_record_service.dart` | Upload / list / view records |
 | `hospital_service.dart` | Hospitals + nearby |
 | `patient_service.dart` | Profile CRUD |
+| `telegram_link_service.dart` | Telegram account linking |
+| `push_notification_service.dart` | FCM token + notification taps |
+| `app_deep_link_service.dart` | `mediclues://` → router |
+| `app_permissions_service.dart` | In-context permission prompts |
 
 ### Key API endpoints
 
@@ -630,6 +757,8 @@ Persisted via `themeModeProvider` in `lib/providers/theme_provider.dart`.
 | Emergency log | `POST /api/emergency/log-event` |
 | Health records | `/api/user/health-records/*` |
 | Integrations | `GET /api/config/integrations` |
+| Telegram link | `POST /api/user/telegram/link-code`, `GET /api/user/telegram/status` |
+| FCM token | `POST /api/user/fcm-token` |
 
 ---
 
@@ -668,6 +797,9 @@ dart run flutter_launcher_icons
 | Camera / Mic | Video consultation |
 | Internet | All API calls |
 | Storage | Health record uploads |
+| Notifications | FCM appointment alerts (requested in context) |
+
+Permissions use **native system dialogs** when a feature needs them (Swiggy/Zomato style), not a blocking full-screen gate on every cold start.
 
 ---
 
@@ -974,6 +1106,29 @@ dart run flutter_launcher_icons   # Regenerate app icons
 - Release builds must use `upload-keystore.jks`, not the debug keystore
 - See [Google Play Store](#google-play-store) section
 
+### Connect Telegram shows 404 / Not found
+
+- Backend on Render must be **Live** (check health: `https://medclues.onrender.com/docs`)
+- Render env: `JWT_SECRET` ≥ 32 chars, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME=medcluesBot`
+- Rebuild APK with `--dart-define=TELEGRAM_BOT_USERNAME=medcluesBot`
+- Only one server polls the bot — `TELEGRAM_BOT_ENABLED=true` on Render, `false` locally
+
+### Telegram "Open App Home" does nothing
+
+- Install the MEDCLUES APK first (deep links are not for web/Chrome)
+- Rebuild APK after `AndroidManifest.xml` deep-link changes
+- Test with: `adb shell am start -a android.intent.action.VIEW -d "mediclues://dashboard" com.medichain.medichain_mobile`
+
+### `flutter pub get` symlink warning (Windows)
+
+- Enable **Developer Mode**: `start ms-settings:developers`
+- Then run `flutter pub get` again
+
+### OPD slot count not decreasing for second user
+
+- Requires latest backend on Render (slot capacity fix)
+- Booking screen refreshes slots every 10s — pull to refresh or re-enter screen
+
 ---
 
 ## Related Documentation
@@ -984,6 +1139,7 @@ dart run flutter_launcher_icons   # Regenerate app icons
 | Backend deploy | [../BACKEND_GITHUB_DEPLOY.md](../BACKEND_GITHUB_DEPLOY.md) |
 | Backend security steps | [../fastapi_back/SECURITY_STEP1.md](../fastapi_back/SECURITY_STEP1.md) |
 | Agora video | [../fastapi_back/AGORA_VIDEO.md](../fastapi_back/AGORA_VIDEO.md) |
+| Telegram bot | [../fastapi_back/TELEGRAM_BOT.md](../fastapi_back/TELEGRAM_BOT.md) |
 | Phone API testing | [../fastapi_back/README_PHONE.md](../fastapi_back/README_PHONE.md) |
 
 ---

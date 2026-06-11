@@ -129,6 +129,7 @@ def format_doctor(doc: Any) -> Optional[Dict[str, Any]]:
         } if d.get('address_line1') else {},
         "available": d.get('available', True),
         "status": d.get('status', 'available'),
+        "phone": d.get('phone') or d.get('hospital_contact') or d.get('contact'),
         "slots_booked": slots_booked,
         "hospitalId": d.get('hospital_id'),
         "hospitalName": d.get('hospital_name')

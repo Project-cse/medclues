@@ -1,6 +1,6 @@
-# MediChain+ Telegram Bot (Patient)
+# MEDCLUES Smart Patient Assistant — @medcluesBot
 
-Runs inside **FastAPI** when `TELEGRAM_BOT_TOKEN` is set in `fastapi_back/.env`.
+Corporate Telegram bot matching the MEDCLUES patient assistant design: welcome menus, inline buttons, real-time booking/report alerts.
 
 ## Start
 
@@ -9,49 +9,60 @@ cd fastapi_back
 python main.py
 ```
 
-Console should show: `[Telegram] Bot started: @your_bot_username`
+Console: `[Telegram] Bot started: @medcluesBot`
 
-## Link account (recommended — MediChain+ app)
+## Link account (recommended)
 
-1. Log in to the **MediChain+** app (Google or email).
-2. **Settings → Connect Telegram** → tap **Connect Telegram**.
-3. Telegram opens; tap **Start** — account links automatically (no password in chat).
+1. MEDCLUES app → **Settings → Connect Telegram**
+2. Tap **Connect** — Telegram opens
+3. Press **START** — account links securely (no password in chat)
 
-Legacy (not recommended):
+## Patient experience
 
-```
-/login your@email.com your_password
-```
+| Screen | Trigger |
+|--------|---------|
+| Welcome + menu | `/start` (linked or unlinked) |
+| Account linked | After app link code |
+| Appointment booked | Auto on booking |
+| Report available | Auto on health record upload |
+| Health check-in | After link + `/checkin` |
+| Appointment reminder | `notify_appointment_reminder()` (scheduler) |
 
-## Patient commands
+## Inline buttons
+
+- 📅 Book Appointment / Find Doctor → app links
+- 📂 My Records / Upcoming → bot replies
+- 🏠 Go to Dashboard → app
+- 📄 View Appointment / 🗺 Directions → callback or maps
+- 😊 Feeling Better / 😟 Need Assistance → check-in replies
+
+## Commands (BotFather menu)
 
 | Command | Description |
 |---------|-------------|
-| `/start` | Welcome + link status |
-| `/help` | Command list |
-| `/login <email> <password>` | Link Telegram to patient account |
-| `/logout` | Unlink |
-| `/my_appointments` | All appointments (alias: `/appointments`) |
-| `/upcoming` | Upcoming visits only |
-| `/profile` | Name, email, phone |
-| `/records` | Health records list |
+| `/start` | Welcome & main menu |
+| `/upcoming` | Next appointments |
+| `/records` | Health records |
+| `/profile` | Your profile |
+| `/help` | Help & support |
+| `/logout` | Unlink account |
+| `/checkin` | Health check-in |
 
-## Important: one bot process per token
+## Real-time notifications (backend hooks)
 
-Telegram allows **only one** `getUpdates` connection per bot token.
+- `user_controller.book_appointment` → Telegram + email + FCM
+- `user_controller.cancel_appointment` → Telegram + email + FCM
+- `health_record_controller.create_health_record` → Telegram + email
 
-- If the bot also runs on another server (e.g. `MEDICHAIN_BOT_BASE_URL`), set in `.env`:
+## Environment
 
-  ```
-  TELEGRAM_BOT_ENABLED=false
-  ```
+```env
+TELEGRAM_BOT_TOKEN=...
+TELEGRAM_BOT_USERNAME=medcluesBot
+TELEGRAM_BOT_ENABLED=true   # Render only; false locally if Render polls
+FRONTEND_URL=https://your-app-url   # used for inline button links
+```
 
-  on the machine that should **not** poll (e.g. local `.env`).
+## One poller per token
 
-  On **Render**, set `TELEGRAM_BOT_ENABLED=true` and `TELEGRAM_BOT_USERNAME=YourBotUsername`.
-
-- For local development, stop the remote bot or disable it and run FastAPI locally with `TELEGRAM_BOT_ENABLED=true`.
-
-## Database
-
-Links are stored in `telegram_user_links` (created automatically on startup).
+Only **one** server may run `getUpdates`. Set `TELEGRAM_BOT_ENABLED=false` locally when Render is live.

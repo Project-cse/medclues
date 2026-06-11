@@ -5,12 +5,22 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../config/api_config.dart';
 import '../../l10n/l10n_extension.dart';
 import '../../providers/service_providers.dart';
+import '../../providers/telegram_link_provider.dart';
 import '../../services/telegram_link_service.dart';
 import '../../utils/telegram_launcher.dart';
 import '../common/app_snackbar.dart';
 
+/// [forLinkedUsers] — Settings (connected: manage / disconnect).
+/// [forUnlinkedUsers] — Profile (prompt to connect).
 class TelegramConnectCard extends ConsumerStatefulWidget {
-  const TelegramConnectCard({super.key});
+  const TelegramConnectCard({
+    super.key,
+    this.forLinkedUsers = false,
+    this.forUnlinkedUsers = false,
+  });
+
+  final bool forLinkedUsers;
+  final bool forUnlinkedUsers;
 
   @override
   ConsumerState<TelegramConnectCard> createState() => _TelegramConnectCardState();
@@ -18,20 +28,6 @@ class TelegramConnectCard extends ConsumerStatefulWidget {
 
 class _TelegramConnectCardState extends ConsumerState<TelegramConnectCard> {
   bool _loading = false;
-  TelegramLinkInfo? _info;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadStatus());
-  }
-
-  Future<void> _loadStatus() async {
-    try {
-      final info = await ref.read(telegramLinkServiceProvider).fetchStatus();
-      if (mounted) setState(() => _info = info);
-    } catch (_) {}
-  }
 
   Future<void> _showInstallTelegramDialog() async {
     final l10n = context.l10n;
@@ -70,7 +66,6 @@ class _TelegramConnectCardState extends ConsumerState<TelegramConnectCard> {
     try {
       final info = await ref.read(telegramLinkServiceProvider).createLinkCode();
       if (!mounted) return;
-      setState(() => _info = info);
 
       final link = info.deepLink;
       if (link == null || link.isEmpty) {
@@ -78,6 +73,7 @@ class _TelegramConnectCardState extends ConsumerState<TelegramConnectCard> {
         return;
       }
       await _openDeepLink(link);
+      ref.invalidate(telegramLinkStatusProvider);
     } on TelegramLinkException catch (e) {
       if (!mounted) return;
       if (e.isNotFound) {
@@ -104,11 +100,60 @@ class _TelegramConnectCardState extends ConsumerState<TelegramConnectCard> {
     }
   }
 
+  Future<void> _disconnect() async {
+    final l10n = context.l10n;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(l10n.settingsTelegramDisconnectTitle),
+        content: Text(l10n.settingsTelegramDisconnectBody),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(l10n.commonCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(l10n.settingsTelegramDisconnect),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+
+    setState(() => _loading = true);
+    try {
+      await ref.read(telegramLinkServiceProvider).disconnect();
+      ref.invalidate(telegramLinkStatusProvider);
+      if (mounted) {
+        AppSnackbar.show(context, l10n.settingsTelegramDisconnected, success: true);
+      }
+    } catch (e) {
+      if (mounted) {
+        AppSnackbar.show(context, e.toString().replaceFirst('Exception: ', ''));
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final statusAsync = ref.watch(telegramLinkStatusProvider);
+    return statusAsync.when(
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (info) => _buildCard(context, info),
+    );
+  }
+
+  Widget _buildCard(BuildContext context, TelegramLinkInfo info) {
+    final linked = info.linked;
+    if (widget.forLinkedUsers && !linked) return const SizedBox.shrink();
+    if (widget.forUnlinkedUsers && linked) return const SizedBox.shrink();
+
     final l10n = context.l10n;
     final cs = Theme.of(context).colorScheme;
-    final linked = _info?.linked == true;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -129,7 +174,7 @@ class _TelegramConnectCardState extends ConsumerState<TelegramConnectCard> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      l10n.settingsTelegramTitle,
+                      linked ? l10n.settingsTelegramManageTitle : l10n.settingsTelegramTitle,
                       style: GoogleFonts.poppins(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
@@ -155,7 +200,7 @@ class _TelegramConnectCardState extends ConsumerState<TelegramConnectCard> {
                 Expanded(
                   child: Text(
                     '${l10n.settingsTelegramConnected}'
-                    '${_info?.telegramUsername != null ? ' (@${_info!.telegramUsername})' : ''}',
+                    '${info.telegramUsername != null ? ' (@${info.telegramUsername})' : ''}',
                     style: GoogleFonts.poppins(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
@@ -170,15 +215,20 @@ class _TelegramConnectCardState extends ConsumerState<TelegramConnectCard> {
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
-              onPressed: _loading ? null : _connect,
+              onPressed: _loading ? null : (linked ? _disconnect : _connect),
+              style: linked
+                  ? FilledButton.styleFrom(backgroundColor: cs.error)
+                  : null,
               icon: _loading
                   ? const SizedBox(
                       width: 18,
                       height: 18,
                       child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                     )
-                  : const Icon(Icons.link_rounded, size: 20),
-              label: Text(l10n.settingsTelegramConnect),
+                  : Icon(linked ? Icons.link_off_rounded : Icons.link_rounded, size: 20),
+              label: Text(
+                linked ? l10n.settingsTelegramDisconnect : l10n.settingsTelegramConnect,
+              ),
             ),
           ),
         ],

@@ -39,6 +39,14 @@ async def create_app_link_code(user_id: int) -> dict:
     }
 
 
+async def unlink_telegram_from_app(user_id: int) -> dict:
+    await telegram_model.ensure_telegram_schema()
+    removed = await telegram_model.unlink_user(user_id)
+    if not removed:
+        return {"success": False, "message": "Telegram is not linked to this account"}
+    return {"success": True, "message": "Telegram disconnected", "linked": False}
+
+
 async def get_telegram_link_status(user_id: int) -> dict:
     await telegram_model.ensure_telegram_schema()
     link = await telegram_model.get_link_by_user_id(user_id)
@@ -73,9 +81,4 @@ async def link_chat_with_code(
         return False, f"❌ Only patient accounts can use this bot (role: {role})."
 
     await telegram_model.link_chat_to_user(chat_id, user_id, telegram_username)
-    return True, (
-        f"✅ Linked to MediChain+ as {user['name']}!\n\n"
-        "Type /help to see commands.\n"
-        "/my_appointments — your visits\n"
-        "/records — health reports"
-    )
+    return True, user.get("name") or "Patient"

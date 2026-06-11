@@ -403,6 +403,7 @@ async def _send_booking_confirmation_email(
     slot_time: str,
     amount,
     token_number,
+    appointment_id,
     frontend_hospital_name: Optional[str],
     frontend_location: Optional[str],
 ):
@@ -415,6 +416,7 @@ async def _send_booking_confirmation_email(
             "time": slot_time,
             "fee": amount,
             "tokenNumber": token_number,
+            "bookingId": f"#APT{appointment_id}",
         }
 
         address_line1 = doc_data.get('address_line1', '')
@@ -436,8 +438,8 @@ async def _send_booking_confirmation_email(
             hospital_location_str = f"{frontend_hospital_name} - {frontend_location}"
             email_details["hospitalName"] = frontend_hospital_name
         else:
-            hospital_location_str = hospital_location or "MediChain Hospital, Main Branch"
-            email_details["hospitalName"] = "MediChain Hospital"
+            hospital_location_str = hospital_location or "MEDCLUES Partner Hospital"
+            email_details["hospitalName"] = "MEDCLUES Partner Hospital"
 
         import urllib.parse
         maps_query = urllib.parse.quote(hospital_location_str)
@@ -451,6 +453,63 @@ async def _send_booking_confirmation_email(
             print(f"[WARNING] Email delivery failed: {email_res.get('message')}")
     except Exception as email_err:
         print(f"[WARNING] Email trigger error: {email_err}")
+
+
+async def _send_booking_telegram_notification(
+    *,
+    user_id: int,
+    actual_patient: dict,
+    user_name: str,
+    doc_data: dict,
+    slot_date: str,
+    slot_time: str,
+    token_number,
+    appointment_id: int,
+    frontend_hospital_name: Optional[str],
+    frontend_location: Optional[str],
+):
+    try:
+        from app.services import telegram_notify_service
+
+        patient_name = actual_patient.get("name") if not actual_patient.get("isSelf") else user_name
+        hospital_name = frontend_hospital_name or "MEDCLUES Partner Hospital"
+        hospital_location = frontend_location or ""
+
+        if not hospital_location:
+            address_line1 = doc_data.get("address_line1", "")
+            address_line2 = doc_data.get("address_line2", "")
+            hospital_location = " ".join(filter(None, [address_line1, address_line2])).strip()
+            if not hospital_location:
+                hosp_id = doc_data.get("hospital_id")
+                if hosp_id:
+                    tieup = await db.fetch_row(
+                        "SELECT name, address FROM hospital_tieups WHERE id = $1", hosp_id
+                    )
+                    if tieup:
+                        hospital_location = tieup["name"]
+                        hospital_name = tieup["name"]
+                    else:
+                        hosp = await db.fetch_row(
+                            "SELECT name, address_line1 FROM hospitals WHERE id = $1", hosp_id
+                        )
+                        if hosp:
+                            hospital_location = hosp["name"]
+                            hospital_name = hosp["name"]
+
+        await telegram_notify_service.notify_appointment_booked(
+            user_id,
+            patient_name=patient_name,
+            doctor_name=doc_data.get("name", "Doctor"),
+            speciality=doc_data.get("speciality", ""),
+            slot_date=slot_date,
+            slot_time=slot_time,
+            token_number=token_number,
+            hospital_name=hospital_name,
+            hospital_location=hospital_location,
+            appointment_id=int(appointment_id),
+        )
+    except Exception as tg_err:
+        print(f"[WARNING] Telegram booking notify: {tg_err}")
 
 
 async def book_appointment(user_id: int, req_body: dict, prescription_file: Optional[UploadFile] = None):
@@ -696,6 +755,19 @@ async def book_appointment(user_id: int, req_body: dict, prescription_file: Opti
             slot_time=slot_time,
             amount=appointment_data['amount'],
             token_number=token_number,
+            appointment_id=new_appointment['id'],
+            frontend_hospital_name=frontend_hospital_name,
+            frontend_location=frontend_location,
+        ))
+        asyncio.create_task(_send_booking_telegram_notification(
+            user_id=user_id,
+            actual_patient=actual_patient,
+            user_name=user_data['name'],
+            doc_data=doc_data,
+            slot_date=slot_date,
+            slot_time=slot_time,
+            token_number=token_number,
+            appointment_id=new_appointment['id'],
             frontend_hospital_name=frontend_hospital_name,
             frontend_location=frontend_location,
         ))
@@ -848,6 +920,43 @@ async def cancel_appointment(user_id: int, appointment_id: int):
             )
         except Exception as push_err:
             print(f"[WARNING] FCM cancel push: {push_err}")
+
+        try:
+            user_data = await user_model.get_user_by_id(user_id)
+            if user_data and user_data.get("email"):
+                cancel_details = {
+                    "doctorName": doc_data["name"] if doc_data else "Doctor",
+                    "date": str(appointment.get("slot_date", "")).replace("_", "/"),
+                    "time": appointment.get("slot_time", ""),
+                    "tokenNumber": appointment.get("token_number", "N/A"),
+                    "bookingId": f"#APT{appointment_id}",
+                }
+                asyncio.create_task(
+                    email_service.send_appointment_cancelled(
+                        user_data["email"],
+                        user_data.get("name", "Patient"),
+                        cancel_details,
+                        reason="Cancelled by user",
+                    )
+                )
+        except Exception as email_err:
+            print(f"[WARNING] Cancel email failed: {email_err}")
+
+        try:
+            from app.services import telegram_notify_service
+            user_data = await user_model.get_user_by_id(user_id)
+            if user_data:
+                asyncio.create_task(
+                    telegram_notify_service.notify_appointment_cancelled(
+                        user_id,
+                        doc_data["name"] if doc_data else "Doctor",
+                        str(appointment.get("slot_date", "")),
+                        user_data.get("name", "Patient"),
+                        reason="Cancelled by user",
+                    )
+                )
+        except Exception as tg_err:
+            print(f"[WARNING] Telegram cancel notify: {tg_err}")
 
         return {"success": True, "message": "Appointment Cancelled"}
     except Exception as e:

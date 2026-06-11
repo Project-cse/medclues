@@ -5,6 +5,8 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../../l10n/l10n_extension.dart';
 import '../../../routes/route_names.dart';
+import '../../../providers/auth_provider.dart';
+import '../../../providers/live_location_share_provider.dart';
 import '../../../widgets/common/app_snackbar.dart';
 import '../emergency_constants.dart';
 import '../models/emergency_case_model.dart';
@@ -30,6 +32,41 @@ class EmergencyActiveScreen extends ConsumerWidget {
     final ok = await launchEmergencyServiceCall(number: number, label: label);
     if (!ok && context.mounted) {
       AppSnackbar.show(context, l10n.emergencyCallFailed(label));
+    }
+  }
+
+  Future<void> _startLiveLocationShare(BuildContext context, WidgetRef ref) async {
+    final l10n = context.l10n;
+    final settings = await ref.read(emergencySettingsProvider.future);
+    final contacts = settings.savedContacts;
+    if (contacts.isEmpty) {
+      if (context.mounted) AppSnackbar.show(context, l10n.emergencyNoRelatives);
+      return;
+    }
+
+    final service = ref.read(liveLocationShareServiceProvider);
+    if (service.isActive) {
+      service.stop();
+      ref.invalidate(liveLocationShareTickProvider);
+      if (context.mounted) AppSnackbar.show(context, 'Live location sharing stopped');
+      return;
+    }
+
+    final user = ref.read(authProvider).user;
+    final ok = await service.start(
+      contacts: contacts,
+      patientName: user?.name,
+    );
+    if (!context.mounted) return;
+    if (ok) {
+      ref.invalidate(liveLocationShareTickProvider);
+      AppSnackbar.show(
+        context,
+        'Sharing live location with contacts for 30 minutes',
+        success: true,
+      );
+    } else {
+      AppSnackbar.show(context, 'Could not start live location — check location permission');
     }
   }
 
@@ -64,6 +101,9 @@ class EmergencyActiveScreen extends ConsumerWidget {
     final severity = caseModel?.severity ?? EmergencySeverity.critical;
     final settingsAsync = ref.watch(emergencySettingsProvider);
     final hasContacts = settingsAsync.value?.savedContacts.isNotEmpty == true;
+    final liveService = ref.watch(liveLocationShareServiceProvider);
+    ref.watch(liveLocationShareTickProvider);
+    final liveRemaining = liveService.remaining;
 
     return Scaffold(
       backgroundColor: EmergencyConstants.emergencyBg,
@@ -86,6 +126,19 @@ class EmergencyActiveScreen extends ConsumerWidget {
             if (severity == EmergencySeverity.moderate) ..._moderateActions(context, ref),
             if (severity == EmergencySeverity.minor) ..._minorActions(context),
             const SizedBox(height: 8),
+            EmergencyActionButton(
+              label: liveService.isActive
+                  ? 'Stop live location share'
+                  : 'Share live location (30 min)',
+              subtitle: liveService.isActive && liveRemaining != null
+                  ? 'Updates every 3 min · ${_formatRemaining(liveRemaining)} left'
+                  : hasContacts
+                      ? 'Auto-updates to emergency contacts via WhatsApp'
+                      : l10n.emergencyNoRelatives,
+              icon: liveService.isActive ? Icons.location_off : Icons.my_location,
+              filled: !liveService.isActive,
+              onTap: () => _startLiveLocationShare(context, ref),
+            ),
             EmergencyActionButton(
               label: l10n.emergencyShareLocation,
               subtitle: hasContacts
@@ -113,6 +166,13 @@ class EmergencyActiveScreen extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  String _formatRemaining(Duration d) {
+    final m = d.inMinutes;
+    final s = d.inSeconds % 60;
+    if (m > 0) return '${m}m ${s}s';
+    return '${s}s';
   }
 
   Widget _testingBanner(BuildContext context) {

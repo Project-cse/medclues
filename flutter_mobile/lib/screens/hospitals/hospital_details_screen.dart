@@ -7,6 +7,7 @@ import '../../providers/hospital_provider.dart';
 import '../../utils/hospital_stats.dart';
 import '../../widgets/common/app_loader.dart';
 import '../../widgets/healthcare/premium_healthcare_theme.dart';
+import '../../widgets/healthcare/hospital_contact_actions.dart';
 import '../../widgets/healthcare/premium_hospital_widgets.dart';
 
 /// Hospital details — premium layout with live API data only.
@@ -69,6 +70,13 @@ class HospitalDetailsScreen extends ConsumerWidget {
                     badge: h.displayBadge,
                     name: h.name,
                     subtitle: (subtitle != null && subtitle.isNotEmpty) ? subtitle : null,
+                    address: h.address,
+                    phone: h.contact,
+                  ),
+                ),
+                SliverToBoxAdapter(
+                  child: HospitalContactActions(
+                    hospitalName: h.name,
                     address: h.address,
                     phone: h.contact,
                   ),

@@ -389,6 +389,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get dashboardGreeting => 'Hello';
 
   @override
+  String get dashboardGoodMorning => 'Good morning';
+
+  @override
+  String get dashboardGoodAfternoon => 'Good afternoon';
+
+  @override
+  String get dashboardGoodEvening => 'Good evening';
+
+  @override
   String get dashboardSearchHint => 'Search doctors, hospitals…';
 
   @override
@@ -871,6 +880,22 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get settingsTelegramServerPending =>
       'Opened Telegram bot. If linking fails, update the app server and try again.';
+
+  @override
+  String get settingsTelegramManageTitle => 'Telegram';
+
+  @override
+  String get settingsTelegramDisconnect => 'Disconnect';
+
+  @override
+  String get settingsTelegramDisconnectTitle => 'Disconnect Telegram?';
+
+  @override
+  String get settingsTelegramDisconnectBody =>
+      'You will stop receiving appointment and report alerts in Telegram. You can connect again anytime from your Profile.';
+
+  @override
+  String get settingsTelegramDisconnected => 'Telegram disconnected';
 
   @override
   String get recordsOpening => 'Opening report…';

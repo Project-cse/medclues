@@ -6,7 +6,7 @@ from typing import Optional
 from app.config.config import settings
 from app.controllers.telegram_bot_controller import handle_update
 from app.models import telegram_model
-from app.services.telegram_api import get_telegram_api
+from app.services.telegram_api import get_telegram_api, register_bot_commands
 
 _polling_task: Optional[asyncio.Task] = None
 _stop_event: Optional[asyncio.Event] = None
@@ -30,6 +30,7 @@ async def start_telegram_bot() -> None:
         me = await api.get_me()
         username = me.get("result", {}).get("username", "?")
         print(f"[Telegram] Bot started: @{username}")
+        await register_bot_commands()
     except Exception as e:
         print(f"[Telegram] Failed to verify bot token: {e}")
         return

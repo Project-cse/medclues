@@ -391,6 +391,15 @@ class AppLocalizationsHi extends AppLocalizations {
   String get dashboardGreeting => 'नमस्ते';
 
   @override
+  String get dashboardGoodMorning => 'सुप्रभात';
+
+  @override
+  String get dashboardGoodAfternoon => 'नमस्कार';
+
+  @override
+  String get dashboardGoodEvening => 'शुभ संध्या';
+
+  @override
   String get dashboardSearchHint => 'डॉक्टर, अस्पताल खोजें…';
 
   @override
@@ -871,6 +880,22 @@ class AppLocalizationsHi extends AppLocalizations {
   @override
   String get settingsTelegramServerPending =>
       'Telegram बॉट खोला। लिंक न हो तो सर्वर अपडेट करें।';
+
+  @override
+  String get settingsTelegramManageTitle => 'Telegram';
+
+  @override
+  String get settingsTelegramDisconnect => 'डिस्कनेक्ट';
+
+  @override
+  String get settingsTelegramDisconnectTitle => 'Telegram डिस्कनेक्ट करें?';
+
+  @override
+  String get settingsTelegramDisconnectBody =>
+      'आपको Telegram में अपॉइंटमेंट और रिपोर्ट अलर्ट नहीं मिलेंगे। प्रोफ़ाइल से फिर कनेक्ट कर सकते हैं।';
+
+  @override
+  String get settingsTelegramDisconnected => 'Telegram डिस्कनेक्ट हो गया';
 
   @override
   String get recordsOpening => 'रिपोर्ट खोली जा रही है…';

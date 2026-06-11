@@ -112,7 +112,9 @@ class PushNotificationService {
       _go('${RouteNames.appointments}/$apptId');
       return;
     }
-    if (type == 'appointment' || type == 'appointment_cancelled') {
+    if (type == 'appointment' ||
+        type == 'appointment_cancelled' ||
+        type == 'appointment_reminder_24h') {
       _go(RouteNames.appointments);
     }
   }
@@ -129,7 +131,9 @@ class PushNotificationService {
       if (id.isNotEmpty) _go('${RouteNames.appointments}/$id');
       return;
     }
-    if (payload == 'appointment' || payload == 'appointment_cancelled') {
+    if (payload == 'appointment' ||
+        payload == 'appointment_cancelled' ||
+        payload == 'appointment_reminder_24h') {
       _go(RouteNames.appointments);
     }
   }

@@ -11,6 +11,7 @@ import '../../utils/calendar_helper.dart';
 import '../../utils/currency_formatter.dart';
 import '../../utils/date_formatter.dart';
 import '../../widgets/common/app_button.dart';
+import '../../widgets/common/appointment_action_buttons.dart';
 import '../../widgets/common/app_loader.dart';
 import '../../widgets/common/app_snackbar.dart';
 import '../../widgets/common/avatar_image.dart';
@@ -126,6 +127,10 @@ class AppointmentDetailScreen extends ConsumerWidget {
                     _detailRow(Icons.qr_code_2, l10n.receiptBookingId, a.bookingId!.toUpperCase()),
                   if (a.tokenNumber != null && a.tokenNumber! > 0)
                     _detailRow(Icons.confirmation_number_outlined, l10n.receiptToken, '#${a.tokenNumber}'),
+                  if (isUpcoming) ...[
+                    AppointmentActionButtons(appointment: a, compact: false),
+                    const SizedBox(height: 12),
+                  ],
                   if (a.isOnlineVisit && isUpcoming) ...[
                     const SizedBox(height: 20),
                     AppButton(

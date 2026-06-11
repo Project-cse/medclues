@@ -1,9 +1,7 @@
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../l10n/l10n_extension.dart';
 import '../../constants/app_colors.dart';
@@ -48,12 +46,9 @@ class _RecordsScreenState extends ConsumerState<RecordsScreen> {
     return 'report.pdf';
   }
 
-  String? _reportMimeType(String fileName) {
-    final lower = fileName.toLowerCase();
-    if (lower.endsWith('.pdf')) return 'application/pdf';
-    if (lower.endsWith('.png')) return 'image/png';
-    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
-    return null;
+  String? _reportFileType(HealthRecordItem record) {
+    if (record.files.isEmpty) return null;
+    return record.files.first['fileType']?.toString();
   }
 
   Future<void> _viewReport(HealthRecordItem record) async {
@@ -89,23 +84,20 @@ class _RecordsScreenState extends ConsumerState<RecordsScreen> {
 
     try {
       final service = ref.read(healthRecordServiceProvider);
-      if (kIsWeb) {
-        final url = record.primaryFileUrl ??
-            await service.fetchViewUrl(record.id);
-        final uri = Uri.parse(url);
-        final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
-        if (!opened) {
-          throw Exception(l10n.recordsOpenFailed);
-        }
-      } else {
-        final bytes = await service.downloadReportFile(record.id);
-        final fileName = _reportFileName(record);
-        await openReportBytes(
-          bytes,
-          fileName,
-          mimeType: _reportMimeType(fileName),
-        );
-      }
+      // Always proxy via backend — Cloudinary PDF URLs often 401 / fail in browser.
+      final fileName = _reportFileName(record);
+      final fileType = _reportFileType(record);
+      final downloaded = await service.downloadReportFile(
+        record.id,
+        fallbackFileName: fileName,
+        fallbackFileType: fileType,
+      );
+      await openReportBytes(
+        downloaded.bytes,
+        downloaded.fileName,
+        mimeType: downloaded.contentType,
+        fileType: downloaded.fileType ?? fileType,
+      );
     } catch (e) {
       if (mounted) {
         AppSnackbar.show(context, e.toString().replaceFirst('Exception: ', ''));
@@ -141,7 +133,7 @@ class _RecordsScreenState extends ConsumerState<RecordsScreen> {
     final picked = await FilePicker.platform.pickFiles(
       allowMultiple: true,
       type: FileType.custom,
-      allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx'],
+      allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx', 'wps'],
     );
     if (picked == null || picked.files.isEmpty) return;
 

@@ -393,6 +393,15 @@ class AppLocalizationsTe extends AppLocalizations {
   String get dashboardGreeting => 'నమస్కారం';
 
   @override
+  String get dashboardGoodMorning => 'శుభోదయం';
+
+  @override
+  String get dashboardGoodAfternoon => 'శుభ మధ్యాహ్నం';
+
+  @override
+  String get dashboardGoodEvening => 'శుభ సాయంత్రం';
+
+  @override
   String get dashboardSearchHint => 'డాక్టర్లు, ఆసుపత్రులు వెతకండి…';
 
   @override
@@ -878,6 +887,22 @@ class AppLocalizationsTe extends AppLocalizations {
   @override
   String get settingsTelegramServerPending =>
       'Telegram బాట్ తెరిచాం. లింక్ కాకపోతే సర్వర్ అప్‌డేట్ అవ్వాలి.';
+
+  @override
+  String get settingsTelegramManageTitle => 'Telegram';
+
+  @override
+  String get settingsTelegramDisconnect => 'డిస్‌కనెక్ట్';
+
+  @override
+  String get settingsTelegramDisconnectTitle => 'Telegram డిస్‌కనెక్ట్ చేయాలా?';
+
+  @override
+  String get settingsTelegramDisconnectBody =>
+      'మీకు Telegramలో అపాయింట్‌మెంట్ మరియు రిపోర్ట్ అలర్ట్‌లు రావు. ప్రొఫైల్ నుండి మళ్లీ కనెక్ట్ చేయవచ్చు.';
+
+  @override
+  String get settingsTelegramDisconnected => 'Telegram డిస్‌కనెక్ట్ అయింది';
 
   @override
   String get recordsOpening => 'రిపోర్ట్ తెరుస్తోంది…';

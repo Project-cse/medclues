@@ -77,6 +77,14 @@ async def unlink_chat(chat_id: int) -> bool:
     return row is not None
 
 
+async def unlink_user(user_id: int) -> bool:
+    row = await db.fetch_row(
+        "DELETE FROM telegram_user_links WHERE user_id = $1 RETURNING user_id",
+        int(user_id),
+    )
+    return row is not None
+
+
 async def create_link_code(user_id: int, code: str, expires_at) -> None:
     await db.execute(
         "DELETE FROM telegram_link_codes WHERE user_id = $1",

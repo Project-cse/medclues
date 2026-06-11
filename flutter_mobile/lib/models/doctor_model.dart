@@ -10,6 +10,7 @@ class DoctorModel {
   final double consultationFee;
   final double videoConsultationFee;
   final bool available;
+  final String? status;
   final String? hospitalName;
   final String? address;
   final String? addressLine1;
@@ -31,6 +32,7 @@ class DoctorModel {
     this.consultationFee = 500,
     this.videoConsultationFee = 450,
     this.available = true,
+    this.status,
     this.hospitalName,
     this.address,
     this.addressLine1,
@@ -45,6 +47,21 @@ class DoctorModel {
       hasRating ? rating!.toStringAsFixed(1) : null;
 
   bool get hasRating => rating != null && rating! > 0;
+
+  bool get isOnline {
+    final s = (status ?? '').toLowerCase();
+    if (s == 'online' || s == 'in-clinic' || s == 'available') return available;
+    if (s == 'offline' || s == 'unavailable' || s == 'busy') return false;
+    return available;
+  }
+
+  String get onlineStatusLabel {
+    final s = (status ?? '').toLowerCase();
+    if (s == 'in-clinic') return 'In clinic';
+    if (s == 'online') return 'Online';
+    if (!available || s == 'offline' || s == 'unavailable' || s == 'busy') return 'Offline';
+    return 'Online';
+  }
 
   static ({String? line1, String? line2, String? full}) _parseAddressFields(dynamic addr) {
     if (addr == null) return (line1: null, line2: null, full: null);
@@ -115,13 +132,14 @@ class DoctorModel {
       videoConsultationFee:
           videoFees is num ? videoFees.toDouble() : double.tryParse('$videoFees') ?? 450,
       available: json['available'] != false && json['status'] != 'unavailable',
+      status: (json['status'] ?? json['doctorStatus'])?.toString(),
       hospitalName: json['hospitalName']?.toString() ?? json['hospital_name']?.toString(),
       address: addressFields.full,
       addressLine1: addressFields.line1,
       addressLine2: addressFields.line2,
       about: json['about']?.toString(),
       degree: (json['degree'] ?? json['qualification'])?.toString(),
-      phone: json['phone']?.toString(),
+      phone: (json['phone'] ?? json['hospital_contact'] ?? json['hospitalContact'])?.toString(),
       slotsBooked: booked,
     );
   }

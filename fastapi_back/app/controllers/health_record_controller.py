@@ -4,8 +4,9 @@ import os
 from datetime import datetime
 from fastapi import UploadFile
 from typing import List, Optional
-from app.models import health_record_model, appointment_model
-from app.services import audit_service
+from app.models import health_record_model, appointment_model, user_model
+from app.services import audit_service, email_service
+import asyncio
 from app.utils.formatters import format_health_record
 
 async def create_health_record(
@@ -37,12 +38,37 @@ async def create_health_record(
             except:
                 tags_array = [tags]
 
+        def _detect_file_type(filename: str, content_type: Optional[str]) -> str:
+            lower = (filename or '').lower()
+            if lower.endswith('.pdf'):
+                return 'pdf'
+            if lower.endswith('.docx'):
+                return 'docx'
+            if lower.endswith('.doc'):
+                return 'doc'
+            if lower.endswith('.wps'):
+                return 'wps'
+            if lower.endswith(('.jpg', '.jpeg')):
+                return 'jpg'
+            if lower.endswith('.png'):
+                return 'png'
+            ct = (content_type or '').lower()
+            if 'pdf' in ct:
+                return 'pdf'
+            if 'wordprocessingml' in ct or 'docx' in ct:
+                return 'docx'
+            if 'msword' in ct:
+                return 'doc'
+            if 'jpeg' in ct or 'jpg' in ct:
+                return 'jpg'
+            if 'png' in ct:
+                return 'png'
+            return 'unknown'
+
         # Upload files to Cloudinary
         uploaded_files = []
         for file in files:
             try:
-                is_pdf = file.content_type == 'application/pdf'
-                
                 # Read file content for upload
                 file_content = await file.read()
                 
@@ -56,7 +82,7 @@ async def create_health_record(
                 uploaded_files.append({
                     "url": upload_result.get('secure_url'),
                     "fileName": file.filename,
-                    "fileType": 'pdf' if is_pdf else (file.content_type.split('/')[-1] if file.content_type else 'unknown'),
+                    "fileType": _detect_file_type(file.filename or '', file.content_type),
                     "fileSize": len(file_content),
                     "cloudinaryPublicId": upload_result.get('public_id')
                 })
@@ -79,6 +105,39 @@ async def create_health_record(
         }
 
         new_record = await health_record_model.create_health_record(record_data)
+
+        try:
+            user = await user_model.get_user_by_id(user_id)
+            if user and user.get("email"):
+                upload_date = date_str or datetime.now().strftime("%d %B %Y")
+                if len(str(upload_date)) == 10 and "-" in str(upload_date):
+                    try:
+                        upload_date = datetime.strptime(str(upload_date), "%Y-%m-%d").strftime("%d %B %Y")
+                    except ValueError:
+                        pass
+                uploaded_by = doctor_name.strip() if doctor_name and doctor_name.strip() else "MEDCLUES"
+                asyncio.create_task(
+                    email_service.send_medical_report_available(
+                        user["email"],
+                        user.get("name", "Patient"),
+                        title,
+                        upload_date,
+                        uploaded_by,
+                        record_type or "General",
+                    )
+                )
+                from app.services import telegram_notify_service
+                asyncio.create_task(
+                    telegram_notify_service.notify_report_available(
+                        user_id,
+                        user.get("name", "Patient"),
+                        title,
+                        upload_date,
+                    )
+                )
+        except Exception as mail_err:
+            print(f"[WARNING] Health record email failed: {mail_err}")
+
         return {"success": True, "message": "Health record uploaded", "record": format_health_record(new_record)}
 
     except Exception as e:

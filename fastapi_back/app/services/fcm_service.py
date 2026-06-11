@@ -110,6 +110,24 @@ async def notify_appointment_booked(
     )
 
 
+async def notify_appointment_reminder_24h(
+    user_id: int,
+    doctor_name: str,
+    slot_date: str,
+    slot_time: str,
+    appointment_id: int,
+):
+    await send_to_user(
+        user_id,
+        title="Appointment tomorrow",
+        body=f"Reminder: Dr. {doctor_name} on {slot_date} at {slot_time}",
+        data={
+            "type": "appointment_reminder_24h",
+            "appointmentId": str(appointment_id),
+        },
+    )
+
+
 async def notify_appointment_cancelled(user_id: int, doctor_name: str, appointment_id: int):
     await send_to_user(
         user_id,

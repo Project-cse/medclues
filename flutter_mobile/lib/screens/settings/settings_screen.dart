@@ -28,7 +28,7 @@ class SettingsScreen extends ConsumerWidget {
         children: [
           const LanguageSelectorCard(),
           const SizedBox(height: 16),
-          const TelegramConnectCard(),
+          const TelegramConnectCard(forLinkedUsers: true),
           const SizedBox(height: 16),
           Container(
             padding: const EdgeInsets.all(16),

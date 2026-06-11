@@ -5,6 +5,7 @@ import '../../models/doctor_model.dart';
 import '../../utils/hospital_stats.dart';
 import '../../utils/image_url_helper.dart';
 import '../common/avatar_image.dart';
+import '../common/doctor_status_badge.dart';
 import 'premium_healthcare_theme.dart';
 
 const kHospitalBuildingAsset = 'assets/images/hospital_building.png';
@@ -457,6 +458,8 @@ class PremiumHospitalDoctorCard extends StatelessWidget {
                   ),
                 ],
                 const SizedBox(height: 6),
+                DoctorStatusBadge(doctor: doctor, compact: true),
+                const SizedBox(height: 4),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(

@@ -92,6 +92,10 @@ class Config:
     BREVO_API_KEY = os.getenv("BREVO_API_KEY") or os.getenv("BERVO_API_KEY")
     BREVO_SENDER_EMAIL = os.getenv("BREVO_SENDER_EMAIL") or os.getenv("BERVO_SENDER_EMAIL")
     BREVO_APP_NAME = os.getenv("BREVO_APP_NAME") or os.getenv("BERVO_APP_NAME")
+    EMAIL_LOGO_URL = os.getenv("EMAIL_LOGO_URL") or (
+        "https://res.cloudinary.com/dinbiaq7q/image/upload/v1781150365/medclues/branding/medclues_logo_email.png"
+    )
+    MEDCLUES_APP_DEEP_LINK_SCHEME = os.getenv("MEDCLUES_APP_DEEP_LINK_SCHEME", "mediclues")
     EMAIL_USER = os.getenv("EMAIL_USER")
     EMAIL_APP_PASSWORD = os.getenv("EMAIL_APP_PASSWORD")
 

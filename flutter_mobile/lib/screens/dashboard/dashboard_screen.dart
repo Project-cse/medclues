@@ -15,6 +15,7 @@ import '../../providers/doctor_provider.dart';
 import '../../providers/service_providers.dart';
 import '../../routes/route_names.dart';
 import '../../utils/speciality_match.dart';
+import '../../utils/time_greeting.dart';
 import '../../widgets/common/app_snackbar.dart';
 import '../../widgets/home/hero_banner_illustration.dart';
 import '../../widgets/home/home_search_bar.dart';
@@ -106,6 +107,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final topDoctors = ref.watch(topDoctorsProvider);
     final allDoctors = ref.watch(allDoctorsProvider);
     final displayName = (user?.name ?? '').trim().toUpperCase();
+    final greeting = timeBasedGreeting(l10n);
     final hasQuery = _query.isNotEmpty;
     final searchResults = hasQuery ? _buildSearchResults(allDoctors.valueOrNull ?? []) : <HomeSearchResultItem>[];
 
@@ -126,7 +128,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             children: [
               _header(context),
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
                 child: Text(
                   '${l10n.dashboardGreeting}${displayName.isNotEmpty ? ', $displayName' : ''} 👋',
                   style: GoogleFonts.poppins(
@@ -136,18 +138,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   ),
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-                child: Text(
-                  l10n.dashboardGreeting,
-                  style: GoogleFonts.poppins(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w700,
-                    color: context.primaryText,
-                  ),
-                ),
-              ),
-              _heroBanner(context).dashboardStagger(0),
+              _heroBanner(context, greeting: greeting).dashboardStagger(0),
               const Padding(
                 padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
                 child: EmergencyHelpButton(),
@@ -219,7 +210,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
-  Widget _heroBanner(BuildContext context) {
+  Widget _heroBanner(BuildContext context, {required String greeting}) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: GestureDetector(
@@ -248,9 +239,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(
-                        'Get out and about',
+                        greeting,
                         style: GoogleFonts.poppins(
-                          fontSize: 20,
+                          fontSize: 22,
                           fontWeight: FontWeight.w700,
                           color: Colors.white,
                         ),

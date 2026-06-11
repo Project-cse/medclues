@@ -1,21 +1,34 @@
 import 'dart:html' as html;
 import 'dart:typed_data';
 
+import 'report_mime_utils.dart';
+
 Future<void> openReportBytes(
   Uint8List bytes,
   String filename, {
   String? mimeType,
+  String? fileType,
 }) async {
-  final type = mimeType ?? 'application/pdf';
+  final safeName = ReportMimeUtils.sanitizeFileName(
+    ReportMimeUtils.ensureExtension(filename, fileType: fileType, contentType: mimeType),
+  );
+  final type = ReportMimeUtils.resolveMimeType(
+    fileName: safeName,
+    contentType: mimeType,
+    fileType: fileType,
+  );
+
   final blob = html.Blob([bytes], type);
   final url = html.Url.createObjectUrlFromBlob(blob);
 
-  // Anchor click is more reliable than window.open (popup blockers).
+  // PDF/images: open in new tab via blob URL (works in Chrome built-in viewer).
+  // Word/WPS: trigger download so user opens with desktop app.
   final anchor = html.AnchorElement(href: url)
     ..target = '_blank'
     ..rel = 'noopener';
-  if (!type.startsWith('application/pdf') && !type.startsWith('image/')) {
-    anchor.download = filename;
+  final isInline = type.startsWith('application/pdf') || type.startsWith('image/');
+  if (!isInline) {
+    anchor.download = safeName;
   }
   html.document.body?.children.add(anchor);
   anchor.click();

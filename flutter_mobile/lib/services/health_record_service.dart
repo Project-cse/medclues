@@ -5,7 +5,22 @@ import 'package:file_picker/file_picker.dart';
 
 import '../config/api_config.dart';
 import '../utils/json_parser.dart';
+import '../utils/report_mime_utils.dart';
 import 'api_service.dart';
+
+class DownloadedReport {
+  const DownloadedReport({
+    required this.bytes,
+    required this.fileName,
+    this.contentType,
+    this.fileType,
+  });
+
+  final Uint8List bytes;
+  final String fileName;
+  final String? contentType;
+  final String? fileType;
+}
 
 class HealthRecordItem {
   const HealthRecordItem({
@@ -61,7 +76,20 @@ class HealthRecordService {
 
   final ApiService _api;
 
-  Future<Uint8List> downloadReportFile(String recordId, {int fileIndex = 0}) async {
+  String? _fileNameFromDisposition(String? header) {
+    if (header == null || header.isEmpty) return null;
+    final quoted = RegExp(r'filename="([^"]+)"').firstMatch(header);
+    if (quoted != null) return quoted.group(1);
+    final plain = RegExp(r'filename=([^;\s]+)').firstMatch(header);
+    return plain?.group(1);
+  }
+
+  Future<DownloadedReport> downloadReportFile(
+    String recordId, {
+    int fileIndex = 0,
+    String? fallbackFileName,
+    String? fallbackFileType,
+  }) async {
     try {
       final res = await _api.dio.get<List<int>>(
         ApiConfig.healthRecordFile(recordId, fileIndex: fileIndex),
@@ -78,7 +106,19 @@ class HealthRecordService {
       if (data == null || data.isEmpty) {
         throw Exception('Report file is empty or unavailable');
       }
-      return Uint8List.fromList(data);
+      final disposition = res.headers.value('content-disposition');
+      final headerName = _fileNameFromDisposition(disposition);
+      final fileName = ReportMimeUtils.ensureExtension(
+        headerName ?? fallbackFileName ?? 'report',
+        fileType: fallbackFileType,
+        contentType: contentType,
+      );
+      return DownloadedReport(
+        bytes: Uint8List.fromList(data),
+        fileName: fileName,
+        contentType: contentType.split(';').first.trim(),
+        fileType: fallbackFileType ?? ReportMimeUtils.extensionFromFileName(fileName),
+      );
     } on DioException catch (e) {
       final status = e.response?.statusCode;
       if (status == 404) {

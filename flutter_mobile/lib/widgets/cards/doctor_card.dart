@@ -8,6 +8,7 @@ import '../../models/doctor_model.dart';
 import '../../utils/image_url_helper.dart';
 import '../animations/healthcare_motion.dart';
 import '../common/avatar_image.dart';
+import '../common/doctor_status_badge.dart';
 
 /// Matches mobile/components/cards/DoctorListCard.tsx
 class DoctorCard extends StatefulWidget {
@@ -123,25 +124,10 @@ class _DoctorCardState extends State<DoctorCard> {
                                     ),
                                   ],
                                 ),
-                              if (widget.doctor.available)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 6),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFD1FAE5),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Text(
-                                      'Available',
-                                      style: GoogleFonts.poppins(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w600,
-                                        color: AppColors.success,
-                                      ),
-                                    ),
-                                  ),
-                                ),
+                              Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: DoctorStatusBadge(doctor: widget.doctor, compact: true),
+                              ),
                             ],
                           ),
                         ],

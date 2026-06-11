@@ -87,4 +87,14 @@ class TelegramLinkService {
       rethrow;
     }
   }
+
+  Future<void> disconnect() async {
+    final res = await _api.delete<Map<String, dynamic>>(ApiConfig.userTelegramUnlink);
+    final data = res.data ?? {};
+    if (data['success'] != true) {
+      throw TelegramLinkException(
+        data['message']?.toString() ?? 'Could not disconnect Telegram',
+      );
+    }
+  }
 }

@@ -11,6 +11,7 @@ class AppointmentModel {
   final bool isCompleted;
   final String? hospitalName;
   final String? location;
+  final String? clinicPhone;
   final String? roomNo;
   final double? amount;
   final String? visitType;
@@ -33,6 +34,7 @@ class AppointmentModel {
     this.isCompleted = false,
     this.hospitalName,
     this.location,
+    this.clinicPhone,
     this.roomNo,
     this.amount,
     this.visitType,
@@ -72,6 +74,7 @@ class AppointmentModel {
       isCompleted: completed,
       hospitalName: json['hospitalName']?.toString() ?? docMap['hospitalName']?.toString(),
       location: json['location']?.toString() ?? addrLine1,
+      clinicPhone: (docMap['phone'] ?? docMap['hospital_contact'] ?? json['clinicPhone'])?.toString(),
       roomNo: json['roomNo']?.toString() ?? addrLine2,
       amount: (json['amount'] ?? json['fees']) is num
           ? ((json['amount'] ?? json['fees']) as num).toDouble()

@@ -5,7 +5,7 @@ from app.config.db import db
 
 async def get_all_doctors():
     sql = '''
-        SELECT d.*, h.name as hospital_name
+        SELECT d.*, h.name as hospital_name, h.contact as hospital_contact
         FROM doctors d
         LEFT JOIN hospital_tieups h ON d.hospital_id = h.id
         ORDER BY d.date DESC NULLS LAST, d.id DESC
@@ -18,7 +18,7 @@ async def get_doctor_by_id(doc_id: Union[int, str]):
         try:
             actual_id = int(doc_id.replace('emb_', ''))
             sql = '''
-                SELECT d.*, h.name as hospital_name, h.id as hospital_id
+                SELECT d.*, h.name as hospital_name, h.contact as hospital_contact, h.id as hospital_id
                 FROM hospital_tieup_doctors d
                 JOIN hospital_tieups h ON d.hospital_tieup_id = h.id
                 WHERE d.id = $1
@@ -48,7 +48,7 @@ async def get_doctor_by_id(doc_id: Union[int, str]):
     try:
         numeric_id = int(doc_id)
         sql = '''
-            SELECT d.*, h.name as hospital_name 
+            SELECT d.*, h.name as hospital_name, h.contact as hospital_contact 
             FROM doctors d 
             LEFT JOIN hospital_tieups h ON d.hospital_id = h.id 
             WHERE d.id = $1
@@ -59,7 +59,7 @@ async def get_doctor_by_id(doc_id: Union[int, str]):
 
         # Fallback: allow numeric ids that belong to embedded hospital doctors.
         emb_sql = '''
-            SELECT d.*, h.name as hospital_name, h.id as hospital_id
+            SELECT d.*, h.name as hospital_name, h.contact as hospital_contact, h.id as hospital_id
             FROM hospital_tieup_doctors d
             JOIN hospital_tieups h ON d.hospital_tieup_id = h.id
             WHERE d.id = $1
@@ -90,7 +90,7 @@ async def get_doctor_by_email(email: str):
 
 async def get_doctors_by_specialty(speciality: str):
     sql = """
-        SELECT d.*, h.name as hospital_name
+        SELECT d.*, h.name as hospital_name, h.contact as hospital_contact
         FROM doctors d
         LEFT JOIN hospital_tieups h ON d.hospital_id = h.id
         WHERE d.speciality = $1 AND d.available = true
@@ -100,7 +100,7 @@ async def get_doctors_by_specialty(speciality: str):
  
 async def get_doctors_by_hospital_id(hospital_id: int):
     sql = '''
-        SELECT d.*, h.name as hospital_name
+        SELECT d.*, h.name as hospital_name, h.contact as hospital_contact
         FROM doctors d
         LEFT JOIN hospital_tieups h ON d.hospital_id = h.id
         WHERE d.hospital_id = $1
