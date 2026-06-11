@@ -36,10 +36,73 @@ class AgoraJoinCredentials {
   }
 }
 
+class CallSessionStatus {
+  const CallSessionStatus({
+    required this.status,
+    this.sessionId,
+    this.canJoin = false,
+    this.rejectReason,
+    this.patientName,
+    this.tokenNumber,
+    this.queuePosition,
+  });
+
+  final String status;
+  final int? sessionId;
+  final bool canJoin;
+  final String? rejectReason;
+  final String? patientName;
+  final int? tokenNumber;
+  final int? queuePosition;
+
+  factory CallSessionStatus.fromJson(Map<String, dynamic> json) {
+    int? parseInt(dynamic v) => v is num ? v.toInt() : int.tryParse('$v');
+
+    return CallSessionStatus(
+      status: '${json['status'] ?? 'none'}',
+      sessionId: parseInt(json['sessionId'] ?? json['session_id']),
+      canJoin: json['canJoin'] == true,
+      rejectReason: json['rejectReason']?.toString(),
+      patientName: json['patientName']?.toString(),
+      tokenNumber: parseInt(json['tokenNumber']),
+      queuePosition: parseInt(json['queuePosition']),
+    );
+  }
+}
+
 class ConsultationService {
   ConsultationService(this._api);
 
   final ApiService _api;
+
+  Future<CallSessionStatus> requestCall(String appointmentId) async {
+    final res = await _api.post<Map<String, dynamic>>(
+      ApiConfig.callRequestForAppointment(appointmentId),
+      data: {},
+    );
+    final data = res.data ?? {};
+    assertSuccess(data, 'Could not request video consultation');
+    return CallSessionStatus.fromJson(data);
+  }
+
+  Future<CallSessionStatus> fetchCallStatus(String appointmentId) async {
+    final res = await _api.get<Map<String, dynamic>>(
+      ApiConfig.callStatusForAppointment(appointmentId),
+    );
+    final data = res.data ?? {};
+    if (data['success'] == false) {
+      throw Exception(data['message']?.toString() ?? 'Could not load call status');
+    }
+    return CallSessionStatus.fromJson(data);
+  }
+
+  Future<void> cancelCallRequest(String appointmentId) async {
+    final res = await _api.post<Map<String, dynamic>>(
+      ApiConfig.callCancelForAppointment(appointmentId),
+      data: {},
+    );
+    assertSuccess(res.data ?? {}, 'Could not cancel call request');
+  }
 
   Future<AgoraJoinCredentials> fetchAgoraToken(String appointmentId) async {
     final res = await _api.post<Map<String, dynamic>>(
@@ -66,7 +129,7 @@ class ConsultationService {
     return res.data ?? {};
   }
 
-  Future<void> endVideoCall(String appointmentId, {int? consultationId}) async {
+  Future<Map<String, dynamic>> endVideoCall(String appointmentId, {int? consultationId}) async {
     final res = await _api.post<Map<String, dynamic>>(
       ApiConfig.endVideoCallForAppointment(appointmentId),
       data: {
@@ -75,5 +138,6 @@ class ConsultationService {
     );
     final data = res.data ?? {};
     assertSuccess(data, 'Could not end video call');
+    return data;
   }
 }

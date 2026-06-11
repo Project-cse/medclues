@@ -40,6 +40,19 @@ import 'utils/web_safe_media_query.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+    if (kDebugMode) {
+      debugPrint('FlutterError: ${details.exceptionAsString()}');
+    }
+  };
+  PlatformDispatcher.instance.onError = (error, stack) {
+    if (kDebugMode) {
+      debugPrint('Uncaught async error: $error\n$stack');
+    }
+    return true;
+  };
+
   await _loadEnv();
   await _initFirebase();
   FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);

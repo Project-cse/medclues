@@ -65,6 +65,7 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
   Future<void> _completeBooking({
     required DoctorModel doctor,
     required String selectedDate,
+    required String slotTime,
     required Map<String, dynamic> result,
     required String visitType,
     required String paymentMethod,
@@ -81,7 +82,7 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
     ref.read(bookingDraftProvider.notifier).state = BookingDraft(
       doctor: doctor,
       date: selectedDate,
-      time: _selectedSlot!.time,
+      time: slotTime,
       visitType: visitType,
       notes: _note.text,
       appointmentId: apptId,
@@ -138,11 +139,6 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
   /// Slot API mode: online = video consult slots; offline = OPD blocks.
   String get _slotMode => widget.preferOnline ? 'online' : 'offline';
 
-  String? get _selectedSlotType =>
-      _selectedSlot == null
-          ? null
-          : inferOpdSlotType(_selectedSlot!.displayTime, _selectedSlot!.slotType);
-
   bool get _requiresRazorpay => widget.preferOnline || _payOnline;
 
   Future<Map<String, dynamic>> _collectRazorpayPayment({
@@ -198,6 +194,12 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
       return;
     }
 
+    // Snapshot slot before any await — schedule refresh can clear _selectedSlot mid-flow.
+    final slot = _selectedSlot!;
+    final slotTime = slot.time;
+    final slotId = slot.slotId;
+    final slotType = inferOpdSlotType(slot.displayTime, slot.slotType);
+
     setState(() => _booking = true);
     final selectedDate = _week[_dayIndex].slotDate;
     final notes = _note.text.trim().isEmpty ? null : _note.text.trim();
@@ -220,10 +222,10 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
           amountPaise: feePaise,
           doctorId: widget.doctorId,
           appointmentDate: selectedDate,
-          appointmentTime: _selectedSlot!.time,
+          appointmentTime: slotTime,
           notes: notes,
-          slotId: _selectedSlot!.slotId,
-          slotType: _selectedSlotType,
+          slotId: slotId,
+          slotType: slotType,
           mode: isVideo ? 'online' : 'offline',
           visitType: isVideo ? 'Online' : 'In-clinic',
         );
@@ -252,6 +254,7 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
         await _completeBooking(
           doctor: doctor,
           selectedDate: selectedDate,
+          slotTime: slotTime,
           result: enriched,
           visitType: isVideo ? 'Online' : 'In-clinic',
           paymentMethod: 'onlinePayment',
@@ -262,7 +265,7 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
       final result = await ref.read(appointmentRepositoryProvider).book(
             doctorId: widget.doctorId,
             slotDate: selectedDate,
-            slotTime: _selectedSlot!.time,
+            slotTime: slotTime,
             symptoms: symptoms,
             notes: notes,
             hospitalName: doctor.hospitalName,
@@ -271,13 +274,14 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
             paymentMethod: 'payOnVisit',
             visitType: 'In-clinic',
             mode: 'offline',
-            slotId: _selectedSlot!.slotId,
-            slotType: _selectedSlotType,
+            slotId: slotId,
+            slotType: slotType,
             prescription: _reportFile,
           );
       await _completeBooking(
         doctor: doctor,
         selectedDate: selectedDate,
+        slotTime: slotTime,
         result: result,
         visitType: 'In-clinic',
         paymentMethod: 'payOnVisit',
@@ -515,7 +519,7 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
             onSurface: PremiumBookingTheme.text(context),
           ),
         ),
-        child: child!,
+        child: child ?? const SizedBox.shrink(),
       ),
     );
     if (picked == null || !mounted) return;

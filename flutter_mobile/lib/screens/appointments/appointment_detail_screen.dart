@@ -135,7 +135,7 @@ class AppointmentDetailScreen extends ConsumerWidget {
                     const SizedBox(height: 20),
                     AppButton(
                       label: l10n.doctorVideoConsult,
-                      onPressed: () => context.push('/video-consult/${a.id}'),
+                      onPressed: () => context.push('/video-waiting/${a.id}'),
                     ),
                     const SizedBox(height: 12),
                   ],

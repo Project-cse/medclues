@@ -77,6 +77,32 @@ class AppPermissionsService {
     return results.values.every((s) => s.isGranted || s.isLimited);
   }
 
+  /// Throws if camera or microphone is not granted (blocks native Agora crash).
+  static Future<({bool camera, bool microphone})> requireVideoConsult() async {
+    if (!isMobile) return (camera: true, microphone: true);
+
+    var cam = await Permission.camera.status;
+    var mic = await Permission.microphone.status;
+    if (!cam.isGranted && !cam.isLimited) cam = await Permission.camera.request();
+    if (!mic.isGranted && !mic.isLimited) mic = await Permission.microphone.request();
+
+    final cameraOk = cam.isGranted || cam.isLimited;
+    final micOk = mic.isGranted || mic.isLimited;
+
+    if (!cameraOk || !micOk) {
+      if (cam.isPermanentlyDenied) {
+        await openAppSettings();
+      } else if (mic.isPermanentlyDenied) {
+        await openAppSettings();
+      }
+      throw VideoConsultPermissionException(
+        cameraOk: cameraOk,
+        microphoneOk: micOk,
+      );
+    }
+    return (camera: cameraOk, microphone: micOk);
+  }
+
   /// Open system settings when user permanently denied a permission.
   static Future<void> openSettingsIfPermanentlyDenied(Permission permission) async {
     if (!isMobile) return;
@@ -131,6 +157,22 @@ class AppPermissionsService {
 }
 
 /// Legacy screen support — router no longer forces this flow.
+class VideoConsultPermissionException implements Exception {
+  VideoConsultPermissionException({required this.cameraOk, required this.microphoneOk});
+
+  final bool cameraOk;
+  final bool microphoneOk;
+
+  @override
+  String toString() {
+    if (!cameraOk && !microphoneOk) {
+      return 'Camera and microphone permissions are required for video consultation.';
+    }
+    if (!cameraOk) return 'Camera permission is required for video consultation.';
+    return 'Microphone permission is required for video consultation.';
+  }
+}
+
 class PermissionStep {
   const PermissionStep({
     required this.id,

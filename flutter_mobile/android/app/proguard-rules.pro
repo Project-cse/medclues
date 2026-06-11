@@ -18,6 +18,10 @@
 
 -keep class io.agora.** { *; }
 -keep class io.agora.rtc.** { *; }
+-keep class io.agora.iris.** { *; }
+-keep class com.agora.** { *; }
+-keepattributes *Annotation*
+-keepclassmembers class * { native <methods>; }
 
 # Razorpay
 -keepclassmembers class * {

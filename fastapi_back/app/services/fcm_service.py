@@ -138,3 +138,46 @@ async def notify_appointment_cancelled(user_id: int, doctor_name: str, appointme
             "appointmentId": str(appointment_id),
         },
     )
+
+
+async def notify_doctor_incoming_video_consult(
+    doctor_id: int,
+    patient_name: str,
+    appointment_id: int,
+    session_id: int,
+):
+    """Doctors on web poll /incoming-calls; FCM reserved for future doctor mobile app."""
+    print(
+        f"[Video] Incoming consult for doctor {doctor_id}: "
+        f"{patient_name} appointment={appointment_id} session={session_id}"
+    )
+
+
+async def notify_patient_call_status(
+    user_id: int,
+    appointment_id: int,
+    status: str,
+    doctor_name: str,
+):
+    titles = {
+        "accepted": "Doctor joined",
+        "rejected": "Call declined",
+        "busy": "Doctor is busy",
+        "missed": "Missed consultation",
+    }
+    bodies = {
+        "accepted": f"Dr. {doctor_name} accepted — tap to join video consultation.",
+        "rejected": f"Dr. {doctor_name} is unavailable for video now.",
+        "busy": f"Dr. {doctor_name} is in another consultation.",
+        "missed": "Your video consultation request was not answered.",
+    }
+    await send_to_user(
+        user_id,
+        title=titles.get(status, "Video consultation update"),
+        body=bodies.get(status, f"Call status: {status}"),
+        data={
+            "type": "video_call_status",
+            "status": status,
+            "appointmentId": str(appointment_id),
+        },
+    )

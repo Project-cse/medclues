@@ -13,6 +13,8 @@ import 'api_service.dart';
 
 const _channelId = 'medclues_appointments';
 const _channelName = 'MEDCLUES Appointments';
+const _videoChannelId = 'medclues_video_calls';
+const _videoChannelName = 'MEDCLUES Video Calls';
 
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -56,9 +58,17 @@ class PushNotificationService {
       description: 'Appointment updates and reminders',
       importance: Importance.high,
     );
-    await _local
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(channel);
+    final androidPlugin =
+        _local.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+    await androidPlugin?.createNotificationChannel(channel);
+    await androidPlugin?.createNotificationChannel(
+      const AndroidNotificationChannel(
+        _videoChannelId,
+        _videoChannelName,
+        description: 'Video consultation status updates',
+        importance: Importance.max,
+      ),
+    );
 
     FirebaseMessaging.onMessage.listen(_onForegroundMessage);
     FirebaseMessaging.onMessageOpenedApp.listen(_handleRemoteOpen);
@@ -85,17 +95,18 @@ class PushNotificationService {
     final title = notification?.title ?? 'MEDCLUES';
     final body = notification?.body ?? '';
     final payload = _payloadFromData(message.data);
+    final isVideo = message.data['type']?.toString() == 'video_call_status';
 
     await _local.show(
       message.hashCode,
       title,
       body,
-      const NotificationDetails(
+      NotificationDetails(
         android: AndroidNotificationDetails(
-          _channelId,
-          _channelName,
-          importance: Importance.high,
-          priority: Priority.high,
+          isVideo ? _videoChannelId : _channelId,
+          isVideo ? _videoChannelName : _channelName,
+          importance: isVideo ? Importance.max : Importance.high,
+          priority: isVideo ? Priority.max : Priority.high,
           icon: '@mipmap/ic_launcher',
         ),
       ),
@@ -108,6 +119,15 @@ class PushNotificationService {
   void _openFromMessage(RemoteMessage message) {
     final type = message.data['type']?.toString() ?? '';
     final apptId = message.data['appointmentId']?.toString();
+    if (type == 'video_call_status' && apptId != null && apptId.isNotEmpty) {
+      final status = message.data['status']?.toString() ?? '';
+      if (status == 'accepted') {
+        _go('/video-waiting/$apptId');
+      } else {
+        _go('${RouteNames.appointments}/$apptId');
+      }
+      return;
+    }
     if (apptId != null && apptId.isNotEmpty) {
       _go('${RouteNames.appointments}/$apptId');
       return;
@@ -120,12 +140,29 @@ class PushNotificationService {
   }
 
   String _payloadFromData(Map<String, dynamic> data) {
+    final type = data['type']?.toString() ?? '';
     final apptId = data['appointmentId']?.toString();
+    if (type == 'video_call_status' && apptId != null && apptId.isNotEmpty) {
+      return 'video_call:${data['status']}:$apptId';
+    }
     if (apptId != null && apptId.isNotEmpty) return 'appointment:$apptId';
-    return data['type']?.toString() ?? '';
+    return type;
   }
 
   void _navigateByPayload(String payload) {
+    if (payload.startsWith('video_call:')) {
+      final parts = payload.split(':');
+      if (parts.length >= 3) {
+        final status = parts[1];
+        final id = parts[2];
+        if (status == 'accepted') {
+          _go('/video-waiting/$id');
+        } else {
+          _go('${RouteNames.appointments}/$id');
+        }
+      }
+      return;
+    }
     if (payload.startsWith('appointment:')) {
       final id = payload.split(':').last;
       if (id.isNotEmpty) _go('${RouteNames.appointments}/$id');

@@ -154,7 +154,7 @@ class _BookingConfirmationScreenState extends ConsumerState<BookingConfirmationS
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
-                  onPressed: () => context.push('/video-consult/$apptId'),
+                  onPressed: () => context.push('/video-waiting/$apptId'),
                   icon: const Icon(Icons.videocam),
                   label: Text(l10n.doctorVideoConsult, style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
                   style: ElevatedButton.styleFrom(

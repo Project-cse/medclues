@@ -101,6 +101,24 @@ async def mark_record_as_viewed(recordId: int, doc_id: int = Depends(auth_doctor
     from app.controllers import health_record_controller
     return await health_record_controller.mark_record_as_viewed(doc_id, recordId)
 
+from app.controllers import call_session_controller
+
+@router.get("/call/incoming")
+async def doctor_incoming_calls(doc_id: int = Depends(auth_doctor)):
+    return await call_session_controller.list_incoming_calls(doc_id)
+
+@router.post("/appointments/{appointmentId}/call/accept")
+async def doctor_accept_call(appointmentId: int, doc_id: int = Depends(auth_doctor)):
+    return await call_session_controller.accept_call(doc_id, appointmentId)
+
+@router.post("/appointments/{appointmentId}/call/reject")
+async def doctor_reject_call(appointmentId: int, doc_id: int = Depends(auth_doctor)):
+    return await call_session_controller.reject_call(doc_id, appointmentId)
+
+@router.post("/appointments/{appointmentId}/call/busy")
+async def doctor_busy_call(appointmentId: int, doc_id: int = Depends(auth_doctor)):
+    return await call_session_controller.busy_call(doc_id, appointmentId)
+
 @router.post("/appointments/{appointmentId}/agora-token")
 async def doctor_agora_token(appointmentId: int, doc_id: int = Depends(auth_doctor)):
     return await consultation_controller.get_agora_token_for_doctor_appointment(doc_id, appointmentId)

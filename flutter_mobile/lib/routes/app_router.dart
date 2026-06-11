@@ -16,7 +16,9 @@ import '../screens/booking/booking_confirmation_screen.dart';
 import '../screens/booking/booking_receipt_screen.dart';
 import '../screens/booking/booking_screen.dart';
 import '../screens/booking/booking_success_screen.dart';
+import '../screens/consultation/consultation_summary_screen.dart';
 import '../screens/consultation/video_consult_screen.dart';
+import '../screens/consultation/video_waiting_room_screen.dart';
 import '../screens/dashboard/dashboard_screen.dart';
 import '../screens/doctors/doctor_profile_screen.dart';
 import '../screens/doctors/doctors_list_screen.dart';
@@ -199,8 +201,19 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         builder: (_, state) => AppointmentDetailScreen(appointmentId: state.pathParameters['id']!),
       ),
       GoRoute(
+        path: '/video-waiting/:appointmentId',
+        builder: (_, state) => VideoWaitingRoomScreen(appointmentId: state.pathParameters['appointmentId']!),
+      ),
+      GoRoute(
         path: '/video-consult/:appointmentId',
         builder: (_, state) => VideoConsultScreen(appointmentId: state.pathParameters['appointmentId']!),
+      ),
+      GoRoute(
+        path: '/consultation-summary/:appointmentId',
+        builder: (_, state) => ConsultationSummaryScreen(
+          appointmentId: state.pathParameters['appointmentId']!,
+          durationSeconds: int.tryParse(state.uri.queryParameters['seconds'] ?? '') ?? 0,
+        ),
       ),
       GoRoute(path: RouteNames.notifications, builder: (_, __) => const NotificationsScreen()),
       GoRoute(path: RouteNames.settings, builder: (_, __) => const SettingsScreen()),

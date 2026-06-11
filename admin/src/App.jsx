@@ -34,6 +34,7 @@ import DoctorProfile from './pages/Doctor/DoctorProfile';
 import QueueManagement from './pages/Doctor/QueueManagement';
 import DoctorVideoConsult from './pages/Doctor/DoctorVideoConsult';
 import DoctorVideoCalls from './pages/Doctor/DoctorVideoCalls';
+import IncomingVideoCallModal from './components/IncomingVideoCallModal';
 
 // Dean pages
 import DeanDashboard from './pages/Dean/DeanDashboard';
@@ -111,6 +112,7 @@ const App = () => {
         </div>
       </div>
       <ScrollToTop />
+      {dToken ? <IncomingVideoCallModal /> : null}
       <style>{`@keyframes pan {0%{background-position:0% 0%}50%{background-position:100% 100%}100%{background-position:0% 0%}}
       @keyframes routeIn {0%{opacity:0; transform: translateY(12px) scale(.98)} 100%{opacity:1; transform: translateY(0) scale(1)}}
       .animate-route-in{animation: routeIn .5s ease forwards}

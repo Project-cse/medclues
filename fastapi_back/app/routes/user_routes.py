@@ -344,6 +344,20 @@ async def get_user_consultations(user_id: int = Depends(auth_user)):
 async def get_consultation(consultationId: int, user_id: int = Depends(auth_user)):
     return await consultation_controller.get_consultation(consultationId)
 
+from app.controllers import call_session_controller
+
+@router.post("/appointments/{appointmentId}/call/request")
+async def request_video_call(appointmentId: int, user_id: int = Depends(auth_user)):
+    return await call_session_controller.request_call(user_id, appointmentId)
+
+@router.get("/appointments/{appointmentId}/call/status")
+async def video_call_session_status(appointmentId: int, user_id: int = Depends(auth_user)):
+    return await call_session_controller.get_call_status_for_user(user_id, appointmentId)
+
+@router.post("/appointments/{appointmentId}/call/cancel")
+async def cancel_video_call_request(appointmentId: int, user_id: int = Depends(auth_user)):
+    return await call_session_controller.cancel_call_request(user_id, appointmentId)
+
 @router.post("/appointments/{appointmentId}/agora-token")
 async def get_appointment_agora_token(appointmentId: int, user_id: int = Depends(auth_user)):
     return await consultation_controller.get_agora_token_for_appointment(user_id, appointmentId)

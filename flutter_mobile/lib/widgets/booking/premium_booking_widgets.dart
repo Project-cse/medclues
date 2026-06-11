@@ -148,7 +148,7 @@ class PremiumDoctorBookingCard extends StatelessWidget {
                       const Icon(Icons.star_rounded, size: 16, color: PremiumBookingTheme.starGold),
                       const SizedBox(width: 4),
                       Text(
-                        doctor.displayRatingText!,
+                        doctor.displayRatingText ?? '',
                         style: GoogleFonts.inter(
                           fontSize: 13,
                           fontWeight: FontWeight.w700,

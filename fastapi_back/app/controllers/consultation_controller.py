@@ -160,11 +160,17 @@ async def get_agora_token_for_appointment(user_id: int, appointment_id: int):
             'message': 'Agora is not configured on the server (AGORA_APP_ID / AGORA_APP_CERTIFICATE)',
         }
 
+    from app.controllers import call_session_controller
+    gate = await call_session_controller.assert_can_issue_patient_token(user_id, appointment_id)
+    if gate:
+        return {'success': False, 'message': gate}
+
     consultation, err = await ensure_consultation_for_appointment(user_id, appointment_id)
     if err:
         return {'success': False, 'message': err}
 
     consultation = await _ensure_consultation_started(consultation)
+    await call_session_controller.mark_ongoing_if_joined(int(appointment_id))
 
     channel = consultation.get('meeting_id') or agora_service.channel_for_appointment(int(appointment_id))
     uid = int(user_id) % 2147483647 or 1
@@ -185,6 +191,24 @@ async def get_agora_token_for_doctor_appointment(doctor_id: int, appointment_id:
     consultation, err = await ensure_consultation_for_doctor(doctor_id, appointment_id)
     if err:
         return {'success': False, 'message': err}
+
+    from app.controllers import call_session_controller
+    from app.models import call_session_model
+    existing_session = await call_session_model.get_by_appointment(int(appointment_id))
+    if existing_session and existing_session['status'] in ('requested', 'ringing'):
+        await call_session_controller.accept_call(doctor_id, int(appointment_id))
+    elif not existing_session:
+        appointment = await appointment_model.get_appointment_by_id(int(appointment_id))
+        if appointment:
+            channel = consultation.get('meeting_id') or agora_service.channel_for_appointment(int(appointment_id))
+            await call_session_model.create_session({
+                'appointment_id': int(appointment_id),
+                'consultation_id': consultation['id'],
+                'patient_user_id': appointment['user_id'],
+                'doctor_id': doctor_id,
+                'status': 'accepted',
+                'agora_channel': channel,
+            })
 
     await db.execute(
         "UPDATE appointments SET status = $1, alerted = true, updated_at = CURRENT_TIMESTAMP WHERE id = $2",
@@ -363,6 +387,8 @@ async def end_video_call_for_appointment(appointment_id: int, req_body: dict | N
         return {'success': False, 'message': 'Consultation not found'}
     if consultation.get('status') == 'completed':
         return {'success': True, 'message': 'Call already ended', 'ended': True}
+    from app.controllers import call_session_controller
+    await call_session_controller.mark_completed(int(appointment_id))
     return await end_consultation(
         int(consultation['id']),
         {

@@ -116,6 +116,12 @@ class ApiConfig {
   static const String cancelAppointment = '/api/user/cancel-appointment';
   static String appointmentByBookingId(String bookingId) =>
       '/api/appointments/$bookingId';
+  static String callRequestForAppointment(String appointmentId) =>
+      '/api/user/appointments/$appointmentId/call/request';
+  static String callStatusForAppointment(String appointmentId) =>
+      '/api/user/appointments/$appointmentId/call/status';
+  static String callCancelForAppointment(String appointmentId) =>
+      '/api/user/appointments/$appointmentId/call/cancel';
   static String agoraTokenForAppointment(String appointmentId) =>
       '/api/user/appointments/$appointmentId/agora-token';
   static String videoCallStatusForAppointment(String appointmentId) =>

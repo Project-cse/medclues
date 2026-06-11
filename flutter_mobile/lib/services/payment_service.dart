@@ -71,15 +71,23 @@ class PaymentService {
       },
     );
     final data = res.data ?? {};
-    if (data['order_id'] == null || data['razorpay_key'] == null || data['checkout_token'] == null) {
+    final orderId = data['order_id']?.toString();
+    final razorpayKey = data['razorpay_key']?.toString();
+    final checkoutToken = data['checkout_token']?.toString();
+    if (orderId == null ||
+        orderId.isEmpty ||
+        razorpayKey == null ||
+        razorpayKey.isEmpty ||
+        checkoutToken == null ||
+        checkoutToken.isEmpty) {
       throw Exception(data['message']?.toString() ?? 'Failed to create payment order');
     }
     return PaymentOrderResult(
-      orderId: '${data['order_id']}',
+      orderId: orderId,
       amount: (data['amount'] as num?)?.toInt() ?? amountPaise,
       currency: '${data['currency'] ?? 'INR'}',
-      razorpayKey: '${data['razorpay_key']}',
-      checkoutToken: '${data['checkout_token']}',
+      razorpayKey: razorpayKey,
+      checkoutToken: checkoutToken,
       appointmentId: '${data['appointment_id'] ?? ''}',
     );
   }

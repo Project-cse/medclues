@@ -7,8 +7,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:permission_handler/permission_handler.dart';
-
 import '../../constants/app_colors.dart';
 import '../../l10n/l10n_extension.dart';
 import '../../providers/service_providers.dart';
@@ -36,6 +34,8 @@ class _VideoConsultScreenState extends ConsumerState<VideoConsultScreen> {
   bool _muted = false;
   bool _videoOff = false;
   bool _cameraBlocked = false;
+  bool _speakerOn = true;
+  bool _micGranted = true;
   int _callSeconds = 0;
   int? _callStartedAtMs;
   bool _hadRemote = false;
@@ -109,14 +109,14 @@ class _VideoConsultScreenState extends ConsumerState<VideoConsultScreen> {
     }
 
     final engine = _engine;
-    if (engine != null) {
-      await engine.leaveChannel();
-      await engine.release();
-    }
     _engine = null;
+    await _tearDownEngine(engine);
 
-    await Future<void>.delayed(const Duration(seconds: 2));
-    if (mounted) context.pop();
+    if (mounted) {
+      context.pushReplacement(
+        '/consultation-summary/${widget.appointmentId}?seconds=$_callSeconds',
+      );
+    }
   }
 
   @override
@@ -125,14 +125,13 @@ class _VideoConsultScreenState extends ConsumerState<VideoConsultScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _start());
   }
 
-  Future<void> _requestPermissions() async {
-    if (kIsWeb) return;
-    await AppPermissionsService.ensureVideoConsult();
-  }
-
   Future<void> _start() async {
     try {
-      await _requestPermissions();
+      if (!kIsWeb) {
+        final perms = await AppPermissionsService.requireVideoConsult();
+        _micGranted = perms.microphone;
+        _cameraBlocked = !perms.camera;
+      }
       final creds = await ref.read(consultationServiceProvider).fetchAgoraToken(widget.appointmentId);
       if (creds.appId.isEmpty || creds.token.isEmpty || creds.channel.isEmpty) {
         throw Exception('Invalid video session from server');
@@ -170,14 +169,17 @@ class _VideoConsultScreenState extends ConsumerState<VideoConsultScreen> {
         ),
       );
       await engine.enableVideo();
-      var publishCamera = true;
-      if (!kIsWeb) {
+      var publishCamera = !_cameraBlocked;
+      if (!kIsWeb && publishCamera) {
         try {
           await engine.startPreview();
         } catch (_) {
           publishCamera = false;
           _cameraBlocked = true;
         }
+      }
+      if (!kIsWeb) {
+        await engine.setEnableSpeakerphone(_speakerOn);
       }
       await engine.joinChannel(
         token: creds.token,
@@ -187,7 +189,7 @@ class _VideoConsultScreenState extends ConsumerState<VideoConsultScreen> {
           channelProfile: ChannelProfileType.channelProfileCommunication,
           clientRoleType: ClientRoleType.clientRoleBroadcaster,
           publishCameraTrack: publishCamera,
-          publishMicrophoneTrack: true,
+          publishMicrophoneTrack: _micGranted,
           autoSubscribeAudio: true,
           autoSubscribeVideo: true,
         ),
@@ -203,6 +205,12 @@ class _VideoConsultScreenState extends ConsumerState<VideoConsultScreen> {
         _loading = false;
       });
       _startStatusPolling();
+    } on VideoConsultPermissionException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = e.toString();
+      });
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -221,13 +229,19 @@ class _VideoConsultScreenState extends ConsumerState<VideoConsultScreen> {
     _callTimer?.cancel();
     _statusPollTimer?.cancel();
     if (!_callEnding) {
-      final engine = _engine;
-      if (engine != null) {
-        engine.leaveChannel();
-        engine.release();
-      }
+      _tearDownEngine(_engine);
     }
     super.dispose();
+  }
+
+  Future<void> _tearDownEngine(RtcEngine? engine) async {
+    if (engine == null) return;
+    try {
+      await engine.leaveChannel();
+    } catch (_) {}
+    try {
+      await engine.release();
+    } catch (_) {}
   }
 
   @override
@@ -279,6 +293,15 @@ class _VideoConsultScreenState extends ConsumerState<VideoConsultScreen> {
                       onTap: () async {
                         await _engine?.muteLocalVideoStream(!_videoOff);
                         setState(() => _videoOff = !_videoOff);
+                      },
+                    ),
+                    _controlBtn(
+                      icon: _speakerOn ? Icons.volume_up : Icons.volume_off,
+                      label: _speakerOn ? 'Speaker' : 'Earpiece',
+                      onTap: () async {
+                        final next = !_speakerOn;
+                        await _engine?.setEnableSpeakerphone(next);
+                        setState(() => _speakerOn = next);
                       },
                     ),
                     _controlBtn(
