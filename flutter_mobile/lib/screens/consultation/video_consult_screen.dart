@@ -39,6 +39,7 @@ class _VideoConsultScreenState extends ConsumerState<VideoConsultScreen> {
   int _callSeconds = 0;
   int? _callStartedAtMs;
   bool _hadRemote = false;
+  int? _remoteJoinedAtMs;
   bool _callEnding = false;
   String? _callEndedMessage;
   Timer? _callTimer;
@@ -81,7 +82,8 @@ class _VideoConsultScreenState extends ConsumerState<VideoConsultScreen> {
       if (_callEnding || !mounted) return;
       try {
         final status = await ref.read(consultationServiceProvider).fetchVideoCallStatus(widget.appointmentId);
-        if (status['ended'] == true) {
+        // Ignore stale ended from a prior attempt until we have joined the channel.
+        if (status['ended'] == true && _joined) {
           await _handleCallEnded('The call was ended.');
           return;
         }
@@ -146,6 +148,7 @@ class _VideoConsultScreenState extends ConsumerState<VideoConsultScreen> {
           onUserJoined: (connection, remoteUid, elapsed) {
             if (mounted) {
               _hadRemote = true;
+              _remoteJoinedAtMs = DateTime.now().millisecondsSinceEpoch;
               setState(() => _remoteUid = remoteUid);
             }
             _syncCallTimerFromServer();
@@ -158,7 +161,12 @@ class _VideoConsultScreenState extends ConsumerState<VideoConsultScreen> {
             }
           },
           onUserOffline: (connection, remoteUid, reason) {
-            if (!mounted) return;
+            if (!mounted || !_hadRemote) return;
+            final joinedAt = _remoteJoinedAtMs;
+            if (joinedAt != null &&
+                DateTime.now().millisecondsSinceEpoch - joinedAt < 4000) {
+              return;
+            }
             if (_remoteUid == remoteUid || _hadRemote) {
               _handleCallEnded('The call was ended.');
             }

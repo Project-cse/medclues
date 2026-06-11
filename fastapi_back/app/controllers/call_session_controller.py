@@ -129,6 +129,7 @@ async def accept_call(doctor_id: int, appointment_id: int):
     if err:
         return {"success": False, "message": err}
 
+    await consultation_controller._ensure_consultation_started(consultation)
     updated = await call_session_model.update_status(
         session["id"],
         "accepted",

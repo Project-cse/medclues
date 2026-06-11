@@ -354,11 +354,19 @@ def _video_call_status_payload(consultation: dict):
 
 
 async def get_video_call_status_for_appointment(appointment_id: int):
+    from app.models import call_session_model
+
     consultation = await consultation_model.get_consultation_by_appointment_id(int(appointment_id))
     if not consultation:
         return {'success': False, 'message': 'Consultation not found'}
     consultation = await _refresh_consultation(consultation)
-    return _video_call_status_payload(consultation)
+    payload = _video_call_status_payload(consultation)
+    # Active call session overrides stale consultation.completed from a prior attempt.
+    session = await call_session_model.get_by_appointment(int(appointment_id))
+    if session and session.get('status') in ('requested', 'ringing', 'accepted', 'ongoing'):
+        payload['ended'] = False
+        payload['status'] = session['status']
+    return payload
 
 
 async def sync_call_timer_for_appointment(appointment_id: int):

@@ -122,7 +122,8 @@ class PushNotificationService {
     if (type == 'video_call_status' && apptId != null && apptId.isNotEmpty) {
       final status = message.data['status']?.toString() ?? '';
       if (status == 'accepted') {
-        _go('/video-waiting/$apptId');
+        // Join Agora room directly — do not go to waiting room (ctx.go would tear down an active call).
+        _go('/video-consult/$apptId');
       } else {
         _go('${RouteNames.appointments}/$apptId');
       }
@@ -156,7 +157,7 @@ class PushNotificationService {
         final status = parts[1];
         final id = parts[2];
         if (status == 'accepted') {
-          _go('/video-waiting/$id');
+          _go('/video-consult/$id');
         } else {
           _go('${RouteNames.appointments}/$id');
         }

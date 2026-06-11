@@ -99,7 +99,8 @@ class _VideoWaitingRoomScreenState extends ConsumerState<VideoWaitingRoomScreen>
 
   void _goToVideo() {
     if (!mounted) return;
-    context.pushReplacement('/video-consult/${widget.appointmentId}');
+    // go() avoids stacking waiting room under the video route (FCM may also navigate).
+    context.go('/video-consult/${widget.appointmentId}');
   }
 
   Future<void> _cancel() async {

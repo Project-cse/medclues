@@ -333,7 +333,7 @@ const DoctorVideoConsultRoom = ({
           `${backendUrl}/api/doctor/appointments/${appointmentId}/video-call-status`,
           { headers: { dToken: authToken } }
         )
-        if (data?.ended) {
+        if (data?.ended && callActive) {
           handleCallEnded('The call was ended.')
           return
         }
