@@ -134,7 +134,15 @@ class _VideoConsultScreenState extends ConsumerState<VideoConsultScreen> {
         _micGranted = perms.microphone;
         _cameraBlocked = !perms.camera;
       }
-      final creds = await ref.read(consultationServiceProvider).fetchAgoraToken(widget.appointmentId);
+      final creds = await ref
+          .read(consultationServiceProvider)
+          .fetchAgoraToken(widget.appointmentId)
+          .timeout(
+            const Duration(seconds: 45),
+            onTimeout: () => throw Exception(
+              'Could not connect. Ensure the doctor accepted the call and you use the same server as the doctor app.',
+            ),
+          );
       if (creds.appId.isEmpty || creds.token.isEmpty || creds.channel.isEmpty) {
         throw Exception('Invalid video session from server');
       }
@@ -255,7 +263,14 @@ class _VideoConsultScreenState extends ConsumerState<VideoConsultScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    return Scaffold(
+    return PopScope(
+      canPop: _loading || _error != null,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && !_loading && _error == null) {
+          _leave();
+        }
+      },
+      child: Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
         backgroundColor: Colors.black,
@@ -325,6 +340,7 @@ class _VideoConsultScreenState extends ConsumerState<VideoConsultScreen> {
                 .animate()
                 .fadeIn(duration: 400.ms, delay: 200.ms)
                 .slideY(begin: 0.25, end: 0, duration: 450.ms, curve: Curves.easeOutCubic),
+    ),
     );
   }
 

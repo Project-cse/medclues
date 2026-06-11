@@ -178,9 +178,16 @@ class PushNotificationService {
 
   void _go(String path) {
     final ctx = _navKey?.currentContext;
-    if (ctx != null && ctx.mounted) {
-      ctx.go(path);
+    if (ctx == null || !ctx.mounted) return;
+
+    // Do not tear down an active video room when a duplicate FCM arrives.
+    if (path.startsWith('/video-consult/')) {
+      final apptId = path.replaceFirst('/video-consult/', '');
+      final loc = GoRouterState.of(ctx).matchedLocation;
+      if (loc == '/video-consult/$apptId') return;
     }
+
+    ctx.go(path);
   }
 
   Future<String?> syncTokenWithBackend() async {

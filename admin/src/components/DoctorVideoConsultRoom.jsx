@@ -400,9 +400,18 @@ const DoctorVideoConsultRoom = ({
       <div className="max-w-lg mx-auto p-8 text-center bg-white rounded-2xl border border-red-100 shadow-sm">
         <p className="text-red-600 font-semibold mb-2">Video consultation unavailable</p>
         <p className="text-slate-600 text-sm mb-4">{error}</p>
-        <button type="button" onClick={onLeave} className="px-5 py-2.5 bg-slate-800 text-white rounded-lg text-sm">
-          Back to appointments
-        </button>
+        <div className="flex flex-wrap gap-3 justify-center">
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="px-5 py-2.5 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700"
+          >
+            Retry video
+          </button>
+          <button type="button" onClick={onLeave} className="px-5 py-2.5 bg-slate-800 text-white rounded-lg text-sm">
+            Back to appointments
+          </button>
+        </div>
       </div>
     )
   }

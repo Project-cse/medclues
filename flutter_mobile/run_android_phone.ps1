@@ -16,7 +16,7 @@ if (-not $ip) {
 
 $configPath = Join-Path $PSScriptRoot "assets\config.env"
 $content = Get-Content $configPath -Raw
-$content = $content -replace 'API_BASE_URL=http://[^\s:]+:5000', "API_BASE_URL=http://${ip}:5000"
+$content = $content -replace 'API_BASE_URL=https?://[^\s#]+', "API_BASE_URL=http://${ip}:5000"
 Set-Content -Path $configPath -Value $content.TrimEnd() -Encoding UTF8 -NoNewline
 Add-Content -Path $configPath -Value ""
 Write-Host "API_BASE_URL -> http://${ip}:5000" -ForegroundColor Green

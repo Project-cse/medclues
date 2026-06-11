@@ -223,6 +223,7 @@ async def get_agora_token_for_doctor_appointment(doctor_id: int, appointment_id:
     )
     consultation = await _ensure_consultation_started(consultation)
     consultation = await _clear_call_timer(consultation)
+    await call_session_controller.mark_ongoing_if_joined(int(appointment_id))
 
     channel = consultation.get('meeting_id') or agora_service.channel_for_appointment(int(appointment_id))
     uid = agora_service.uid_for_doctor(doctor_id)

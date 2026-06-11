@@ -66,6 +66,12 @@ async def request_call(user_id: int, appointment_id: int):
     if err:
         return {"success": False, "message": err}
 
+    if existing and existing["status"] in (
+        "completed", "cancelled", "rejected", "busy", "missed",
+    ):
+        consultation = await consultation_controller._ensure_consultation_started(consultation)
+        consultation = await consultation_controller._clear_call_timer(consultation)
+
     channel = consultation.get("meeting_id") or agora_service.channel_for_appointment(int(appointment_id))
     session = await call_session_model.create_session(
         {
