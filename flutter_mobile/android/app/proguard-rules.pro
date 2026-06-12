@@ -1,4 +1,4 @@
-# Agora RTC — optional screen-capture / MediaProjection refs (not bundled when agora-special-full is excluded)
+# Agora RTC — optional screen-capture / MediaProjection refs
 -dontwarn io.agora.base.VideoFrame$Buffer
 -dontwarn io.agora.base.VideoFrame$I420Buffer
 -dontwarn io.agora.base.VideoFrame$TextureBuffer$ContextType

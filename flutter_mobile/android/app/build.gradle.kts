@@ -42,7 +42,11 @@ android {
 
     packaging {
         jniLibs {
-            pickFirsts += listOf("**/libaosl.so", "**/libc++_shared.so")
+            pickFirsts += listOf(
+                "**/libaosl.so",
+                "**/libc++_shared.so",
+                "**/libagora-rtc-sdk.so",
+            )
         }
     }
 }
@@ -53,11 +57,6 @@ kotlin {
 
 flutter {
     source = "../.."
-}
-
-// Exclude duplicate Agora native SDK (manifest namespace clash with iris-rtc).
-configurations.configureEach {
-    exclude(group = "io.agora.rtc", module = "agora-special-full")
 }
 
 dependencies {

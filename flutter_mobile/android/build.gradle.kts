@@ -12,11 +12,6 @@ allprojects {
 subprojects {
     afterEvaluate {
         extensions.findByType<LibraryExtension>()?.compileSdk = 36
-        // Video consult: agora_rtc_engine bundles iris-rtc + agora-special-full with the
-        // same Android namespace (io.agora.rtc) → manifest merger fails. Keep iris-rtc only.
-        configurations.configureEach {
-            exclude(group = "io.agora.rtc", module = "agora-special-full")
-        }
     }
 }
 
