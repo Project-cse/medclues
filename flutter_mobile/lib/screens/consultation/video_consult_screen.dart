@@ -5,11 +5,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../constants/app_colors.dart';
 import '../../l10n/l10n_extension.dart';
 import '../../providers/service_providers.dart';
+import '../../services/agora_session_manager.dart';
 import '../../services/app_permissions_service.dart';
 import '../../services/consultation_service.dart';
 import '../../widgets/animations/connecting_doctor_overlay.dart';
@@ -128,7 +128,11 @@ class _VideoConsultScreenState extends ConsumerState<VideoConsultScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _start());
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      // Let the route finish building before native Agora starts (avoids Android crash).
+      await Future<void>.delayed(const Duration(milliseconds: 350));
+      if (_alive) await _start();
+    });
   }
 
   bool get _alive => mounted && !_disposed;
@@ -146,6 +150,7 @@ class _VideoConsultScreenState extends ConsumerState<VideoConsultScreen> {
     }
     _activeAppointments.add(apptKey);
     final generation = ++_startGeneration;
+    AgoraSessionManager.log('PATIENT_CALL_START appt=$apptKey');
 
     try {
       if (!kIsWeb) {
@@ -154,6 +159,8 @@ class _VideoConsultScreenState extends ConsumerState<VideoConsultScreen> {
         _micGranted = perms.microphone;
         _cameraBlocked = !perms.camera;
       }
+      await AgoraSessionManager.release();
+      if (!_alive || generation != _startGeneration) return;
       final creds = await ref
           .read(consultationServiceProvider)
           .fetchAgoraToken(widget.appointmentId)
@@ -170,12 +177,10 @@ class _VideoConsultScreenState extends ConsumerState<VideoConsultScreen> {
       if (creds.uid <= 0) {
         throw Exception('Invalid video session from server (uid)');
       }
-      final engine = createAgoraRtcEngine();
-      await engine
-          .initialize(RtcEngineContext(appId: creds.appId))
-          .timeout(const Duration(seconds: 30), onTimeout: () {
-        throw Exception('Video engine timed out. Check network and try again.');
-      });
+      final engine = await AgoraSessionManager.acquire(creds.appId).timeout(
+        const Duration(seconds: 30),
+        onTimeout: () => throw Exception('Video engine timed out. Check network and try again.'),
+      );
       if (!_alive || generation != _startGeneration) {
         await _tearDownEngine(engine);
         return;
@@ -218,14 +223,6 @@ class _VideoConsultScreenState extends ConsumerState<VideoConsultScreen> {
       );
       await engine.enableVideo();
       var publishCamera = !_cameraBlocked;
-      if (!kIsWeb && publishCamera) {
-        try {
-          await engine.startPreview();
-        } catch (_) {
-          publishCamera = false;
-          _cameraBlocked = true;
-        }
-      }
       if (!kIsWeb) {
         await engine.setEnableSpeakerphone(_speakerOn);
       }
@@ -246,6 +243,15 @@ class _VideoConsultScreenState extends ConsumerState<VideoConsultScreen> {
           .timeout(const Duration(seconds: 30), onTimeout: () {
         throw Exception('Could not join video channel. Ask the doctor to re-accept the call.');
       });
+      AgoraSessionManager.log('PATIENT_JOINED channel=${creds.channel} uid=${creds.uid}');
+      if (!kIsWeb && publishCamera) {
+        try {
+          await engine.startPreview();
+        } catch (_) {
+          publishCamera = false;
+          _cameraBlocked = true;
+        }
+      }
       if (!publishCamera) {
         _videoOff = true;
       }
@@ -289,19 +295,14 @@ class _VideoConsultScreenState extends ConsumerState<VideoConsultScreen> {
     _callTimer?.cancel();
     _statusPollTimer?.cancel();
     if (!_callEnding) {
-      _tearDownEngine(_engine);
+      unawaited(_tearDownEngine(_engine));
     }
     super.dispose();
   }
 
   Future<void> _tearDownEngine(RtcEngine? engine) async {
     if (engine == null) return;
-    try {
-      await engine.leaveChannel();
-    } catch (_) {}
-    try {
-      await engine.release();
-    } catch (_) {}
+    await AgoraSessionManager.release();
   }
 
   @override
@@ -380,10 +381,7 @@ class _VideoConsultScreenState extends ConsumerState<VideoConsultScreen> {
                   ],
                 ),
               ),
-            )
-                .animate()
-                .fadeIn(duration: 400.ms, delay: 200.ms)
-                .slideY(begin: 0.25, end: 0, duration: 450.ms, curve: Curves.easeOutCubic),
+            ),
     ),
     );
   }
@@ -490,7 +488,7 @@ class _VideoConsultScreenState extends ConsumerState<VideoConsultScreen> {
               ),
             ),
           ),
-        if (!_videoOff)
+        if (_joined && !_videoOff && _creds != null)
           Align(
             alignment: Alignment.topRight,
             child: Padding(
@@ -506,7 +504,7 @@ class _VideoConsultScreenState extends ConsumerState<VideoConsultScreen> {
                     child: AgoraVideoView(
                       controller: VideoViewController(
                         rtcEngine: engine,
-                        canvas: VideoCanvas(uid: _creds?.uid ?? 0),
+                        canvas: VideoCanvas(uid: _creds!.uid),
                       ),
                     ),
                   ),
@@ -542,9 +540,7 @@ class _VideoConsultScreenState extends ConsumerState<VideoConsultScreen> {
             ),
           ),
       ],
-    )
-        .animate()
-        .fadeIn(duration: 420.ms, curve: Curves.easeOut);
+    );
   }
 
   Widget _controlBtn({

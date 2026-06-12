@@ -189,6 +189,15 @@ class PushNotificationService {
       if (loc == '/video-waiting/$apptId') return;
     }
 
+    if (path.startsWith('/video-consult/')) {
+      final apptId = path.replaceFirst('/video-consult/', '').split('?').first;
+      final loc = GoRouterState.of(ctx).matchedLocation;
+      if (loc != '/video-consult/$apptId') {
+        ctx.pushReplacement('/video-consult/$apptId');
+      }
+      return;
+    }
+
     ctx.go(path);
   }
 

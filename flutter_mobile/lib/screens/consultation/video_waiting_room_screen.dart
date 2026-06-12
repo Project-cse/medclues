@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -10,6 +11,7 @@ import '../../l10n/app_localizations.dart';
 import '../../l10n/l10n_extension.dart';
 import '../../providers/appointment_provider.dart';
 import '../../providers/service_providers.dart';
+import '../../services/app_permissions_service.dart';
 import '../../services/consultation_service.dart';
 import '../../utils/app_exception.dart';
 import '../../widgets/common/app_button.dart';
@@ -98,11 +100,28 @@ class _VideoWaitingRoomScreenState extends ConsumerState<VideoWaitingRoomScreen>
     } catch (_) {}
   }
 
-  void _goToVideo() {
+  Future<void> _goToVideo() async {
     if (!mounted || _navigatingToVideo) return;
     _navigatingToVideo = true;
     _pollTimer?.cancel();
-    // Replace waiting room only — safer than go() which can race with FCM navigation.
+
+    if (!kIsWeb) {
+      try {
+        await AppPermissionsService.requireVideoConsult();
+      } on VideoConsultPermissionException catch (e) {
+        _navigatingToVideo = false;
+        if (mounted) setState(() => _error = e.toString());
+        return;
+      } catch (e) {
+        _navigatingToVideo = false;
+        if (mounted) setState(() => _error = e.toString());
+        return;
+      }
+    }
+
+    if (!mounted) return;
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    if (!mounted) return;
     context.pushReplacement('/video-consult/${widget.appointmentId}');
   }
 
