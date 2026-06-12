@@ -25,11 +25,18 @@ class AgoraJoinCredentials {
       return int.tryParse('$value');
     }
 
+    final uid = (json['uid'] is num)
+        ? (json['uid'] as num).toInt()
+        : int.tryParse('${json['uid']}') ?? 0;
+    if (uid <= 0) {
+      throw Exception('Invalid video session: missing Agora user id from server');
+    }
+
     return AgoraJoinCredentials(
       appId: '${json['appId'] ?? json['app_id'] ?? ''}',
       channel: '${json['channel'] ?? json['channelName'] ?? ''}',
       token: '${json['token'] ?? ''}',
-      uid: (json['uid'] is num) ? (json['uid'] as num).toInt() : int.tryParse('${json['uid']}') ?? 0,
+      uid: uid,
       consultationId: parseInt(json['consultationId'] ?? json['consultation_id']),
       callStartedAtMs: parseInt(json['callStartedAt'] ?? json['call_started_at']),
     );

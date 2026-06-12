@@ -182,9 +182,11 @@ class PushNotificationService {
 
     // Do not tear down an active video room when a duplicate FCM arrives.
     if (path.startsWith('/video-consult/')) {
-      final apptId = path.replaceFirst('/video-consult/', '');
+      final apptId = path.replaceFirst('/video-consult/', '').split('?').first;
       final loc = GoRouterState.of(ctx).matchedLocation;
       if (loc == '/video-consult/$apptId') return;
+      // Waiting room already navigates when doctor accepts — avoid double route swap.
+      if (loc == '/video-waiting/$apptId') return;
     }
 
     ctx.go(path);

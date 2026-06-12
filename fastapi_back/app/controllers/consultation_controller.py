@@ -173,7 +173,7 @@ async def get_agora_token_for_appointment(user_id: int, appointment_id: int):
     await call_session_controller.mark_ongoing_if_joined(int(appointment_id))
 
     channel = consultation.get('meeting_id') or agora_service.channel_for_appointment(int(appointment_id))
-    uid = agora_service.uid_for_patient(user_id)
+    uid = agora_service.uid_for_patient(int(appointment_id))
     payload, token_err = _agora_join_payload(channel, uid, consultation)
     if token_err:
         return {'success': False, 'message': token_err}
@@ -226,7 +226,7 @@ async def get_agora_token_for_doctor_appointment(doctor_id: int, appointment_id:
     await call_session_controller.mark_ongoing_if_joined(int(appointment_id))
 
     channel = consultation.get('meeting_id') or agora_service.channel_for_appointment(int(appointment_id))
-    uid = agora_service.uid_for_doctor(doctor_id)
+    uid = agora_service.uid_for_doctor(int(appointment_id))
     payload, token_err = _agora_join_payload(channel, uid, consultation)
     if token_err:
         return {'success': False, 'message': token_err}

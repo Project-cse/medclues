@@ -30,6 +30,7 @@ class _VideoWaitingRoomScreenState extends ConsumerState<VideoWaitingRoomScreen>
   CallSessionStatus? _session;
   String? _error;
   bool _requesting = true;
+  bool _navigatingToVideo = false;
   Timer? _pollTimer;
 
   @override
@@ -98,9 +99,11 @@ class _VideoWaitingRoomScreenState extends ConsumerState<VideoWaitingRoomScreen>
   }
 
   void _goToVideo() {
-    if (!mounted) return;
-    // go() avoids stacking waiting room under the video route (FCM may also navigate).
-    context.go('/video-consult/${widget.appointmentId}');
+    if (!mounted || _navigatingToVideo) return;
+    _navigatingToVideo = true;
+    _pollTimer?.cancel();
+    // Replace waiting room only — safer than go() which can race with FCM navigation.
+    context.pushReplacement('/video-consult/${widget.appointmentId}');
   }
 
   Future<void> _cancel() async {

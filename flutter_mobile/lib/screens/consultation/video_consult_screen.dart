@@ -25,9 +25,13 @@ class VideoConsultScreen extends ConsumerStatefulWidget {
 }
 
 class _VideoConsultScreenState extends ConsumerState<VideoConsultScreen> {
+  static final Set<String> _activeAppointments = {};
+
   RtcEngine? _engine;
   AgoraJoinCredentials? _creds;
   bool _loading = true;
+  bool _disposed = false;
+  int _startGeneration = 0;
   String? _error;
   bool _joined = false;
   int? _remoteUid;
@@ -127,10 +131,26 @@ class _VideoConsultScreenState extends ConsumerState<VideoConsultScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _start());
   }
 
+  bool get _alive => mounted && !_disposed;
+
   Future<void> _start() async {
+    final apptKey = widget.appointmentId;
+    if (_activeAppointments.contains(apptKey)) {
+      if (_alive) {
+        setState(() {
+          _loading = false;
+          _error = 'Video session is already starting. Go back and try again.';
+        });
+      }
+      return;
+    }
+    _activeAppointments.add(apptKey);
+    final generation = ++_startGeneration;
+
     try {
       if (!kIsWeb) {
         final perms = await AppPermissionsService.requireVideoConsult();
+        if (!_alive || generation != _startGeneration) return;
         _micGranted = perms.microphone;
         _cameraBlocked = !perms.camera;
       }
@@ -143,11 +163,23 @@ class _VideoConsultScreenState extends ConsumerState<VideoConsultScreen> {
               'Could not connect. Ensure the doctor accepted the call and you use the same server as the doctor app.',
             ),
           );
+      if (!_alive || generation != _startGeneration) return;
       if (creds.appId.isEmpty || creds.token.isEmpty || creds.channel.isEmpty) {
         throw Exception('Invalid video session from server');
       }
+      if (creds.uid <= 0) {
+        throw Exception('Invalid video session from server (uid)');
+      }
       final engine = createAgoraRtcEngine();
-      await engine.initialize(RtcEngineContext(appId: creds.appId));
+      await engine
+          .initialize(RtcEngineContext(appId: creds.appId))
+          .timeout(const Duration(seconds: 30), onTimeout: () {
+        throw Exception('Video engine timed out. Check network and try again.');
+      });
+      if (!_alive || generation != _startGeneration) {
+        await _tearDownEngine(engine);
+        return;
+      }
       engine.registerEventHandler(
         RtcEngineEventHandler(
           onJoinChannelSuccess: (connection, elapsed) {
@@ -197,24 +229,31 @@ class _VideoConsultScreenState extends ConsumerState<VideoConsultScreen> {
       if (!kIsWeb) {
         await engine.setEnableSpeakerphone(_speakerOn);
       }
-      await engine.joinChannel(
-        token: creds.token,
-        channelId: creds.channel,
-        uid: creds.uid,
-        options: ChannelMediaOptions(
-          channelProfile: ChannelProfileType.channelProfileCommunication,
-          clientRoleType: ClientRoleType.clientRoleBroadcaster,
-          publishCameraTrack: publishCamera,
-          publishMicrophoneTrack: _micGranted,
-          autoSubscribeAudio: true,
-          autoSubscribeVideo: true,
-        ),
-      );
+      await engine
+          .joinChannel(
+            token: creds.token,
+            channelId: creds.channel,
+            uid: creds.uid,
+            options: ChannelMediaOptions(
+              channelProfile: ChannelProfileType.channelProfileCommunication,
+              clientRoleType: ClientRoleType.clientRoleBroadcaster,
+              publishCameraTrack: publishCamera,
+              publishMicrophoneTrack: _micGranted,
+              autoSubscribeAudio: true,
+              autoSubscribeVideo: true,
+            ),
+          )
+          .timeout(const Duration(seconds: 30), onTimeout: () {
+        throw Exception('Could not join video channel. Ask the doctor to re-accept the call.');
+      });
       if (!publishCamera) {
         _videoOff = true;
       }
 
-      if (!mounted) return;
+      if (!_alive || generation != _startGeneration) {
+        await _tearDownEngine(engine);
+        return;
+      }
       setState(() {
         _engine = engine;
         _creds = creds;
@@ -222,17 +261,19 @@ class _VideoConsultScreenState extends ConsumerState<VideoConsultScreen> {
       });
       _startStatusPolling();
     } on VideoConsultPermissionException catch (e) {
-      if (!mounted) return;
+      if (!_alive) return;
       setState(() {
         _loading = false;
         _error = e.toString();
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!_alive) return;
       setState(() {
         _loading = false;
         _error = e.toString().replaceFirst('Exception: ', '');
       });
+    } finally {
+      _activeAppointments.remove(apptKey);
     }
   }
 
@@ -242,6 +283,9 @@ class _VideoConsultScreenState extends ConsumerState<VideoConsultScreen> {
 
   @override
   void dispose() {
+    _disposed = true;
+    _startGeneration++;
+    _activeAppointments.remove(widget.appointmentId);
     _callTimer?.cancel();
     _statusPollTimer?.cancel();
     if (!_callEnding) {

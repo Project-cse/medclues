@@ -88,6 +88,7 @@ const DoctorVideoConsultRoom = ({
   const remoteUsersRef = useRef(new Map())
   const callEndedRef = useRef(false)
   const hadRemoteRef = useRef(false)
+  const joinAttemptRef = useRef(0)
 
   const patientName = getPatientName(appointment)
   const patientAge = getPatientAge(appointment, calculateAge)
@@ -218,14 +219,29 @@ const DoctorVideoConsultRoom = ({
       clientRef.current = null
     }
 
+    const fetchJoinCredentials = async () => {
+      const { data } = await axios.post(
+        `${backendUrl}/api/doctor/appointments/${appointmentId}/agora-token`,
+        {},
+        { headers: { dToken: authToken } }
+      )
+      if (!data?.success) throw new Error(data?.message || 'Could not start video session')
+      return data
+    }
+
+    const joinChannel = async (client, data) => {
+      const uid = Number(data.uid)
+      if (!Number.isFinite(uid) || uid <= 0) {
+        throw new Error('Invalid Agora uid from server')
+      }
+      await client.join(data.appId, data.channel, data.token, uid)
+    }
+
     const start = async () => {
+      const attempt = ++joinAttemptRef.current
       try {
-        const { data } = await axios.post(
-          `${backendUrl}/api/doctor/appointments/${appointmentId}/agora-token`,
-          {},
-          { headers: { dToken: authToken } }
-        )
-        if (!data?.success) throw new Error(data?.message || 'Could not start video session')
+        const data = await fetchJoinCredentials()
+        if (cancelled || attempt !== joinAttemptRef.current) return
 
         if (data.consultationId) setConsultationId(data.consultationId)
 
@@ -258,7 +274,23 @@ const DoctorVideoConsultRoom = ({
           }
         })
 
-        await client.join(data.appId, data.channel, data.token, data.uid)
+        try {
+          await joinChannel(client, data)
+        } catch (joinErr) {
+          const code = joinErr?.code || joinErr?.name || ''
+          const msg = joinErr?.message || ''
+          const isUidConflict =
+            code === 'UID_CONFLICT' ||
+            msg.includes('UID_CONFLICT') ||
+            msg.toLowerCase().includes('uid conflict')
+          if (!isUidConflict) throw joinErr
+          try {
+            await client.leave()
+          } catch (_) {}
+          const fresh = await fetchJoinCredentials()
+          if (cancelled || attempt !== joinAttemptRef.current) return
+          await joinChannel(client, fresh)
+        }
         setCallActive(true)
 
         for (const user of client.remoteUsers) {
@@ -292,6 +324,7 @@ const DoctorVideoConsultRoom = ({
     start()
     return () => {
       cancelled = true
+      joinAttemptRef.current += 1
       cleanup()
     }
   }, [appointmentId, authToken, backendUrl, publishCameraInitial])
