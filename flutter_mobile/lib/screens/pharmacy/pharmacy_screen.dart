@@ -852,16 +852,29 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
       separatorBuilder: (_, __) => const SizedBox(height: 12),
       itemBuilder: (_, i) {
         final o = _orders[i];
-        final rawStatus = '${o['status'] ?? ''}'.toLowerCase();
+        final rawStatus = '${o['status'] ?? 'received'}'.toLowerCase();
         final status = rawStatus.replaceAll('_', ' ').toUpperCase();
         final total = o['amountTotal'];
         final orderId = o['id'];
         final publicId = o['publicId'] ?? '#ORD-$orderId';
 
         Color statusColor = Colors.blue;
-        if (rawStatus == 'delivered') statusColor = Colors.green;
-        if (rawStatus == 'packed' || rawStatus == 'verified') statusColor = Colors.orange;
-        if (rawStatus == 'out_for_delivery' || rawStatus == 'ready_for_pickup') statusColor = Colors.purple;
+        int currentStep = 1;
+        if (rawStatus == 'packed' || rawStatus == 'verified') {
+          statusColor = Colors.orange;
+          currentStep = 2;
+        } else if (rawStatus == 'out_for_delivery' || rawStatus == 'dispatched' || rawStatus == 'ready_for_pickup') {
+          statusColor = Colors.purple;
+          currentStep = 3;
+        } else if (rawStatus == 'delivered' || rawStatus == 'completed') {
+          statusColor = Colors.green;
+          currentStep = 4;
+        }
+
+        // Mock delivery executive info for out_for_delivery orders
+        final riderName = o['riderName'] ?? 'Ramesh Kumar';
+        final riderPhone = o['riderPhone'] ?? '+91 98765 43210';
+        final vehicleNo = o['vehicleNo'] ?? 'KA 05 EQ 8821';
 
         return Card(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -897,6 +910,85 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
                   'Order ID: $publicId ${total != null ? '· Total: ₹$total' : ''}',
                   style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
                 ),
+                const SizedBox(height: 12),
+
+                // Visual Live Order Tracker Steps
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey.shade200),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Live Order Tracking',
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          _buildTrackerStep('Received', 1, currentStep),
+                          _buildTrackerLine(1, currentStep),
+                          _buildTrackerStep('Packed', 2, currentStep),
+                          _buildTrackerLine(2, currentStep),
+                          _buildTrackerStep('On Way', 3, currentStep),
+                          _buildTrackerLine(3, currentStep),
+                          _buildTrackerStep('Delivered', 4, currentStep),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Assigned Delivery Partner Card
+                if (currentStep >= 3) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.purple.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.purple.shade200),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.purple.shade100,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.two_wheeler, color: Colors.purple, size: 20),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Delivery Partner: $riderName',
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                              ),
+                              Text(
+                                'Vehicle: $vehicleNo · Mobile: $riderPhone',
+                                style: TextStyle(fontSize: 11, color: Colors.purple.shade900),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.phone, color: Colors.purple),
+                          onPressed: () => launchUrl(Uri.parse('tel:$riderPhone')),
+                          tooltip: 'Call Rider',
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+
                 const Divider(height: 20),
                 Row(
                   children: [
@@ -925,6 +1017,43 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
     );
   }
 
+  Widget _buildTrackerStep(String label, int stepNumber, int activeStep) {
+    final isDone = activeStep >= stepNumber;
+    return Column(
+      children: [
+        CircleAvatar(
+          radius: 10,
+          backgroundColor: isDone ? Colors.green : Colors.grey.shade300,
+          child: Icon(
+            isDone ? Icons.check : Icons.circle,
+            size: 10,
+            color: Colors.white,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: isDone ? FontWeight.bold : FontWeight.normal,
+            color: isDone ? Colors.black87 : Colors.grey,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTrackerLine(int stepNumber, int activeStep) {
+    final isDone = activeStep > stepNumber;
+    return Expanded(
+      child: Container(
+        height: 2,
+        color: isDone ? Colors.green : Colors.grey.shade300,
+        margin: const EdgeInsets.symmetric(horizontal: 2),
+      ),
+    );
+  }
+
   // 4️⃣ NEARBY PHARMACIES TAB
   Widget _buildNearbyPharmaciesTab() {
     return ListView.builder(
@@ -933,9 +1062,15 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
       itemBuilder: (_, i) {
         final store = _nearbyPharmacies[i];
         final isInHouse = store['isInHouse'] == true;
+        final isSelected = store['name'] == _selectedStore['name'];
+
         return Card(
           margin: const EdgeInsets.only(bottom: 12),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          elevation: isSelected ? 3 : 1,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: isSelected ? const BorderSide(color: AppColors.primary, width: 1.5) : BorderSide.none,
+          ),
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -985,19 +1120,43 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
                 const SizedBox(height: 12),
                 Row(
                   children: [
-                    OutlinedButton.icon(
-                      icon: const Icon(Icons.phone, size: 16),
-                      label: const Text('Call Store'),
-                      onPressed: () => launchUrl(Uri.parse('tel:${store['phone']}')),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.phone, size: 14),
+                        label: const Text('Call Store', style: TextStyle(fontSize: 12)),
+                        onPressed: () => launchUrl(Uri.parse('tel:${store['phone']}')),
+                      ),
                     ),
-                    const SizedBox(width: 8),
-                    FilledButton.icon(
-                      icon: const Icon(Icons.directions, size: 16),
-                      label: const Text('Directions'),
-                      onPressed: () {
-                        final query = Uri.encodeComponent('${store['name']} ${store['address']}');
-                        launchUrl(Uri.parse('https://www.google.com/maps/search/?api=1&query=$query'));
-                      },
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.directions, size: 14),
+                        label: const Text('Directions', style: TextStyle(fontSize: 12)),
+                        onPressed: () {
+                          final query = Uri.encodeComponent('${store['name']} ${store['address']}');
+                          launchUrl(Uri.parse('https://www.google.com/maps/search/?api=1&query=$query'));
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: FilledButton.icon(
+                        icon: const Icon(Icons.shopping_bag, size: 14),
+                        label: Text(isSelected ? 'Selected' : 'Order From', style: const TextStyle(fontSize: 12)),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: isSelected ? Colors.green : AppColors.primary,
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            _selectedStore = store;
+                            _tabs.animateTo(0); // Switch to All Medicines tab
+                          });
+                          AppSnackbar.show(
+                            context,
+                            'Selected ${store['name']} as your delivery pharmacy!',
+                          );
+                        },
+                      ),
                     ),
                   ],
                 ),
