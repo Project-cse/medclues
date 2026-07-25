@@ -294,6 +294,54 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
           ],
         ),
       ),
+      bottomSheet: _cartItemCount > 0
+          ? Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 10,
+                    offset: const Offset(0, -4),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '$_cartItemCount Item${_cartItemCount > 1 ? 's' : ''} | ₹${_cartTotalAmount.toStringAsFixed(2)}',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                        ),
+                        Text(
+                          'Fulfilling via ${_selectedStore['name']}',
+                          style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.shopping_cart_checkout),
+                    label: const Text('View Cart & Order'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: _openCartCheckoutSheet,
+                  ),
+                ],
+              ),
+            )
+          : null,
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
@@ -330,6 +378,49 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        // Fulfilling Pharmacy Store Selector Banner
+        InkWell(
+          onTap: _showStoreSelectorDialog,
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              color: Colors.blue.shade50,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.blue.shade200),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.storefront, color: Colors.blue.shade700),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Fulfilling Store: ${_selectedStore['name']}',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          color: Colors.blue.shade900,
+                        ),
+                      ),
+                      Text(
+                        'Single pharmacy delivery point · ${_selectedStore['address']}',
+                        style: TextStyle(fontSize: 11, color: Colors.blue.shade800),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(Icons.swap_horiz, color: Colors.blue.shade700),
+              ],
+            ),
+          ),
+        ),
+
         // Search Bar
         TextField(
           controller: _searchController,
@@ -391,91 +482,92 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
             child: Center(child: Text('No medicines found matching your search.')),
           )
         else
-          ...filtered.map((item) => Card(
-                margin: const EdgeInsets.only(bottom: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Row(
-                    children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: Image.network(
-                          item['image'],
+          ...filtered.map((item) {
+            final qty = _cart[item['id']] ?? 0;
+            return Card(
+              margin: const EdgeInsets.only(bottom: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.network(
+                        item['image'],
+                        width: 80,
+                        height: 80,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Container(
                           width: 80,
                           height: 80,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Container(
-                            width: 80,
-                            height: 80,
-                            color: Colors.blue.shade50,
-                            child: const Icon(Icons.medical_services, color: AppColors.primary),
+                          color: Colors.blue.shade50,
+                          child: const Icon(Icons.medical_services, color: AppColors.primary),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            item['name'],
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                            ),
                           ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              item['name'],
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 15,
+                          Text(
+                            'By ${item['brand']} · ${item['category']}',
+                            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              Text(
+                                '₹${item['price']}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                  color: Colors.green,
+                                ),
                               ),
-                            ),
-                            Text(
-                              'By ${item['brand']} · ${item['category']}',
-                              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                            ),
-                            const SizedBox(height: 6),
-                            Row(
-                              children: [
-                                Text(
-                                  '₹${item['price']}',
+                              const SizedBox(width: 6),
+                              Text(
+                                '₹${item['mrp']}',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  decoration: TextDecoration.lineThrough,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.green.shade50,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  item['discount'],
                                   style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
+                                    fontSize: 11,
                                     color: Colors.green,
+                                    fontWeight: FontWeight.bold,
                                   ),
                                 ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  '₹${item['mrp']}',
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    decoration: TextDecoration.lineThrough,
-                                    color: Colors.grey,
-                                  ),
-                                ),
-                                const SizedBox(width: 6),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: Colors.green.shade50,
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Text(
-                                    item['discount'],
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.green,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
+                    ),
+                    if (qty == 0)
                       ElevatedButton(
-                        onPressed: () {
-                          AppSnackbar.show(context, '${item['name']} added to cart!');
-                        },
+                        onPressed: () => _addToCart(item),
                         style: ElevatedButton.styleFrom(
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
@@ -484,11 +576,36 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
                           foregroundColor: Colors.white,
                         ),
                         child: const Text('Add'),
+                      )
+                    else
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.remove, size: 18, color: AppColors.primary),
+                              onPressed: () => _removeFromCart(item),
+                            ),
+                            Text(
+                              '$qty',
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.add, size: 18, color: AppColors.primary),
+                              onPressed: () => _addToCart(item),
+                            ),
+                          ],
+                        ),
                       ),
-                    ],
-                  ),
+                  ],
                 ),
-              )),
+              ),
+            );
+          }),
       ],
     );
   }
