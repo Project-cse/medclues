@@ -992,19 +992,32 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
                 const Divider(height: 20),
                 Row(
                   children: [
+                    if (currentStep >= 3) ...[
+                      Expanded(
+                        child: FilledButton.icon(
+                          icon: const Icon(Icons.map, size: 16),
+                          label: const Text('Track Live'),
+                          style: FilledButton.styleFrom(backgroundColor: Colors.purple.shade700),
+                          onPressed: () => _showLiveRiderTrackerModal(o),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                    if (currentStep == 4) ...[
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          icon: const Icon(Icons.star, size: 16, color: Colors.amber),
+                          label: const Text('Rate Order'),
+                          onPressed: () => _showRatingReviewModal(o),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
                     Expanded(
                       child: OutlinedButton.icon(
                         icon: const Icon(Icons.picture_as_pdf, size: 16),
                         label: const Text('Invoice'),
                         onPressed: () => _downloadInvoice(orderId),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: FilledButton.icon(
-                        icon: const Icon(Icons.autorenew, size: 16),
-                        label: const Text('1-Click Refill'),
-                        onPressed: () => _refillOrder(orderId),
                       ),
                     ),
                   ],
@@ -1014,6 +1027,207 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
           ),
         );
       },
+    );
+  }
+
+  void _showLiveRiderTrackerModal(Map<String, dynamic> order) {
+    final riderName = order['riderName'] ?? 'Ramesh Kumar';
+    final riderPhone = order['riderPhone'] ?? '+91 98765 43210';
+    final vehicleNo = order['vehicleNo'] ?? 'KA 05 EQ 8821';
+    final deliveryOtp = order['otp'] ?? '4892';
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Row(
+                  children: [
+                    Icon(Icons.near_me, color: Colors.purple),
+                    SizedBox(width: 8),
+                    Text('Live Rider Tracking', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                  ],
+                ),
+                IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
+              ],
+            ),
+            const Divider(),
+            // Mock Animated Map Box (Swiggy / Rapido Style)
+            Container(
+              height: 180,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.blue.shade200),
+              ),
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Icon(Icons.map, size: 160, color: Colors.blue.shade100),
+                  Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.purple,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(color: Colors.purple.withOpacity(0.4), blurRadius: 12, spreadRadius: 4),
+                          ],
+                        ),
+                        child: const Icon(Icons.two_wheeler, color: Colors.white, size: 28),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Text('Rider 1.2 km away · Arriving in 8 mins', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.purple)),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Doorstep Delivery OTP Card
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.amber.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.amber.shade300),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.key, color: Colors.amber, size: 28),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Doorstep Handover OTP', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.brown)),
+                        Text('Share with $riderName upon delivery', style: const TextStyle(fontSize: 11, color: Colors.brown)),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.shade200,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      '$deliveryOtp',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20, letterSpacing: 2, color: Colors.brown),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Rider Card
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Rider: $riderName', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                      Text('Vehicle: $vehicleNo', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+                    ],
+                  ),
+                ),
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.phone),
+                  label: const Text('Call Rider'),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.purple, foregroundColor: Colors.white),
+                  onPressed: () => launchUrl(Uri.parse('tel:$riderPhone')),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showRatingReviewModal(Map<String, dynamic> order) {
+    int rating = 5;
+    final textController = TextEditingController();
+
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Column(
+            children: [
+              Icon(Icons.stars, size: 48, color: Colors.amber),
+              SizedBox(height: 8),
+              Text('Rate Your Delivery', style: TextStyle(fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('How was your medicine delivery experience?', textAlign: TextAlign.center, style: TextStyle(fontSize: 13)),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(5, (index) {
+                  final starNum = index + 1;
+                  return IconButton(
+                    icon: Icon(
+                      starNum <= rating ? Icons.star : Icons.star_border,
+                      color: Colors.amber,
+                      size: 32,
+                    ),
+                    onPressed: () {
+                      setDialogState(() => rating = starNum);
+                    },
+                  );
+                }),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: textController,
+                decoration: InputDecoration(
+                  hintText: 'Write optional review for rider & pharmacy...',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                maxLines: 2,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Skip')),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                AppSnackbar.show(context, 'Thank you! Your $rating-star review has been submitted.');
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
+              child: const Text('Submit Review'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
