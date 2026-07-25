@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>MedClues</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>medichain_mobile</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(FLUTTER_BUILD_NAME)</string>
+	<key>CFBundleSignature</key>
+	<string>????</string>
+	<key>CFBundleVersion</key>
+	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneClassName</key>
+					<string>UIWindowScene</string>
+					<key>UISceneConfigurationName</key>
+					<string>flutter</string>
+					<key>UISceneDelegateClassName</key>
+					<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+					<key>UISceneStoryboardFile</key>
+					<string>Main</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
+
+	<!-- ============================================================ -->
+	<!--  Privacy Usage Descriptions (required for iOS App Store)     -->
+	<!-- ============================================================ -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>MedClues uses your location to show nearby hospitals and ambulance services.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>MedClues needs camera access to perform live video consultations with doctors.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>MedClues needs microphone access for speaking to doctors during video consultations and for voice input in the AI Assistant.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>MedClues uses speech recognition so you can talk to the AI Assistant hands-free.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>MedClues needs photo library access to upload medical reports and profile pictures.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>MedClues needs permission to save downloaded reports and prescriptions to your photo library.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>MedClues needs calendar access to schedule and track doctor appointments.</string>
+	<key>NSCalendarsWriteOnlyAccessUsageDescription</key>
+	<string>MedClues needs calendar write access to add doctor appointments to your calendar.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>MedClues uses contacts for emergency contact configuration.</string>
+
+	<!-- ============================================================ -->
+	<!--  URL Schemes — Deep Links + Google Sign-In OAuth Redirect    -->
+	<!--  Mirrors the Android manifest intent-filters                 -->
+	<!-- ============================================================ -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<!-- Google Sign-In redirect (REVERSED_CLIENT_ID from GoogleService-Info.plist) -->
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>Google Sign-In</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.675557370566-12kvutdnj7frlmcabh8jcmv01fehgg8f</string>
+			</array>
+		</dict>
+		<!-- Primary deep links: medclues:// -->
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>MedClues Deep Link</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>medclues</string>
+			</array>
+		</dict>
+		<!-- Legacy payment scheme (accept only): medichain://payment -->
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>Razorpay Payment Legacy</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>medichain</string>
+			</array>
+		</dict>
+		<!-- Legacy typo scheme (accept only): mediclues:// -->
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>MedClues Deep Link Legacy</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>mediclues</string>
+			</array>
+		</dict>
+	</array>
+
+	<!-- ============================================================ -->
+	<!--  Orientation Support                                         -->
+	<!-- ============================================================ -->
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
+	<key>UIMainStoryboardFile</key>
+	<string>Main</string>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+</dict>
+</plist>

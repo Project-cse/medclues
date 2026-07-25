@@ -1,0 +1,70 @@
+{
+  "project_info": {
+    "project_number": "675557370566",
+    "project_id": "mediclues-e39db",
+    "storage_bucket": "mediclues-e39db.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:675557370566:android:4dff6f066786e9f916c5c7",
+        "android_client_info": {
+          "package_name": "com.medichain.medichain_mobile"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "675557370566-3pipfhb7fjrbtfqds7f8tmqd4l95pbin.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.medichain.medichain_mobile",
+            "certificate_hash": "37949ec85a2389eb0617c27ef0ac6e2f25f22a17"
+          }
+        },
+        {
+          "client_id": "675557370566-ctfivrb6acve6nmd0l0k0hmkfgigojrv.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.medichain.medichain_mobile",
+            "certificate_hash": "3f96ef8cf0e718ca16736bd9631753d942b94852"
+          }
+        },
+        {
+          "client_id": "675557370566-hv66gqdfvnbibfa07vij47pm8jqk5jb0.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.medichain.medichain_mobile",
+            "certificate_hash": "16c9615a7e6f34ed7feb1765ceebe7643d5b06a4"
+          }
+        },
+        {
+          "client_id": "675557370566-c9jkgqf6pl58e3i1ftjb765lv0akmf1g.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC_CxTOYgWiWL04oc385OF6n_3CozOEwiw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "675557370566-c9jkgqf6pl58e3i1ftjb765lv0akmf1g.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "675557370566-12kvutdnj7frlmcabh8jcmv01fehgg8f.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.medichain.medichainMobile"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

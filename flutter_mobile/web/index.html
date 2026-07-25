@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <!--
+    If you are serving your web app in a path other than the root, change the
+    href value below to reflect the base path you are serving from.
+
+    The path provided below has to start and end with a slash "/" in order for
+    it to work correctly.
+
+    For more details:
+    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
+
+    This is a placeholder for base href that will be replaced by the value of
+    the `--base-href` argument provided to `flutter build`.
+  -->
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+  <meta name="description" content="MedClues Patient Management System">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="MedClues">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>MedClues</title>
+  <link rel="manifest" href="manifest.json">
+  <style>
+    /* Keep auth inputs clean on web — no grey autofill/focus blocks */
+    input:-webkit-autofill,
+    input:-webkit-autofill:hover,
+    input:-webkit-autofill:focus,
+    input:-webkit-autofill:active,
+    textarea:-webkit-autofill,
+    textarea:-webkit-autofill:hover,
+    textarea:-webkit-autofill:focus,
+    textarea:-webkit-autofill:active {
+      -webkit-box-shadow: 0 0 0 1000px #ffffff inset !important;
+      box-shadow: 0 0 0 1000px #ffffff inset !important;
+      -webkit-text-fill-color: #1f2937 !important;
+      caret-color: #2563eb !important;
+      transition: background-color 99999s ease-in-out 0s;
+    }
+    input:focus,
+    textarea:focus {
+      outline: none !important;
+    }
+  </style>
+</head>
+<body>
+  <script>
+    // Flutter Web: prevent negative ViewInsets when the virtual keyboard closes.
+    // See: physicalSize vs visualViewport.height mismatch on browser resize.
+    (function () {
+      if (!window.visualViewport) return;
+      var proto = VisualViewport.prototype;
+      var heightDesc = Object.getOwnPropertyDescriptor(proto, 'height');
+      if (!heightDesc || !heightDesc.get) return;
+      var originalGet = heightDesc.get;
+      Object.defineProperty(window.visualViewport, 'height', {
+        get: function () {
+          var h = originalGet.call(this);
+          var max = window.innerHeight || h;
+          return Math.min(h, max);
+        },
+        configurable: true,
+      });
+    })();
+  </script>
+  <!-- Required for agora_rtc_engine on Flutter Web (alpha). Load before Flutter starts. -->
+  <script src="https://download.agora.io/sdk/release/iris-web-rtc_n450_w4220_0.8.6.js"></script>
+  <!--
+    You can customize the "flutter_bootstrap.js" script.
+    This is useful to provide a custom configuration to the Flutter loader
+    or to give the user feedback during the initialization process.
+
+    For more details:
+    * https://docs.flutter.dev/platform-integration/web/initialization
+  -->
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>
