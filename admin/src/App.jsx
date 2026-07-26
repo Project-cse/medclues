@@ -32,6 +32,8 @@ const AmbulanceDashboard = lazy(() => import('./pages/Ambulance/AmbulanceDashboa
 const DriverTripPage = lazy(() => import('./pages/Driver/DriverTripPage'))
 const GreenCorridorPage = lazy(() => import('./pages/Driver/GreenCorridorPage'))
 const PartnerDashboard = lazy(() => import('./pages/Partner/PartnerDashboard'))
+const PharmacyMasterCatalog = lazy(() => import('./pages/Admin/PharmacyMasterCatalog'))
+const HospitalPharmacyCounter = lazy(() => import('./pages/Partner/HospitalPharmacyCounter'))
 const DoctorAppointments = lazy(() => import('./pages/Doctor/DoctorAppointments'))
 const DoctorDashboard = lazy(() => import('./pages/Doctor/DoctorDashboard'))
 const DoctorCommunity = lazy(() => import('./pages/Doctor/DoctorCommunity'))
@@ -175,6 +177,8 @@ const App = () => {
               <Route path='/refund-management' element={<RefundManagement />} />
               <Route path='/partner-integrations' element={<ManagePartners />} />
               <Route path='/partner-analytics' element={<PartnerDashboard />} />
+              <Route path='/pharmacy-master-catalog' element={<PharmacyMasterCatalog />} />
+              <Route path='/hospital-pharmacy-counter' element={<HospitalPharmacyCounter />} />
               <Route path='/community-moderation' element={<CommunityModeration />} />
               <Route path='/doctor-dashboard' element={<DoctorDashboard />} />
               <Route path='/doctor-community' element={<DoctorCommunity />} />

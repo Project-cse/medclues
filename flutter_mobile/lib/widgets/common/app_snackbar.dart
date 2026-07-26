@@ -11,6 +11,14 @@ class AppSnackbar {
   static OverlayEntry? _current;
 
   static void show(BuildContext context, String message, {bool success = false}) {
+    // Auto-detect positive messages if success wasn't explicitly set to true
+    final isPositive = success ||
+        message.toLowerCase().contains('added') ||
+        message.toLowerCase().contains('success') ||
+        message.toLowerCase().contains('submitted') ||
+        message.toLowerCase().contains('placed') ||
+        message.toLowerCase().contains('selected');
+
     _current?.remove();
     _current = null;
 
@@ -19,7 +27,7 @@ class AppSnackbar {
     entry = OverlayEntry(
       builder: (ctx) => _PremiumToast(
         message: message,
-        success: success,
+        success: isPositive,
         onDismiss: () {
           entry.remove();
           if (_current == entry) _current = null;
@@ -28,6 +36,18 @@ class AppSnackbar {
     );
     _current = entry;
     overlay.insert(entry);
+  }
+
+  static void showSuccess(BuildContext context, String message) {
+    show(context, message, success: true);
+  }
+
+  static void showError(BuildContext context, String message) {
+    show(context, message, success: false);
+  }
+
+  static void showInfo(BuildContext context, String message) {
+    show(context, message, success: true);
   }
 }
 

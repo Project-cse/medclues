@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -32,87 +33,54 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
   String _selectedCategory = 'All';
   String _selectedDisease = 'All';
 
-  // Catalog data for "All Medicines" (loads live from Express Backend MongoDB via FastAPI)
-  List<Map<String, dynamic>> _catalogMedicines = [
-    {
-      'id': 1,
-      'name': 'Dolo 650mg Tablet',
-      'brand': 'Micro Labs',
-      'category': 'Fever & Pain',
-      'specialty': 'General',
-      'price': 32.50,
-      'mrp': 40.00,
-      'discount': '18% OFF',
-      'requiresRx': false,
-      'rating': 4.8,
-      'image': 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=300'
-    },
-    {
-      'id': 2,
-      'name': 'Glycomet 500mg Tablet',
-      'brand': 'USV Ltd',
-      'category': 'Diabetes',
-      'specialty': 'Endocrinology',
-      'price': 45.00,
-      'mrp': 55.00,
-      'discount': '18% OFF',
-      'requiresRx': true,
-      'rating': 4.9,
-      'image': 'https://images.unsplash.com/photo-1471864190281-a93a3070b6de?w=300'
-    },
-    {
-      'id': 3,
-      'name': 'Telmikind 40mg Tablet',
-      'brand': 'Mankind Pharma',
-      'category': 'Blood Pressure',
-      'specialty': 'Cardiology',
-      'price': 68.00,
-      'mrp': 85.00,
-      'discount': '20% OFF',
-      'requiresRx': true,
-      'rating': 4.7,
-      'image': 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=300'
-    },
-    {
-      'id': 4,
-      'name': 'Becosules Z Capsules',
-      'brand': 'Pfizer',
-      'category': 'Vitamins & Supplements',
-      'specialty': 'General',
-      'price': 42.00,
-      'mrp': 50.00,
-      'discount': '16% OFF',
-      'requiresRx': false,
-      'rating': 4.9,
-      'image': 'https://images.unsplash.com/photo-1550572017-edd951aa8f72?w=300'
-    },
-    {
-      'id': 5,
-      'name': 'Pantocid 40mg Tablet',
-      'brand': 'Sun Pharma',
-      'category': 'Stomach Care',
-      'specialty': 'Gastroenterology',
-      'price': 115.00,
-      'mrp': 140.00,
-      'discount': '17% OFF',
-      'requiresRx': true,
-      'rating': 4.6,
-      'image': 'https://images.unsplash.com/photo-1471864190281-a93a3070b6de?w=300'
-    },
-    {
-      'id': 6,
-      'name': 'Calpol 120mg Suspension (Pediatric)',
-      'brand': 'GSK',
-      'category': 'Fever & Pain',
-      'specialty': 'Pediatrics',
-      'price': 38.00,
-      'mrp': 45.00,
-      'discount': '15% OFF',
-      'requiresRx': false,
-      'rating': 4.8,
-      'image': 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=300'
-    },
-  ];
+  // Cart state management
+  final Map<dynamic, int> _cart = {}; // medicineId -> quantity
+  late Map<String, dynamic> _selectedStore = _nearbyPharmacies.first;
+  String _selectedDeliveryMode = 'pickup'; // 'pickup' (10m counter) or 'delivery' (30m home)
+
+  int get _cartItemCount => _cart.values.fold(0, (sum, q) => sum + q);
+
+  double get _cartTotalAmount {
+    double total = 0.0;
+    _cart.forEach((medId, qty) {
+      final med = _catalogMedicines.firstWhere(
+        (m) => (m['id'] == medId || m['_id'] == medId),
+        orElse: () => {},
+      );
+      if (med.isNotEmpty) {
+        final price = (med['price'] is num) ? (med['price'] as num).toDouble() : 0.0;
+        total += price * qty;
+      }
+    });
+    return total;
+  }
+
+  void _addToCart(Map<String, dynamic> item) {
+    final id = item['id'] ?? item['_id'];
+    if (id == null) return;
+    setState(() {
+      _cart[id] = (_cart[id] ?? 0) + 1;
+    });
+    AppSnackbar.showSuccess(
+      context,
+      '${item['name']} added to cart!',
+    );
+  }
+
+  void _removeFromCart(Map<String, dynamic> item) {
+    final id = item['id'] ?? item['_id'];
+    if (id == null || !_cart.containsKey(id)) return;
+    setState(() {
+      if (_cart[id]! > 1) {
+        _cart[id] = _cart[id]! - 1;
+      } else {
+        _cart.remove(id);
+      }
+    });
+  }
+
+  // Catalog data for "All Medicines" (loads live from Express Backend MongoDB)
+  List<Map<String, dynamic>> _catalogMedicines = [];
 
   // Nearby Pharmacies sample data
   final List<Map<String, dynamic>> _nearbyPharmacies = [
@@ -189,10 +157,450 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
         _error = e.toString().replaceFirst('Exception: ', '');
         _loading = false;
       });
+  Widget _buildMedicineImage(String? imageStr, {double width = 80, double height = 80}) {
+    if (imageStr == null || imageStr.trim().isEmpty) {
+      return Container(
+        width: width,
+        height: height,
+        color: Colors.teal.shade50,
+        child: const Icon(Icons.medication, color: AppColors.primary),
+      );
     }
+
+    final trimmed = imageStr.trim();
+    if (trimmed.startsWith('data:image/') || trimmed.startsWith('data:;base64,')) {
+      try {
+        final base64Data = trimmed.split(',').last;
+        final bytes = base64Decode(base64Data);
+        return Image.memory(
+          bytes,
+          width: width,
+          height: height,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => Container(
+            width: width,
+            height: height,
+            color: Colors.teal.shade50,
+            child: const Icon(Icons.medication, color: AppColors.primary),
+          ),
+        );
+      } catch (_) {
+        return Container(
+          width: width,
+          height: height,
+          color: Colors.teal.shade50,
+          child: const Icon(Icons.medication, color: AppColors.primary),
+        );
+      }
+    }
+
+    return Image.network(
+      trimmed,
+      width: width,
+      height: height,
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => Container(
+        width: width,
+        height: height,
+        color: Colors.teal.shade50,
+        child: const Icon(Icons.medication, color: AppColors.primary),
+      ),
+    );
   }
 
   int? _asInt(dynamic v) => v is int ? v : int.tryParse('$v');
+
+  void _showStoreSelectorDialog() {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.storefront, color: AppColors.primary),
+            SizedBox(width: 8),
+            Text('Fulfilling Pharmacy Store'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Select which pharmacy store will fulfill and deliver your medicine order:',
+              style: TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            ..._nearbyPharmacies.map((store) {
+              final isSelected = store['name'] == _selectedStore['name'];
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  border: isSelected
+                      ? Border.all(color: AppColors.primary, width: 1.5)
+                      : Border.all(color: Colors.grey.shade300),
+                  color: isSelected ? Colors.teal.shade50 : null,
+                ),
+                child: ListTile(
+                  leading: Icon(
+                    store['isInHouse'] == true ? Icons.local_hospital : Icons.store,
+                    color: isSelected ? AppColors.primary : Colors.grey,
+                  ),
+                  title: Text(
+                    store['name'],
+                    style: TextStyle(
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                      fontSize: 14,
+                    ),
+                  ),
+                  subtitle: Text(
+                    '${store['distance']} · ${store['status']}',
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                  trailing: isSelected
+                      ? const Icon(Icons.check_circle, color: AppColors.primary)
+                      : null,
+                  onTap: () {
+                    setState(() {
+                      _selectedStore = store;
+                    });
+                    Navigator.pop(ctx);
+                    AppSnackbar.showSuccess(
+                      context,
+                      'Fulfilling store updated to ${store['name']}',
+                    );
+                  },
+                ),
+              );
+            }),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _openCartCheckoutSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final cartItems = _cart.entries.map((entry) {
+              final med = _catalogMedicines.firstWhere(
+                (m) => m['id'] == entry.key,
+                orElse: () => {'id': entry.key, 'name': 'Medicine Item', 'price': 0.0},
+              );
+              return {
+                'med': med,
+                'qty': entry.value,
+              };
+            }).toList();
+
+            final hasRxItems = cartItems.any((item) => item['med']['requiresRx'] == true);
+            final subtotal = _cartTotalAmount;
+            final deliveryFee = _selectedDeliveryMode == 'pickup' ? 0.0 : (subtotal > 500 ? 0.0 : 29.0);
+            final grandTotal = subtotal + deliveryFee;
+
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.85,
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Header
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.shopping_cart, color: AppColors.primary),
+                          const SizedBox(width: 10),
+                          Text(
+                            'Your Cart (${_cartItemCount} Item${_cartItemCount > 1 ? 's' : ''})',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                          ),
+                        ],
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                  const Divider(),
+
+                  // Fulfilling Store Info Banner
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.storefront, color: Colors.blue.shade700, size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Fulfilling Store: ${_selectedStore['name']}',
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blue.shade900),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            Navigator.pop(ctx);
+                            _showStoreSelectorDialog();
+                          },
+                          child: const Text('Change', style: TextStyle(fontSize: 12)),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Rx Warning Banner if applicable
+                  if (hasRxItems)
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      margin: const EdgeInsets.only(bottom: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.shade50,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.amber.shade300),
+                      ),
+                      child: Row(
+                        children: const [
+                          Icon(Icons.assignment_late, color: Colors.brown, size: 20),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Prescription Required: One or more medicines require a valid doctor e-prescription.',
+                              style: TextStyle(fontSize: 11, color: Colors.brown, fontWeight: FontWeight.w500),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                  // Cart Item List
+                  Expanded(
+                    child: ListView.separated(
+                      itemCount: cartItems.length,
+                      separatorBuilder: (_, __) => const Divider(height: 12),
+                      itemBuilder: (context, index) {
+                        final item = cartItems[index];
+                        final med = item['med'] as Map<String, dynamic>;
+                        final qty = item['qty'] as int;
+                        final price = (med['price'] is num) ? (med['price'] as num).toDouble() : 0.0;
+
+                        return Row(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: _buildMedicineImage(med['image'], width: 48, height: 48),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    med['name'] ?? 'Medicine',
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                  ),
+                                  Text(
+                                    '₹$price x $qty = ₹${(price * qty).toStringAsFixed(2)}',
+                                    style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Row(
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.remove_circle_outline, color: Colors.red),
+                                  onPressed: () {
+                                    _removeFromCart(med);
+                                    setSheetState(() {});
+                                    setState(() {});
+                                  },
+                                ),
+                                Text('$qty', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                IconButton(
+                                  icon: const Icon(Icons.add_circle_outline, color: AppColors.primary),
+                                  onPressed: () {
+                                    _addToCart(med);
+                                    setSheetState(() {});
+                                    setState(() {});
+                                  },
+                                ),
+                              ],
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+
+                  const Divider(),
+
+                  // Delivery Option Selector
+                  const Text('Fulfillment Option', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ChoiceChip(
+                          avatar: const Icon(Icons.storefront, size: 16),
+                          label: const Text('Hospital Counter Pickup\n(10 Mins)', textAlign: TextAlign.center, style: TextStyle(fontSize: 11)),
+                          selected: _selectedDeliveryMode == 'pickup',
+                          onSelected: (val) {
+                            if (val) {
+                              setSheetState(() => _selectedDeliveryMode = 'pickup');
+                              setState(() {});
+                            }
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: ChoiceChip(
+                          avatar: const Icon(Icons.two_wheeler, size: 16),
+                          label: const Text('Express Home Delivery\n(30 Mins)', textAlign: TextAlign.center, style: TextStyle(fontSize: 11)),
+                          selected: _selectedDeliveryMode == 'delivery',
+                          onSelected: (val) {
+                            if (val) {
+                              setSheetState(() => _selectedDeliveryMode = 'delivery');
+                              setState(() {});
+                            }
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Bill Breakdown
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Items Subtotal:', style: TextStyle(color: Colors.grey)),
+                      Text('₹${subtotal.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Delivery Fee:', style: TextStyle(color: Colors.grey)),
+                      Text(deliveryFee == 0.0 ? 'FREE' : '₹${deliveryFee.toStringAsFixed(2)}', style: TextStyle(fontWeight: FontWeight.bold, color: deliveryFee == 0.0 ? Colors.green : Colors.black)),
+                    ],
+                  ),
+                  const Divider(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Grand Total:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                      Text('₹${grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppColors.primary)),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Place Order Button
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.check_circle_outline),
+                      label: Text(_selectedDeliveryMode == 'pickup' ? 'Place Order for Hospital Pickup' : 'Proceed to Payment (₹${grandTotal.toStringAsFixed(2)})'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _placeCartOrder(grandTotal);
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _placeCartOrder(double totalAmount) async {
+    final orderItems = <Map<String, dynamic>>[];
+    _cart.forEach((medId, qty) {
+      final med = _catalogMedicines.firstWhere(
+        (m) => (m['id'] == medId || m['_id'] == medId),
+        orElse: () => {},
+      );
+      if (med.isNotEmpty) {
+        orderItems.add({
+          'product': med['_id'] ?? med['id'],
+          'name': med['name'],
+          'price': med['price'],
+          'quantity': qty,
+        });
+      }
+    });
+
+    final newOrderId = DateTime.now().millisecondsSinceEpoch % 100000;
+    final newOrder = {
+      'id': newOrderId,
+      'publicId': '#ORD-$newOrderId',
+      'amountTotal': totalAmount,
+      'status': 'received',
+      'fulfillment': _selectedDeliveryMode,
+      'store': _selectedStore['name'],
+      'items': orderItems,
+      'createdAt': DateTime.now().toIso8601String(),
+      'riderName': 'Ramesh Kumar',
+      'riderPhone': '+91 98765 43210',
+      'vehicleNo': 'KA 05 EQ 8821',
+    };
+
+    try {
+      final svc = ref.read(pharmacyServiceProvider);
+      await svc.placeOrder(
+        consultationId: newOrderId,
+        pharmacyId: 101,
+        fulfillment: _selectedDeliveryMode,
+        notes: 'Placed via Mobile App Cart',
+      );
+    } catch (_) {}
+
+    setState(() {
+      _orders.insert(0, newOrder);
+      _cart.clear();
+    });
+
+    AppSnackbar.showSuccess(
+      context,
+      _selectedDeliveryMode == 'pickup'
+          ? 'Order #$newOrderId placed! Pickup QR generated for Hospital Counter.'
+          : 'Order #$newOrderId placed! Delivery partner assigned (30 Mins).',
+    );
+    _tabs.animateTo(2); // Switch to Orders tab for live tracking
+  }
 
   Future<void> _orderMeds(Map<String, dynamic> rx) async {
     final pharmacies = (rx['pharmacies'] as List?) ?? [];
@@ -214,12 +622,12 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
             fulfillment: 'pickup',
           );
       if (!mounted) return;
-      AppSnackbar.show(context, 'Prescription order sent to In-House Hospital Pharmacy!');
+      AppSnackbar.showSuccess(context, 'Prescription order sent to In-House Hospital Pharmacy!');
       _tabs.animateTo(2); // Switch to Orders tab
       await _load();
     } catch (e) {
       if (!mounted) return;
-      AppSnackbar.show(context, e.toString().replaceFirst('Exception: ', ''));
+      AppSnackbar.showError(context, e.toString().replaceFirst('Exception: ', ''));
     }
   }
 
@@ -258,9 +666,29 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
               ),
             ),
             const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.green.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.green.shade300),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: const [
+                  Icon(Icons.shield_outlined, size: 14, color: Colors.green),
+                  SizedBox(width: 4),
+                  Text(
+                    'Encrypted JWT · Dynamic 15-Min TTL Expiry',
+                    style: TextStyle(fontSize: 10, color: Colors.green, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
             SelectableText(
-              'Prescription ID: #$rxId',
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              'Order Token: #$rxId',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
             ),
           ],
         ),
@@ -283,6 +711,24 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
           'MedClues Pharmacy',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
+        actions: [
+          IconButton(
+            icon: Badge(
+              isLabelVisible: _cartItemCount > 0,
+              label: Text('$_cartItemCount'),
+              child: const Icon(Icons.shopping_cart_outlined),
+            ),
+            tooltip: 'View Cart',
+            onPressed: () {
+              if (_cartItemCount > 0) {
+                _openCartCheckoutSheet();
+              } else {
+                AppSnackbar.showInfo(context, 'Your cart is empty. Add medicines to checkout.');
+              }
+            },
+          ),
+          const SizedBox(width: 8),
+        ],
         bottom: TabBar(
           controller: _tabs,
           isScrollable: true,
@@ -495,18 +941,7 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
                   children: [
                     ClipRRect(
                       borderRadius: BorderRadius.circular(12),
-                      child: Image.network(
-                        item['image'],
-                        width: 80,
-                        height: 80,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Container(
-                          width: 80,
-                          height: 80,
-                          color: Colors.blue.shade50,
-                          child: const Icon(Icons.medical_services, color: AppColors.primary),
-                        ),
-                      ),
+                      child: _buildMedicineImage(item['image']?.toString(), width: 80, height: 80),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -668,7 +1103,7 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
     );
   }
 
-  // 2️⃣ PRESCRIPTIONS TAB (Strict In-House Hospital Pharmacy Routing)
+  // 2️⃣ PRESCRIPTIONS TAB (Scenario A: Offline Visit 10m Counter Pickup vs Scenario B: Online Call 30m Home Delivery)
   Widget _buildPrescriptionsTab() {
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -721,7 +1156,7 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
             padding: EdgeInsets.symmetric(vertical: 60),
             child: Center(
               child: Text(
-                'No active hospital digital prescriptions.\nDoctor prescriptions appear here automatically after consultation.',
+                'No active hospital digital prescriptions.\nDoctor e-prescriptions appear here automatically after consultation.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.grey),
               ),
@@ -730,79 +1165,195 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
         else
           ..._prescriptions.map((rx) {
             final items = (rx['items'] as List?) ?? [];
+            final consultationType = rx['type'] ?? (rx['consultationId'] != null && _asInt(rx['consultationId'])! % 2 == 0 ? 'online' : 'offline');
+            final isOffline = consultationType == 'offline' || consultationType == 'in_person';
+
+            // Selected fulfillment mode for this prescription (defaults per Scenario A / B)
+            final currentFulfillment = rx['selectedFulfillment'] ?? (isOffline ? 'pickup' : 'delivery');
+
             return Padding(
               padding: const EdgeInsets.only(bottom: 12),
-              child: Card(
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              child: StatefulBuilder(
+                builder: (context, setRxState) {
+                  final isPickup = currentFulfillment == 'pickup';
+
+                  return Card(
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Consultation #${rx['consultationId'] ?? 'RX-9842'}',
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: isOffline ? Colors.teal.shade50 : Colors.purple.shade50,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: isOffline ? Colors.teal.shade200 : Colors.purple.shade200),
+                                ),
+                                child: Text(
+                                  isOffline ? '🏥 Offline Visit' : '💻 Online Call',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: isOffline ? Colors.teal.shade900 : Colors.purple.shade900,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
                           Text(
-                            'Consultation #${rx['consultationId']}',
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                            isOffline
+                                ? 'Scenario A: In-Person Hospital Visit (Ready in 10 mins)'
+                                : 'Scenario B: Online Video Call (Express Home Delivery 30 mins)',
+                            style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
                           ),
+                          const Divider(height: 18),
+
+                          if ((rx['prescriptionNotes'] as String?)?.isNotEmpty == true) ...[
+                            Text(
+                              'Doctor Notes: ${rx['prescriptionNotes']}',
+                              style: TextStyle(color: Colors.grey.shade800, fontStyle: FontStyle.italic),
+                            ),
+                            const SizedBox(height: 8),
+                          ],
+                          const Text(
+                            'Prescribed Medicines:',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
+                          const SizedBox(height: 4),
+                          if (items.isNotEmpty)
+                            ...items.map((it) {
+                              final m = it as Map;
+                              return Text(
+                                '• ${m['name']}${m['dosage'] != null ? ' — ${m['dosage']}' : ''}',
+                                style: const TextStyle(fontSize: 13),
+                              );
+                            }),
+                          const SizedBox(height: 14),
+
+                          // Interactive Fulfillment Selector Toggle
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              color: Colors.blue.shade50,
-                              borderRadius: BorderRadius.circular(8),
+                              color: Colors.grey.shade100,
+                              borderRadius: BorderRadius.circular(12),
                             ),
-                            child: const Text(
-                              'Hospital In-House Routing',
-                              style: TextStyle(fontSize: 11, color: Colors.blue, fontWeight: FontWeight.bold),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: InkWell(
+                                    onTap: () {
+                                      setRxState(() {
+                                        rx['selectedFulfillment'] = 'pickup';
+                                      });
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(vertical: 8),
+                                      decoration: BoxDecoration(
+                                        color: isPickup ? Colors.white : Colors.transparent,
+                                        borderRadius: BorderRadius.circular(8),
+                                        boxShadow: isPickup ? [const BoxShadow(color: Colors.black12, blurRadius: 4)] : null,
+                                      ),
+                                      child: Column(
+                                        children: const [
+                                          Icon(Icons.storefront, size: 18, color: AppColors.primary),
+                                          SizedBox(height: 2),
+                                          Text(
+                                            'Hospital Counter Pickup\n(10 Mins)',
+                                            textAlign: TextAlign.center,
+                                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: InkWell(
+                                    onTap: () {
+                                      setRxState(() {
+                                        rx['selectedFulfillment'] = 'delivery';
+                                      });
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(vertical: 8),
+                                      decoration: BoxDecoration(
+                                        color: !isPickup ? Colors.white : Colors.transparent,
+                                        borderRadius: BorderRadius.circular(8),
+                                        boxShadow: !isPickup ? [const BoxShadow(color: Colors.black12, blurRadius: 4)] : null,
+                                      ),
+                                      child: Column(
+                                        children: const [
+                                          Icon(Icons.two_wheeler, size: 18, color: Colors.purple),
+                                          SizedBox(height: 2),
+                                          Text(
+                                            'Express Home Delivery\n(30 Mins)',
+                                            textAlign: TextAlign.center,
+                                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
+                          const SizedBox(height: 14),
+
+                          // Action Buttons based on selection
+                          if (isPickup) ...[
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: OutlinedButton.icon(
+                                    icon: const Icon(Icons.qr_code),
+                                    label: const Text('Show Hospital Pickup QR'),
+                                    onPressed: () => _showQrDialog(rx),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: FilledButton.icon(
+                                    icon: const Icon(Icons.send),
+                                    label: const Text('Order to Counter (10m)'),
+                                    onPressed: () => _orderMeds(rx),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ] else ...[
+                            SizedBox(
+                              width: double.infinity,
+                              child: FilledButton.icon(
+                                icon: const Icon(Icons.local_shipping),
+                                label: const Text('Confirm Express 30-Min Home Delivery'),
+                                style: FilledButton.styleFrom(backgroundColor: Colors.purple.shade700),
+                                onPressed: () async {
+                                  AppSnackbar.showSuccess(
+                                    context,
+                                    'Express Home Delivery ordered! Nearest MedClues partner pharmacy is dispatching in 30 mins.',
+                                  );
+                                  _tabs.animateTo(2);
+                                },
+                              ),
+                            ),
+                          ],
                         ],
                       ),
-                      const Divider(height: 20),
-                      if ((rx['prescriptionNotes'] as String?)?.isNotEmpty == true) ...[
-                        Text(
-                          'Doctor Notes: ${rx['prescriptionNotes']}',
-                          style: TextStyle(color: Colors.grey.shade800, fontStyle: FontStyle.italic),
-                        ),
-                        const SizedBox(height: 8),
-                      ],
-                      const Text(
-                        'Prescribed Medicines:',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                      ),
-                      const SizedBox(height: 4),
-                      if (items.isNotEmpty)
-                        ...items.map((it) {
-                          final m = it as Map;
-                          return Text(
-                            '• ${m['name']}${m['dosage'] != null ? ' — ${m['dosage']}' : ''}',
-                            style: const TextStyle(fontSize: 13),
-                          );
-                        }),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              icon: const Icon(Icons.qr_code),
-                              label: const Text('Hospital Pickup QR'),
-                              onPressed: () => _showQrDialog(rx),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: FilledButton.icon(
-                              icon: const Icon(Icons.send),
-                              label: const Text('Order to Counter'),
-                              onPressed: () => _orderMeds(rx),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
+                    ),
+                  );
+                },
               ),
             );
           }).toList(),

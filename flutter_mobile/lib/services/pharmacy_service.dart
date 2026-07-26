@@ -33,11 +33,40 @@ class PharmacyService {
 
   Future<List<Map<String, dynamic>>> searchMedicines([String query = '']) async {
     try {
-      final res = await _api.get('/api/user/pharmacy/search', queryParameters: {'query': query});
-      return _list(res.data);
-    } catch (_) {
-      return [];
-    }
+      final res = await _api.get('/api/inventory', queryParameters: query.isNotEmpty ? {'query': query} : null);
+      if (res.data is List) {
+        final list = (res.data as List).map((item) {
+          final m = Map<String, dynamic>.from(item as Map);
+          final price = (m['price'] is num) ? (m['price'] as num).toDouble() : (m['costPrice'] is num ? (m['costPrice'] as num).toDouble() : 50.0);
+          final mrp = (m['mrp'] is num) ? (m['mrp'] as num).toDouble() : (price * 1.25);
+          return {
+            'id': m['_id'] ?? m['id'] ?? UniqueKey().toString(),
+            '_id': m['_id'] ?? m['id'],
+            'name': m['name'] ?? 'Unnamed Medicine',
+            'brand': m['brand'] ?? m['distributor'] ?? 'Pharma Brand',
+            'category': m['category'] ?? 'General',
+            'salt': m['salt'] ?? m['composition'] ?? 'Generic Composition',
+            'price': price,
+            'mrp': mrp,
+            'discount': m['discount'] ?? '15% OFF',
+            'requiresRx': m['requiresRx'] ?? false,
+            'image': m['image'] != null ? m['image'].toString() : '',
+            'stock': m['stock'] ?? 100,
+          };
+        }).toList();
+        if (list.isNotEmpty) return list;
+      }
+    } catch (_) {}
+
+    try {
+      final res = await _api.get('/api/integration/catalog/search', queryParameters: {'query': query});
+      if (res.data is Map && res.data['data'] is List) {
+        final list = (res.data['data'] as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        if (list.isNotEmpty) return list;
+      }
+    } catch (_) {}
+
+    return [];
   }
 
   Future<List<Map<String, dynamic>>> getOrders() async {
