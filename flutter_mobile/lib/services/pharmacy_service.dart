@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+import 'package:dio/dio.dart';
+
 import '../utils/json_parser.dart';
 import 'api_service.dart';
 
