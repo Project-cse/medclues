@@ -76,7 +76,7 @@ async def list_patient_prescriptions(user_id: int) -> dict:
     rows = await db.query(
             """
             SELECT c.id AS consultation_id, c.appointment_id, c.prescription,
-                   c.created_at, a.hospital_id, a.doc_data, a.slot_date
+                   c.created_at, a.hospital_id, a.doctor_data AS doc_data, a.slot_date
             FROM consultations c
             JOIN appointments a ON a.id = c.appointment_id
             WHERE a.user_id = $1
@@ -835,7 +835,7 @@ async def sync_prescription_to_express(consultation_id: int, hospital_id: int | 
     try:
         row = await db.fetch_row(
             """
-            SELECT c.*, a.doc_data, u.name AS patient_name, u.phone AS patient_phone, u.email AS patient_email
+            SELECT c.*, a.doctor_data AS doc_data, u.name AS patient_name, u.phone AS patient_phone, u.email AS patient_email
             FROM consultations c
             JOIN appointments a ON a.id = c.appointment_id
             LEFT JOIN users u ON u.id = a.user_id
