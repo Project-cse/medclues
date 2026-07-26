@@ -31,33 +31,53 @@ class PharmacyService {
     return _list(res.data);
   }
 
+  List<Map<String, dynamic>> _parseMedicineList(dynamic data) {
+    if (data is! List) return [];
+    return data.map((item) {
+      final m = Map<String, dynamic>.from(item as Map);
+      final price = (m['price'] is num)
+          ? (m['price'] as num).toDouble()
+          : (m['costPrice'] is num ? (m['costPrice'] as num).toDouble() : 50.0);
+      final mrp = (m['mrp'] is num)
+          ? (m['mrp'] as num).toDouble()
+          : (price * 1.25);
+      return {
+        'id': m['_id'] ?? m['id'] ?? 'med_${m['name']}',
+        '_id': m['_id'] ?? m['id'],
+        'name': m['name'] ?? 'Unnamed Medicine',
+        'brand': m['brand'] ?? m['distributor'] ?? 'Pharma Brand',
+        'category': m['category'] ?? 'General',
+        'salt': m['salt'] ?? m['composition'] ?? 'Generic Composition',
+        'price': price,
+        'mrp': mrp,
+        'discount': m['discount'] ?? '15% OFF',
+        'requiresRx': m['requiresRx'] ?? false,
+        'image': m['image'] != null ? m['image'].toString() : '',
+        'stock': m['stock'] ?? 100,
+      };
+    }).toList();
+  }
+
   Future<List<Map<String, dynamic>>> searchMedicines([String query = '']) async {
+    // 1. Primary API backend
     try {
       final res = await _api.get('/api/inventory', queryParameters: query.isNotEmpty ? {'query': query} : null);
-      if (res.data is List) {
-        final list = (res.data as List).map((item) {
-          final m = Map<String, dynamic>.from(item as Map);
-          final price = (m['price'] is num) ? (m['price'] as num).toDouble() : (m['costPrice'] is num ? (m['costPrice'] as num).toDouble() : 50.0);
-          final mrp = (m['mrp'] is num) ? (m['mrp'] as num).toDouble() : (price * 1.25);
-          return {
-            'id': m['_id'] ?? m['id'] ?? 'med_${m['name'] ?? DateTime.now().microsecondsSinceEpoch}',
-            '_id': m['_id'] ?? m['id'],
-            'name': m['name'] ?? 'Unnamed Medicine',
-            'brand': m['brand'] ?? m['distributor'] ?? 'Pharma Brand',
-            'category': m['category'] ?? 'General',
-            'salt': m['salt'] ?? m['composition'] ?? 'Generic Composition',
-            'price': price,
-            'mrp': mrp,
-            'discount': m['discount'] ?? '15% OFF',
-            'requiresRx': m['requiresRx'] ?? false,
-            'image': m['image'] != null ? m['image'].toString() : '',
-            'stock': m['stock'] ?? 100,
-          };
-        }).toList();
-        if (list.isNotEmpty) return list;
-      }
+      final list = _parseMedicineList(res.data);
+      if (list.isNotEmpty) return list;
     } catch (_) {}
 
+    // 2. Connected Medclues Pharmacy Backend on Render (Medclues-Pharmacy-main)
+    try {
+      final dio = Dio();
+      final res = await dio.get(
+        'https://medclues-pharmacy-backend.onrender.com/api/inventory',
+        queryParameters: query.isNotEmpty ? {'query': query} : null,
+      );
+      final list = _parseMedicineList(res.data);
+      if (list.isNotEmpty) return list;
+    } catch (_) {}
+
+    // 3. Integration Catalog endpoint
     try {
       final res = await _api.get('/api/integration/catalog/search', queryParameters: {'query': query});
       if (res.data is Map && res.data['data'] is List) {

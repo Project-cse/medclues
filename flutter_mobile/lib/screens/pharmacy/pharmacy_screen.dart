@@ -135,20 +135,17 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
     try {
       final svc = ref.read(pharmacyServiceProvider);
       final results = await Future.wait([
-        svc.getPrescriptions(),
-        svc.getOrders(),
-        svc.getPayments(),
-        svc.searchMedicines(_searchController.text),
+        svc.getPrescriptions().catchError((_) => <Map<String, dynamic>>[]),
+        svc.getOrders().catchError((_) => <Map<String, dynamic>>[]),
+        svc.getPayments().catchError((_) => <Map<String, dynamic>>[]),
+        svc.searchMedicines(_searchController.text).catchError((_) => <Map<String, dynamic>>[]),
       ]);
       if (!mounted) return;
       setState(() {
         _prescriptions = results[0];
         _orders = results[1];
         _payments = results[2];
-        final liveMeds = results[3];
-        if (liveMeds.isNotEmpty) {
-          _catalogMedicines = liveMeds;
-        }
+        _catalogMedicines = results[3];
         _loading = false;
       });
     } catch (e) {

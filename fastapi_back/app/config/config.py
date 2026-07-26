@@ -374,15 +374,18 @@ def cors_allowed_origins() -> list[str]:
 
 
 def cors_origin_regex() -> str:
-    """Regex patterns for CORS (localhost dev + Vercel admin & SHAMS deployments)."""
+    """Regex patterns for CORS (localhost dev + Vercel admin, pharmacy & SHAMS deployments)."""
     parts = [
         r"https?://(localhost|127\.0\.0\.1)(:\d+)?",
         # Production + preview: medclues-admin.vercel.app, medclues-admin-*-projects.vercel.app
         r"https://medclues-admin[a-z0-9-]*\.vercel\.app",
         # SHAMS Vercel deployments: shams-green.vercel.app, shams-*.vercel.app
         r"https://shams-[a-z0-9-]*\.vercel\.app",
+        # Pharmacy Vercel deployments: medclues-pharmacy.vercel.app, medclues-pharmacy-*.vercel.app
+        r"https://medclues-pharmacy[a-z0-9-]*\.vercel\.app",
     ]
     if settings.CORS_ORIGIN_REGEX:
         parts.append(settings.CORS_ORIGIN_REGEX)
     return "|".join(f"(?:{p})" for p in parts)
+
 
