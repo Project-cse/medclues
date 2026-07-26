@@ -118,6 +118,25 @@ async def schedule_covers_range(
     return row is not None and int(row["cnt"]) >= min_days
 
 
+async def slot_dates_in_range(
+    doctor_ref: str,
+    from_date: date,
+    to_date: date,
+) -> set:
+    """Distinct dates that already have at least one slot row in the window."""
+    rows = await db.query(
+        """
+        SELECT DISTINCT slot_date
+        FROM doctor_slots
+        WHERE doctor_ref = $1 AND slot_date >= $2 AND slot_date <= $3
+        """,
+        doctor_ref,
+        from_date,
+        to_date,
+    )
+    return {r["slot_date"] for r in (rows or []) if r.get("slot_date") is not None}
+
+
 async def insert_slot(row: Dict[str, Any]):
     sql = """
         INSERT INTO doctor_slots (

@@ -149,11 +149,7 @@ class AppointmentService {
     String mode = 'offline',
   }) async {
     final res = await _api.get<Map<String, dynamic>>(
-      ApiConfig.doctorScheduleSlots(doctorId),
-      queryParameters: {
-        'mode': mode,
-        '_': DateTime.now().millisecondsSinceEpoch,
-      },
+      ApiConfig.doctorScheduleSlots(doctorId, mode: mode),
     );
     final data = res.data ?? {};
     assertSuccess(data);

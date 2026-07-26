@@ -4,9 +4,11 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../providers/auth_provider.dart';
+import '../../providers/patient_provider.dart';
 import '../../routes/route_names.dart';
 import '../../l10n/l10n_extension.dart';
 import '../../utils/app_exception.dart';
+import '../../utils/signup_profile_draft.dart';
 import '../../utils/validators.dart';
 import '../../widgets/auth/auth_input.dart';
 import '../../widgets/auth/brand_logo_mark.dart';
@@ -53,6 +55,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     try {
       final ok = await ref.read(authProvider.notifier).loginWithGoogle();
       if (!mounted || !ok) return;
+      final u = ref.read(authProvider).user;
+      await SignupProfileDraft.save(
+        SignupProfileDraft(
+          name: u?.name,
+          email: u?.email,
+          phone: u?.phone,
+        ),
+      );
+      ref.invalidate(patientProfileProvider);
+      if (!mounted) return;
       context.go(RouteNames.dashboard);
     } catch (e) {
       if (!mounted) return;

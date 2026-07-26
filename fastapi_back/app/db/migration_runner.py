@@ -36,32 +36,87 @@ async def _mark_applied(version: str) -> None:
 
 
 def _split_sql_statements(sql: str) -> list[str]:
-    """Split on ';' while respecting $$ dollar-quotes and stripping full-line comments.
+    """Split on ';' while respecting $$ dollar-quotes and single-quoted strings.
 
-    Note: semicolons inside a `--` comment line still split the raw text; keep
-    migration comments free of `;` or put explanatory text on separate comment lines.
+    Also strips full-line `--` comments before returning each statement.
     """
     statements: list[str] = []
-    chunks = sql.split(";")
-    temp = []
-    for chunk in chunks:
-        temp.append(chunk)
-        # Semicolons inside function blocks (surrounded by $$) are kept together
-        joined = ";".join(temp)
-        if joined.count("$$") % 2 == 0:
-            stmt = joined.strip()
+    buf: list[str] = []
+    i = 0
+    n = len(sql)
+    in_single = False
+    in_dollar = False
+
+    while i < n:
+        ch = sql[i]
+        nxt = sql[i + 1] if i + 1 < n else ""
+
+        if in_dollar:
+            if ch == "$" and nxt == "$":
+                buf.append("$$")
+                i += 2
+                in_dollar = False
+                continue
+            buf.append(ch)
+            i += 1
+            continue
+
+        if in_single:
+            buf.append(ch)
+            if ch == "'" and nxt == "'":
+                # Escaped '' inside string
+                buf.append(nxt)
+                i += 2
+                continue
+            if ch == "'":
+                in_single = False
+            i += 1
+            continue
+
+        # Start of dollar-quote body ($$ ... $$)
+        if ch == "$" and nxt == "$":
+            buf.append("$$")
+            i += 2
+            in_dollar = True
+            continue
+
+        if ch == "'":
+            buf.append(ch)
+            in_single = True
+            i += 1
+            continue
+
+        # Line comment — consume until newline (do not treat ; inside as split)
+        if ch == "-" and nxt == "-":
+            while i < n and sql[i] != "\n":
+                buf.append(sql[i])
+                i += 1
+            continue
+
+        if ch == ";":
+            stmt = "".join(buf).strip()
             if stmt:
-                # Drop leading comment-only lines
-                lines = [ln for ln in stmt.splitlines() if ln.strip() and not ln.strip().startswith("--")]
+                lines = [
+                    ln
+                    for ln in stmt.splitlines()
+                    if ln.strip() and not ln.strip().startswith("--")
+                ]
                 if lines:
                     statements.append("\n".join(lines))
-            temp = []
-    if temp:
-        stmt = ";".join(temp).strip()
-        if stmt:
-            lines = [ln for ln in stmt.splitlines() if ln.strip() and not ln.strip().startswith("--")]
-            if lines:
-                statements.append("\n".join(lines))
+            buf = []
+            i += 1
+            continue
+
+        buf.append(ch)
+        i += 1
+
+    tail = "".join(buf).strip()
+    if tail:
+        lines = [
+            ln for ln in tail.splitlines() if ln.strip() and not ln.strip().startswith("--")
+        ]
+        if lines:
+            statements.append("\n".join(lines))
     return statements
 
 

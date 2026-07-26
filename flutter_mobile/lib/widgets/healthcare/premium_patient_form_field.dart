@@ -4,7 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'premium_healthcare_theme.dart';
 
-class PremiumPatientFormField extends StatelessWidget {
+class PremiumPatientFormField extends StatefulWidget {
   const PremiumPatientFormField({
     super.key,
     required this.label,
@@ -29,17 +29,61 @@ class PremiumPatientFormField extends StatelessWidget {
   final ValueChanged<String>? onChanged;
 
   @override
+  State<PremiumPatientFormField> createState() => _PremiumPatientFormFieldState();
+}
+
+class _PremiumPatientFormFieldState extends State<PremiumPatientFormField> {
+  final _fieldKey = GlobalKey<FormFieldState<String>>();
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_syncFromController);
+  }
+
+  @override
+  void didUpdateWidget(covariant PremiumPatientFormField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(_syncFromController);
+      widget.controller.addListener(_syncFromController);
+      _syncFromController();
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_syncFromController);
+    super.dispose();
+  }
+
+  void _syncFromController() {
+    final state = _fieldKey.currentState;
+    if (state == null) return;
+    final text = widget.controller.text;
+    if (state.value != text) {
+      state.didChange(text);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final iconColor = isDark
+        ? PremiumHealthcareTheme.textSecondary(context)
+        : PremiumHealthcareTheme.secondaryBlue;
+
     return FormField<String>(
-      initialValue: controller.text,
-      validator: validator,
+      key: _fieldKey,
+      initialValue: widget.controller.text,
+      validator: widget.validator,
       autovalidateMode: AutovalidateMode.onUserInteraction,
       builder: (state) {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              label,
+              widget.label,
               style: GoogleFonts.inter(
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
@@ -56,14 +100,14 @@ class PremiumPatientFormField extends StatelessWidget {
                 boxShadow: PremiumHealthcareTheme.fieldShadow(context),
               ),
               child: TextField(
-                controller: controller,
-                keyboardType: keyboardType,
-                readOnly: readOnly,
-                onTap: onTap,
-                inputFormatters: inputFormatters,
+                controller: widget.controller,
+                keyboardType: widget.keyboardType,
+                readOnly: widget.readOnly,
+                onTap: widget.onTap,
+                inputFormatters: widget.inputFormatters,
                 onChanged: (v) {
                   state.didChange(v);
-                  onChanged?.call(v);
+                  widget.onChanged?.call(v);
                 },
                 style: GoogleFonts.inter(
                   fontSize: 15,
@@ -73,8 +117,8 @@ class PremiumPatientFormField extends StatelessWidget {
                 decoration: InputDecoration(
                   border: InputBorder.none,
                   contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-                  prefixIcon: icon != null
-                      ? Icon(icon, size: 20, color: PremiumHealthcareTheme.secondaryBlue)
+                  prefixIcon: widget.icon != null
+                      ? Icon(widget.icon, size: 20, color: iconColor)
                       : null,
                 ),
               ),
@@ -116,6 +160,11 @@ class PremiumPatientDropdownField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final iconColor = isDark
+        ? PremiumHealthcareTheme.textSecondary(context)
+        : PremiumHealthcareTheme.secondaryBlue;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -140,16 +189,20 @@ class PremiumPatientDropdownField extends StatelessWidget {
             children: [
               if (icon != null) ...[
                 const SizedBox(width: 12),
-                Icon(icon, size: 20, color: PremiumHealthcareTheme.secondaryBlue),
+                Icon(icon, size: 20, color: iconColor),
               ],
               Expanded(
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
                     value: value,
                     isExpanded: true,
+                    dropdownColor: PremiumHealthcareTheme.white(context),
                     icon: Padding(
                       padding: const EdgeInsets.only(right: 12),
-                      child: Icon(Icons.keyboard_arrow_down_rounded, color: PremiumHealthcareTheme.textSecondary(context)),
+                      child: Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        color: PremiumHealthcareTheme.textSecondary(context),
+                      ),
                     ),
                     style: GoogleFonts.inter(
                       fontSize: 15,
@@ -188,15 +241,21 @@ class PremiumContinueButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final active = onPressed != null && !loading;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
       width: double.infinity,
       height: PremiumHealthcareTheme.ctaHeight,
       decoration: BoxDecoration(
-        gradient: active ? PremiumHealthcareTheme.ctaGradient : null,
-        color: active ? null : PremiumHealthcareTheme.border(context),
+        gradient: active && !isDark ? PremiumHealthcareTheme.ctaGradient : null,
+        color: active
+            ? (isDark ? const Color(0xFF2A2A2A) : null)
+            : PremiumHealthcareTheme.border(context),
         borderRadius: BorderRadius.circular(PremiumHealthcareTheme.ctaRadius),
-        boxShadow: active ? PremiumHealthcareTheme.ctaShadow : null,
+        border: active && isDark
+            ? Border.all(color: const Color(0xFF3A3A3A))
+            : null,
+        boxShadow: active && !isDark ? PremiumHealthcareTheme.ctaShadow : null,
       ),
       child: Material(
         color: Colors.transparent,
@@ -205,17 +264,22 @@ class PremiumContinueButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(PremiumHealthcareTheme.ctaRadius),
           child: Center(
             child: loading
-                ? const SizedBox(
+                ? SizedBox(
                     width: 24,
                     height: 24,
-                    child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      color: isDark ? Colors.white : Colors.white,
+                    ),
                   )
                 : Text(
                     label,
                     style: GoogleFonts.inter(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
-                      color: active ? Colors.white : PremiumHealthcareTheme.textSecondary(context),
+                      color: active
+                          ? Colors.white
+                          : PremiumHealthcareTheme.textSecondary(context),
                     ),
                   ),
           ),

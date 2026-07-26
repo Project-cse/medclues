@@ -156,10 +156,12 @@ class Config:
     CLOUDINARY_API_KEY = os.getenv("CLOUDINARY_API_KEY")
     CLOUDINARY_API_SECRET = os.getenv("CLOUDINARY_API_SECRET") or os.getenv("CLOUDINARY_SECRET_KEY")
 
-    # Payments
-    RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID")
-    RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET")
-    RAZORPAY_WEBHOOK_SECRET = os.getenv("RAZORPAY_WEBHOOK_SECRET")
+    # Payments — strip quotes/spaces so .env KEY = "rzp_…" still authenticates
+    RAZORPAY_KEY_ID = (os.getenv("RAZORPAY_KEY_ID") or "").replace('"', "").replace("'", "").strip() or None
+    RAZORPAY_KEY_SECRET = (os.getenv("RAZORPAY_KEY_SECRET") or "").replace('"', "").replace("'", "").strip() or None
+    RAZORPAY_WEBHOOK_SECRET = (os.getenv("RAZORPAY_WEBHOOK_SECRET") or "").replace('"', "").replace("'", "").strip() or None
+    # Local-only: skip live Razorpay and complete bookings with mock payments (DEBUG required).
+    RAZORPAY_MOCK = _env_bool("RAZORPAY_MOCK", False)
     STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
     PAYU_MERCHANT_KEY = os.getenv("PAYU_MERCHANT_KEY")
     PAYU_MERCHANT_SALT = os.getenv("PAYU_MERCHANT_SALT")

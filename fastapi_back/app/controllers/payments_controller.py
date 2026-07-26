@@ -24,6 +24,22 @@ def is_razorpay_test_mode() -> bool:
     return key.startswith("rzp_test_")
 
 
+def razorpay_mock_enabled() -> bool:
+    """Mock checkout is DEBUG-only so production never silently skips payment."""
+    return bool(settings.DEBUG and settings.RAZORPAY_MOCK)
+
+
+def _is_mock_order_id(order_id: str | None) -> bool:
+    return bool(order_id and str(order_id).startswith("order_mock_"))
+
+
+def _require_client():
+    if razorpay_mock_enabled():
+        return
+    if not razorpay_client:
+        raise RuntimeError("Razorpay not configured")
+
+
 def _normalize_symptoms_list(value) -> list[str]:
     if not value:
         return []
@@ -76,6 +92,13 @@ def _with_camel_aliases(payload: dict) -> dict:
 
 
 def get_razorpay_key():
+    if razorpay_mock_enabled():
+        return {
+            "success": True,
+            "key_id": "rzp_test_mock",
+            "test_mode": True,
+            "mock": True,
+        }
     if not settings.RAZORPAY_KEY_ID:
         return {"success": False, "message": "Razorpay not configured"}
     return {
@@ -83,21 +106,6 @@ def get_razorpay_key():
         "key_id": settings.RAZORPAY_KEY_ID,
         "test_mode": is_razorpay_test_mode(),
     }
-
-
-def _razorpay_test_mode_banner_html() -> str:
-    if not is_razorpay_test_mode():
-        return ""
-    return """
-  <div id="test-hint" style="max-width:520px;margin:16px auto;padding:14px 16px;background:#FEF3C7;border:1px solid #F59E0B;border-radius:12px;text-align:left;font-size:13px;color:#92400E;line-height:1.55;">
-    <strong>Test mode — how to pay successfully:</strong>
-    <ul style="margin:8px 0 0;padding-left:18px;">
-      <li><strong>Card (Indian test):</strong> <code>5267 3181 8797 5449</code> or <code>4111 1111 1111 1111</code> — any future expiry, any CVV. If OTP is asked, enter <code>1234</code> (test only, no real SMS).</li>
-      <li><strong>UPI ID</strong> (not QR scan): enter <code>success@razorpay</code></li>
-      <li><strong>Netbanking / Wallet:</strong> pick any bank/wallet → Success on the mock page</li>
-    </ul>
-    <p style="margin:8px 0 0;font-size:12px;">“International cards not accepted” means a non-Indian card was used. This account accepts Indian payments only.</p>
-  </div>"""
 
 
 def _js_str(value: str) -> str:
@@ -109,11 +117,6 @@ def _amount_to_paise(amount_raw) -> int:
     if value >= 100 and value == int(value):
         return int(value)
     return int(round(value * 100))
-
-
-def _require_client():
-    if not razorpay_client:
-        raise RuntimeError("Razorpay not configured")
 
 
 async def create_order(amount_inr: float, currency: str = "INR", receipt: str | None = None):
@@ -158,7 +161,6 @@ async def create_order(amount_inr: float, currency: str = "INR", receipt: str | 
 
 async def create_appointment_order(user_id: int, body: dict):
     try:
-        _require_client()
         doctor_id = body.get("doctor_id")
         if not doctor_id:
             return {"success": False, "message": "doctor_id is required"}
@@ -166,6 +168,23 @@ async def create_appointment_order(user_id: int, body: dict):
         amount_paise = _amount_to_paise(body.get("amount", 0))
         if amount_paise < 100:
             return {"success": False, "message": "Minimum amount is ₹1"}
+
+        actual_patient = body.get("actualPatient") or body.get("actual_patient") or {"isSelf": True}
+
+        # Same active-appointment policy as pay-on-visit — before Razorpay opens.
+        from app.services.appointment_lifecycle_service import (
+            AppointmentPolicyError,
+            assert_can_book,
+        )
+
+        try:
+            await assert_can_book(user_id, actual_patient=actual_patient)
+        except AppointmentPolicyError as exc:
+            return {
+                "success": False,
+                "message": exc.message,
+                "code": getattr(exc, "code", None) or "POLICY_VIOLATION",
+            }
 
         doc = await doctor_model.get_doctor_by_id(doctor_id)
         doctor_name = (doc or {}).get("name") or "Doctor"
@@ -178,28 +197,54 @@ async def create_appointment_order(user_id: int, body: dict):
         booking_notes = str(body.get("notes") or "")[:200]
         mode = "online" if str(body.get("mode") or "").lower() == "online" else "offline"
         visit_type = "online" if mode == "online" else "in-clinic"
-        actual_patient = body.get("actualPatient") or body.get("actual_patient") or {"isSelf": True}
-        order = await asyncio.to_thread(
-            razorpay_client.order.create,
-            data={
+
+        use_mock = razorpay_mock_enabled()
+        if not use_mock:
+            try:
+                _require_client()
+                order = await asyncio.to_thread(
+                    razorpay_client.order.create,
+                    data={
+                        "amount": amount_paise,
+                        "currency": body.get("currency", "INR"),
+                        "payment_capture": 1,
+                        "receipt": receipt,
+                        "notes": {
+                            "doctor_id": str(doctor_id),
+                            "user_id": str(user_id),
+                            "appointment_date": str(body.get("appointment_date") or ""),
+                            "appointment_time": str(body.get("appointment_time") or ""),
+                            "slot_id": str(body.get("slot_id") or body.get("slotId") or ""),
+                            "slot_type": str(body.get("slot_type") or body.get("slotType") or ""),
+                            "mode": mode,
+                            "visit_type": visit_type,
+                            "booking_notes": booking_notes,
+                            "symptoms": json.dumps(symptoms)[:500],
+                        },
+                    },
+                )
+            except Exception as e:
+                # Dead/mismatched keys: fall back to mock only in local DEBUG.
+                if settings.DEBUG and "authentication" in str(e).lower():
+                    log.warning(
+                        "Razorpay Authentication failed — using local mock payment (DEBUG). "
+                        "Replace RAZORPAY_KEY_ID/SECRET or set RAZORPAY_MOCK=true."
+                    )
+                    use_mock = True
+                    order = {
+                        "id": f"order_mock_{uuid.uuid4().hex[:16]}",
+                        "amount": amount_paise,
+                        "currency": body.get("currency", "INR"),
+                    }
+                else:
+                    raise
+        else:
+            order = {
+                "id": f"order_mock_{uuid.uuid4().hex[:16]}",
                 "amount": amount_paise,
                 "currency": body.get("currency", "INR"),
-                "payment_capture": 1,
-                "receipt": receipt,
-                "notes": {
-                    "doctor_id": str(doctor_id),
-                    "user_id": str(user_id),
-                    "appointment_date": str(body.get("appointment_date") or ""),
-                    "appointment_time": str(body.get("appointment_time") or ""),
-                    "slot_id": str(body.get("slot_id") or body.get("slotId") or ""),
-                    "slot_type": str(body.get("slot_type") or body.get("slotType") or ""),
-                    "mode": mode,
-                    "visit_type": visit_type,
-                    "booking_notes": booking_notes,
-                    "symptoms": json.dumps(symptoms)[:500],
-                },
-            },
-        )
+            }
+
         order_id = order.get("id")
         appointment_id = f"pending_{order_id}"
         checkout_token = uuid.uuid4().hex
@@ -227,6 +272,7 @@ async def create_appointment_order(user_id: int, body: dict):
                 "notes": body.get("notes") or "",
                 "symptoms": symptoms,
                 "actual_patient": actual_patient,
+                "mock": use_mock,
             },
         )
 
@@ -235,13 +281,20 @@ async def create_appointment_order(user_id: int, body: dict):
             "order_id": order_id,
             "amount": order.get("amount"),
             "currency": order.get("currency", "INR"),
-            "razorpay_key": settings.RAZORPAY_KEY_ID,
+            "razorpay_key": "rzp_test_mock" if use_mock else settings.RAZORPAY_KEY_ID,
             "doctor_name": doctor_name,
             "appointment_id": appointment_id,
             "checkout_token": checkout_token,
+            "mock": use_mock,
         })
     except Exception as e:
-        return {"success": False, "message": str(e)}
+        msg = str(e)
+        if "authentication" in msg.lower():
+            msg = (
+                f"{msg}. Check RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET "
+                "are a matching test or live pair."
+            )
+        return {"success": False, "message": msg}
 
 
 async def _resolve_pending_order(order_id: str) -> dict | None:
@@ -277,6 +330,15 @@ async def verify_signature(
     razorpay_signature: str,
 ):
     try:
+        # Local DEBUG mock orders never hit Razorpay.
+        if settings.DEBUG and _is_mock_order_id(razorpay_order_id):
+            if (
+                razorpay_signature == "mock_signature"
+                or str(razorpay_payment_id or "").startswith("pay_mock_")
+            ):
+                return {"success": True, "mock": True}
+            return {"success": False, "message": "Invalid mock payment signature"}
+
         _require_client()
         params = {
             "razorpay_order_id": razorpay_order_id,
@@ -287,6 +349,34 @@ async def verify_signature(
         return {"success": True}
     except Exception:
         return {"success": False, "message": "Invalid payment signature"}
+
+
+async def _refund_payment_best_effort(razorpay_payment_id: str, *, reason: str = "") -> bool:
+    """Best-effort full refund when booking cannot proceed after capture."""
+    if not razorpay_payment_id or str(razorpay_payment_id).startswith("pay_mock_"):
+        return False
+    if not razorpay_client:
+        return False
+    try:
+        await asyncio.to_thread(
+            razorpay_client.payment.refund,
+            razorpay_payment_id,
+            {"speed": "normal", "notes": {"reason": (reason or "booking_failed")[:40]}},
+        )
+        log.info(
+            "razorpay_refund_ok payment_id=%s reason=%s",
+            razorpay_payment_id,
+            reason,
+        )
+        return True
+    except Exception as exc:
+        log.error(
+            "razorpay_refund_failed payment_id=%s reason=%s err=%s",
+            razorpay_payment_id,
+            reason,
+            exc,
+        )
+        return False
 
 
 async def _book_after_payment(user_id: int, pending: dict, razorpay_order_id: str, razorpay_payment_id: str):
@@ -354,7 +444,24 @@ async def _book_after_payment(user_id: int, pending: dict, razorpay_order_id: st
         booked = await user_controller.book_appointment(user_id, book_body)
         if not booked.get("success", True) and booked.get("message"):
             await pt_model.release_claim(razorpay_order_id)
-            return {"success": False, "message": booked.get("message")}
+            fail_msg = str(booked.get("message") or "Booking failed after payment")
+            refunded = await _refund_payment_best_effort(
+                razorpay_payment_id,
+                reason="booking_policy_blocked",
+            )
+            if refunded:
+                fail_msg = f"{fail_msg} Your payment is being refunded automatically."
+            else:
+                fail_msg = (
+                    f"{fail_msg} Payment was captured — contact support with "
+                    f"payment id {razorpay_payment_id} for a refund."
+                )
+            return {
+                "success": False,
+                "message": fail_msg,
+                "paymentCaptured": True,
+                "refundInitiated": refunded,
+            }
 
         real_appointment_id = (
             booked.get("appointmentId")
@@ -448,6 +555,23 @@ async def get_order_status(user_id: int, order_id: str):
     row = await pt_model.get_by_order_id(order_id)
     if row and row.get("user_id") not in (None, user_id):
         return {"success": False, "message": "Unauthorized"}
+
+    if _is_mock_order_id(order_id):
+        paid = bool(row and row.get("status") == "paid")
+        pending = pt_model.row_to_pending(row) if row else None
+        return {
+            "success": True,
+            "order_id": order_id,
+            "order_status": "paid" if paid else "created",
+            "paid": paid,
+            "failed": False,
+            "amount_paise": int((row or {}).get("amount_paise") or 0),
+            "amount_paid_paise": int((row or {}).get("amount_paise") or 0) if paid else 0,
+            "payment_id": (row or {}).get("razorpay_payment_id"),
+            "pending_in_app": bool(row and row.get("status") == "pending"),
+            "doctor_name": (pending or {}).get("doctor_name") or (row or {}).get("doctor_name"),
+            "mock": True,
+        }
 
     try:
         _require_client()
@@ -602,7 +726,7 @@ async def record_failed_payment(
     }
 
 
-async def get_checkout_html(checkout_token: str) -> str | None:
+async def get_checkout_html(checkout_token: str, preferred_upi: str | None = None) -> str | None:
     row = await pt_model.get_by_checkout_token(checkout_token)
     if not row or not settings.RAZORPAY_KEY_ID:
         return None
@@ -629,22 +753,77 @@ async def get_checkout_html(checkout_token: str) -> str | None:
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>MedClues Payment</title>
   <style>
-    body {{ font-family: system-ui, sans-serif; background: #F0F4F8; margin: 0; padding: 24px; text-align: center; }}
-    h1 {{ color: #0EA5E9; font-size: 22px; }}
-    p {{ color: #64748B; }}
-    .loader {{ margin: 40px auto; width: 48px; height: 48px; border: 4px solid #E2E8F0; border-top-color: #0EA5E9; border-radius: 50%; animation: spin 0.8s linear infinite; }}
+    body {{ font-family: system-ui, sans-serif; background: #0B0B0B; margin: 0; padding: 24px; text-align: center; }}
+    h1 {{ color: #F5F5F5; font-size: 22px; }}
+    p {{ color: #A3A3A3; }}
+    .loader {{ margin: 40px auto; width: 48px; height: 48px; border: 4px solid #2E2E2E; border-top-color: #38BDF8; border-radius: 50%; animation: spin 0.8s linear infinite; }}
     @keyframes spin {{ to {{ transform: rotate(360deg); }} }}
   </style>
 </head>
 <body>
   <h1>MedClues</h1>
   <p id="status-msg">Opening secure Razorpay checkout…</p>
-  {_razorpay_test_mode_banner_html()}
   <div class="loader" id="loader"></div>
   <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
   <script>
     function goApp(query) {{
       try {{ window.location.href = "{primary_scheme}://payment" + (query || ""); }} catch (e) {{}}
+    }}
+    function showSuccess(response, data) {{
+      document.body.innerHTML =
+        '<div style="max-width:480px;margin:40px auto;padding:24px;background:#ECFDF5;border:1px solid #86EFAC;border-radius:16px;">' +
+        '<h1 style="color:#16A34A;margin:0 0 12px;">Payment &amp; booking successful</h1>' +
+        '<p style="color:#166534;line-height:1.5;">Close this tab and return to <strong>MedClues</strong>. Your appointment confirmation should appear automatically.</p>' +
+        '<p style="font-size:12px;color:#64748B;margin-top:16px;">Order: ' + response.razorpay_order_id + '</p>' +
+        (data.publicId ? '<p style="font-size:12px;color:#64748B;">Appointment ID: ' + data.publicId + '</p>' : '') +
+        (data.bookingId ? '<p style="font-size:12px;color:#64748B;">Receipt / QR: ' + data.bookingId + '</p>' : '') +
+        '</div>';
+    }}
+    function confirmCheckout(response, attempt) {{
+      var token = {checkout_token_js};
+      document.getElementById("loader").style.display = "block";
+      document.getElementById("status-msg").textContent =
+        attempt > 0
+          ? "Confirming payment… (retry " + attempt + ")"
+          : "Payment received — confirming your appointment…";
+      return fetch("/api/payments/checkout-complete", {{
+        method: "POST",
+        headers: {{ "Content-Type": "application/json" }},
+        body: JSON.stringify({{
+          checkout_token: token,
+          razorpay_order_id: response.razorpay_order_id,
+          razorpay_payment_id: response.razorpay_payment_id,
+          razorpay_signature: response.razorpay_signature
+        }})
+      }})
+      .then(function (r) {{ return r.json(); }})
+      .then(function (data) {{
+        if (data.success) {{
+          document.getElementById("loader").style.display = "none";
+          showSuccess(response, data);
+          return;
+        }}
+        var msg = (data.message || "Booking could not be confirmed").toString();
+        var busy = /being processed|retry shortly/i.test(msg);
+        if (busy && attempt < 3) {{
+          return new Promise(function (resolve) {{
+            setTimeout(function () {{ resolve(confirmCheckout(response, attempt + 1)); }}, 1200 * (attempt + 1));
+          }});
+        }}
+        document.getElementById("loader").style.display = "none";
+        document.getElementById("status-msg").textContent =
+          msg + " — return to the app and tap I've paid.";
+      }})
+      .catch(function () {{
+        if (attempt < 3) {{
+          return new Promise(function (resolve) {{
+            setTimeout(function () {{ resolve(confirmCheckout(response, attempt + 1)); }}, 1200 * (attempt + 1));
+          }});
+        }}
+        document.getElementById("loader").style.display = "none";
+        document.getElementById("status-msg").textContent =
+          "Payment succeeded but booking confirm failed — return to the app and tap I've paid.";
+      }});
     }}
     var options = {{
       key: "{key}",
@@ -653,46 +832,26 @@ async def get_checkout_html(checkout_token: str) -> str | None:
       name: "MedClues",
       description: "{description}",
       order_id: "{order_id}",
+      method: {{
+        upi: true,
+        card: true,
+        netbanking: true,
+        wallet: true
+      }},
+      config: {{
+        display: {{
+          sequence: ["upi", "card", "netbanking", "wallet"],
+          preferences: {{ show_default_blocks: true }}
+        }}
+      }},
       prefill: {{
         name: {prefill_name},
         email: {prefill_email},
-        contact: {prefill_contact}
+        contact: {prefill_contact},
+        method: "upi"
       }},
       handler: function (response) {{
-        var token = {checkout_token_js};
-        document.getElementById("loader").style.display = "none";
-        document.getElementById("status-msg").textContent = "Payment received — confirming your appointment…";
-        fetch("/api/payments/checkout-complete", {{
-          method: "POST",
-          headers: {{ "Content-Type": "application/json" }},
-          body: JSON.stringify({{
-            checkout_token: token,
-            razorpay_order_id: response.razorpay_order_id,
-            razorpay_payment_id: response.razorpay_payment_id,
-            razorpay_signature: response.razorpay_signature
-          }})
-        }})
-        .then(function (r) {{ return r.json(); }})
-        .then(function (data) {{
-          if (data.success) {{
-            document.body.innerHTML =
-              '<div style="max-width:480px;margin:40px auto;padding:24px;background:#ECFDF5;border:1px solid #86EFAC;border-radius:16px;">' +
-              '<h1 style="color:#16A34A;margin:0 0 12px;">Payment &amp; booking successful</h1>' +
-              '<p style="color:#166534;line-height:1.5;">Close this tab and return to <strong>MedClues</strong>. Your appointment confirmation should appear automatically.</p>' +
-              '<p style="font-size:12px;color:#64748B;margin-top:16px;">Order: ' + response.razorpay_order_id + '</p>' +
-              (data.publicId ? '<p style="font-size:12px;color:#64748B;">Appointment ID: ' + data.publicId + '</p>' : '') +
-              (data.bookingId ? '<p style="font-size:12px;color:#64748B;">Receipt / QR: ' + data.bookingId + '</p>' : '') +
-              '</div>';
-          }} else {{
-            document.getElementById("status-msg").textContent =
-              (data.message || "Booking could not be confirmed") +
-              " — return to the app and tap I've paid.";
-          }}
-        }})
-        .catch(function () {{
-          document.getElementById("status-msg").textContent =
-            "Payment succeeded but booking confirm failed — return to the app and tap I've paid.";
-        }});
+        confirmCheckout(response, 0);
       }},
       modal: {{
         ondismiss: function () {{
@@ -703,13 +862,16 @@ async def get_checkout_html(checkout_token: str) -> str | None:
           try {{ window.close(); }} catch (e) {{}}
         }}
       }},
-      theme: {{ color: "#0EA5E9" }}
+      theme: {{ color: "#1A1A1A" }}
     }};
     var rzp = new Razorpay(options);
     rzp.on("payment.failed", function (resp) {{
       var msg = (resp && resp.error && resp.error.description) ? resp.error.description : "Payment failed";
       if (/international/i.test(msg)) {{
         msg += " — Use Indian test card 5267 3181 8797 5449 or UPI ID success@razorpay (test mode).";
+      }}
+      if (/authentication/i.test(msg)) {{
+        msg += " — Razorpay Key ID and Secret must be a matching test or live pair.";
       }}
       document.getElementById("loader").style.display = "none";
       document.getElementById("status-msg").textContent = msg;

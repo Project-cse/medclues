@@ -234,7 +234,7 @@ async def get_doctor_schedule_slots(doctor_id: str, mode: str = "offline"):
     data = await doctor_slot_controller.get_doctor_slots(doctor_id, mode)
     return JSONResponse(
         content=data,
-        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+        headers={"Cache-Control": "public, max-age=15"},
     )
 
 # Public doctor details endpoint. Supports numeric ids and embedded ids like "emb_56".

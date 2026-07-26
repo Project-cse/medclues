@@ -142,6 +142,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           child: ListView(
             children: [
               _header(context),
+              // Greeting → hero → emergency → quick access → search → specialities
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
                 child: Text(
@@ -153,15 +154,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   ),
                 ),
               ),
-              // Search near top — no stagger (tour needs stable layout).
-              KeyedSubtree(
-                key: OnboardingTourKeys.search,
-                child: HomeSearchBar(
-                  controller: _searchController,
-                  onChanged: _onSearchChanged,
+              if (hasQuery) ...[
+                KeyedSubtree(
+                  key: OnboardingTourKeys.search,
+                  child: HomeSearchBar(
+                    controller: _searchController,
+                    onChanged: _onSearchChanged,
+                  ),
                 ),
-              ),
-              if (hasQuery)
                 HomeSearchResults(
                   results: searchResults,
                   loading: allDoctors.isLoading,
@@ -170,6 +170,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     setState(() => _query = '');
                   },
                 ),
+              ],
               if (!hasQuery) ...[
                 _heroBanner(context, greeting: greeting).dashboardStagger(0),
                 // No stagger on emergency — soft-tour measures this key.
@@ -184,6 +185,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   ),
                 ),
                 _quickAccessGrid(),
+                // Search sits directly above specialities (requested home layout).
+                KeyedSubtree(
+                  key: OnboardingTourKeys.search,
+                  child: HomeSearchBar(
+                    controller: _searchController,
+                    onChanged: _onSearchChanged,
+                  ),
+                ),
                 _sectionTitle(l10n.dashboardSpecialities).dashboardStagger(2),
                 const SpecialityGrid().dashboardStagger(3),
                 const SizedBox(height: 8),

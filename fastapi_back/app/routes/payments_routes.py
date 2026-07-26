@@ -31,8 +31,8 @@ async def razorpay_webhook(req: Request):
 
 
 @router.get("/checkout")
-async def payment_checkout(token: str):
-    html = await payments_controller.get_checkout_html(token)
+async def payment_checkout(token: str, preferred_upi: str | None = None):
+    html = await payments_controller.get_checkout_html(token, preferred_upi=preferred_upi)
     if not html:
         return HTMLResponse(
             "<h2>Invalid or expired payment link</h2><p>Please return to the app and try again.</p>",

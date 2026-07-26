@@ -64,11 +64,23 @@ class OnboardingNotifier extends StateNotifier<OnboardingUiState> {
   }
 
   Future<void> load() async {
-    if (state.phase != OnboardingPhase.done) {
+    // Never regress a locally finished onboarding back to setup/loading because
+    // a slow saveStatus race still reports needsOnboarding on the server.
+    final alreadyDone =
+        state.phase == OnboardingPhase.done && state.status.onboardingCompleted;
+    if (!alreadyDone) {
       state = state.copyWith(phase: OnboardingPhase.loading, error: null);
     }
     try {
-      final status = await _service.fetchStatus();
+      final status = await _service
+          .fetchStatus()
+          .timeout(const Duration(seconds: 12));
+      if (alreadyDone) {
+        if (!status.needsOnboarding) {
+          state = OnboardingUiState(phase: OnboardingPhase.done, status: status);
+        }
+        return;
+      }
       if (!status.needsOnboarding) {
         state = OnboardingUiState(phase: OnboardingPhase.done, status: status);
         return;
@@ -84,6 +96,7 @@ class OnboardingNotifier extends StateNotifier<OnboardingUiState> {
         showCompletion: status.profileCompleted && !status.onboardingCompleted,
       );
     } catch (e) {
+      if (alreadyDone) return;
       state = state.copyWith(phase: OnboardingPhase.done, error: e.toString());
     }
   }
@@ -186,7 +199,11 @@ class OnboardingNotifier extends StateNotifier<OnboardingUiState> {
     // Flip to "done" instantly so the UI advances to the home screen without
     // ever waiting on the network. Persist in the background with a retry.
     state = OnboardingUiState(phase: OnboardingPhase.done, status: next);
-    unawaited(_persistWithRetry(next));
+    try {
+      await _service.saveStatus(next).timeout(const Duration(seconds: 8));
+    } catch (_) {
+      unawaited(_persistWithRetry(next));
+    }
   }
 
   Future<void> _persistWithRetry(OnboardingStatus status, {int attempts = 3}) async {

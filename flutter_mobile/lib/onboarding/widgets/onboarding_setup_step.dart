@@ -14,6 +14,7 @@ import '../../models/patient_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/patient_provider.dart';
 import '../../routes/route_names.dart';
+import '../../utils/signup_profile_draft.dart';
 import '../../utils/validators.dart';
 import '../../widgets/healthcare/premium_healthcare_theme.dart';
 import '../providers/onboarding_provider.dart';
@@ -65,32 +66,51 @@ class _OnboardingSetupStepState extends ConsumerState<OnboardingSetupStep> {
     final authUser = ref.read(authProvider).user;
     final cached = ref.read(patientProfileProvider).valueOrNull;
     _applyPrefill(cached, authUser, force: true);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _bootstrap());
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final draft = await SignupProfileDraft.load();
+      if (!mounted) return;
+      if (draft != null) {
+        setState(() => _applyPrefill(null, authUser, force: false, draft: draft));
+      }
+      await _bootstrap();
+    });
   }
 
-  void _applyPrefill(PatientModel? p, dynamic authUser, {bool force = false}) {
+  void _applyPrefill(PatientModel? p, dynamic authUser, {bool force = false, SignupProfileDraft? draft}) {
     void setText(TextEditingController c, String? value) {
       final v = value?.trim() ?? '';
       if (v.isEmpty) return;
       if (force || c.text.trim().isEmpty) c.text = v;
     }
 
-    setText(_name, p?.name.trim().isNotEmpty == true ? p!.name : authUser?.name);
-    setText(_email, (p?.email.trim().isNotEmpty == true ? p!.email : authUser?.email));
+    setText(
+      _name,
+      p?.name.trim().isNotEmpty == true
+          ? p!.name
+          : (draft?.name ?? authUser?.name),
+    );
+    setText(
+      _email,
+      (p?.email.trim().isNotEmpty == true ? p!.email : (draft?.email ?? authUser?.email)),
+    );
     if (p?.emailVerified == true) _emailVerified = true;
     setText(
       _phone,
-      ProfileOptions.sanitize(p?.phone) ?? ProfileOptions.sanitize(authUser?.phone),
+      ProfileOptions.sanitize(p?.phone) ??
+          ProfileOptions.sanitize(draft?.phone) ??
+          ProfileOptions.sanitize(authUser?.phone),
     );
 
-    final g = ProfileOptions.normalizeGender(p?.gender);
+    final g = ProfileOptions.normalizeGender(p?.gender) ??
+        ProfileOptions.normalizeGender(draft?.gender);
     if (g != null && (force || _gender == null)) _gender = g;
-    final b = ProfileOptions.normalizeBloodGroup(p?.bloodGroup);
+    final b = ProfileOptions.normalizeBloodGroup(p?.bloodGroup) ??
+        ProfileOptions.normalizeBloodGroup(draft?.bloodGroup);
     if (b != null && (force || _bloodGroup == null)) _bloodGroup = b;
     if (p?.address != null && p!.address!.trim().isNotEmpty && (force || _address.text.trim().isEmpty)) {
       _address.text = p.address!;
     }
-    final dobRaw = ProfileOptions.sanitize(p?.dob);
+    final dobRaw = ProfileOptions.sanitize(p?.dob) ?? ProfileOptions.sanitize(draft?.dob);
     if (dobRaw != null && (force || _dob == null)) {
       _dob = DateTime.tryParse(dobRaw) ?? _tryParseDob(dobRaw);
     }
@@ -109,14 +129,27 @@ class _OnboardingSetupStepState extends ConsumerState<OnboardingSetupStep> {
   Future<void> _bootstrap() async {
     setState(() => _loadingProfile = true);
     try {
-      final p = await ref.refresh(patientProfileProvider.future).timeout(const Duration(seconds: 12));
+      final draft = await SignupProfileDraft.load();
+      final p = await ref
+          .refresh(patientProfileProvider.future)
+          .timeout(const Duration(seconds: 12));
       if (!mounted) return;
       setState(() {
-        _applyPrefill(p, ref.read(authProvider).user, force: true);
+        _applyPrefill(p, ref.read(authProvider).user, force: true, draft: draft);
         _loadingProfile = false;
       });
     } catch (_) {
-      if (mounted) setState(() => _loadingProfile = false);
+      try {
+        final draft = await SignupProfileDraft.load();
+        if (mounted) {
+          setState(() {
+            _applyPrefill(null, ref.read(authProvider).user, force: true, draft: draft);
+            _loadingProfile = false;
+          });
+        }
+      } catch (_) {
+        if (mounted) setState(() => _loadingProfile = false);
+      }
     }
   }
 
@@ -219,24 +252,59 @@ class _OnboardingSetupStepState extends ConsumerState<OnboardingSetupStep> {
 
     final service = ref.read(onboardingServiceProvider);
     final emergencyNotifier = ref.read(emergencySettingsProvider.notifier);
-    final router = GoRouter.of(context);
+    final onboarding = ref.read(onboardingProvider.notifier);
 
-    // Finish UI immediately — never wait on storage / API (was hanging the spinner).
-    ref.read(onboardingProvider.notifier).finishOnboarding();
-    router.go(RouteNames.dashboard);
+    String? saveError;
+    try {
+      // Persist profile + emergency contact first (so get-profile is not empty).
+      await Future.wait<void>([
+        service.updateProfile(updatedProfile).then((_) {}),
+        service
+            .addEmergencyContact(
+              name: contact.name,
+              phone: contact.phone,
+              relation: contact.relation ?? '',
+            )
+            .then((_) {}),
+        emergencyNotifier.upsertPrimaryContact(contact),
+      ]).timeout(const Duration(seconds: 15));
+    } catch (e) {
+      saveError = e.toString().replaceFirst('Exception: ', '');
+      // Still try individually so a single failure does not wipe all progress.
+      try {
+        await service.updateProfile(updatedProfile).timeout(const Duration(seconds: 8));
+      } catch (_) {}
+      try {
+        await service
+            .addEmergencyContact(
+              name: contact.name,
+              phone: contact.phone,
+              relation: contact.relation ?? '',
+            )
+            .timeout(const Duration(seconds: 8));
+      } catch (_) {}
+      try {
+        await emergencyNotifier.upsertPrimaryContact(contact);
+      } catch (_) {}
+    }
 
-    // Background sync only (fire-and-forget).
-    unawaited(emergencyNotifier.upsertPrimaryContact(contact).catchError((_) {}));
-    unawaited(service
-        .addEmergencyContact(
-          name: contact.name,
-          phone: contact.phone,
-          relation: contact.relation ?? '',
-        )
-        .catchError((_) {}));
-    unawaited(service.updateProfile(updatedProfile).then((_) {
-      ref.invalidate(patientProfileProvider);
-    }).catchError((_) {}));
+    // Unlock home. OnboardingManager lives above GoRouter, so never call
+    // GoRouter.of(context) here — that assertion was aborting the save.
+    await onboarding.finishOnboarding();
+    unawaited(SignupProfileDraft.clear());
+    ref.invalidate(patientProfileProvider);
+
+    if (!mounted) return;
+    setState(() {
+      _saving = false;
+      if (saveError != null) {
+        _error = 'Saved locally. Some sync failed: $saveError';
+      }
+    });
+
+    // Best-effort navigation if a router is available under this context.
+    final router = GoRouter.maybeOf(context);
+    router?.go(RouteNames.dashboard);
   }
 
   @override

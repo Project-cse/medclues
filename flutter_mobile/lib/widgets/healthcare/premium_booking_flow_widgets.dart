@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../themes/premium_theme_colors.dart';
 import 'premium_healthcare_theme.dart';
 
 class PremiumBookingHeroHeader extends StatelessWidget {
@@ -15,6 +16,19 @@ class PremiumBookingHeroHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final titleColor = isDark ? PremiumHealthcareTheme.text(context) : Colors.white;
+    final subtitleColor = isDark
+        ? PremiumHealthcareTheme.textSecondary(context)
+        : Colors.white.withValues(alpha: 0.85);
+    final closeBg = isDark
+        ? PremiumHealthcareTheme.white(context)
+        : Colors.white.withValues(alpha: 0.18);
+    final closeBorder = isDark
+        ? PremiumHealthcareTheme.border(context)
+        : Colors.white.withValues(alpha: 0.25);
+    final closeIcon = isDark ? PremiumHealthcareTheme.text(context) : Colors.white;
+
     return Container(
       width: double.infinity,
       padding: EdgeInsets.fromLTRB(
@@ -23,7 +37,13 @@ class PremiumBookingHeroHeader extends StatelessWidget {
         PremiumHealthcareTheme.horizontalPadding,
         48,
       ),
-      decoration: const BoxDecoration(gradient: PremiumHealthcareTheme.heroGradient),
+      decoration: BoxDecoration(
+        gradient: isDark ? null : PremiumHealthcareTheme.heroGradient,
+        color: isDark ? PremiumHealthcareTheme.background(context) : null,
+        border: isDark
+            ? Border(bottom: BorderSide(color: PremiumHealthcareTheme.border(context)))
+            : null,
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -36,7 +56,7 @@ class PremiumBookingHeroHeader extends StatelessWidget {
                   style: GoogleFonts.inter(
                     fontSize: 24,
                     fontWeight: FontWeight.w700,
-                    color: Colors.white,
+                    color: titleColor,
                     letterSpacing: -0.3,
                   ),
                 ),
@@ -46,7 +66,7 @@ class PremiumBookingHeroHeader extends StatelessWidget {
                   style: GoogleFonts.inter(
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
-                    color: Colors.white.withValues(alpha: 0.85),
+                    color: subtitleColor,
                   ),
                 ),
               ],
@@ -58,11 +78,11 @@ class PremiumBookingHeroHeader extends StatelessWidget {
               width: 40,
               height: 40,
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.18),
+                color: closeBg,
                 shape: BoxShape.circle,
-                border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
+                border: Border.all(color: closeBorder),
               ),
-              child: const Icon(Icons.close_rounded, color: Colors.white, size: 22),
+              child: Icon(Icons.close_rounded, color: closeIcon, size: 22),
             ),
           ),
         ],
@@ -110,6 +130,14 @@ class PremiumSectionTitleRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final badgeBg = isDark
+        ? PremiumThemeColors.of(context).chipSelectedBg
+        : const Color(0xFFEFF6FF);
+    final badgeIcon = isDark
+        ? PremiumHealthcareTheme.text(context)
+        : PremiumHealthcareTheme.secondaryBlue;
+
     return Row(
       children: [
         if (icon != null) ...[
@@ -117,10 +145,13 @@ class PremiumSectionTitleRow extends StatelessWidget {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: const Color(0xFFEFF6FF),
+              color: badgeBg,
               borderRadius: BorderRadius.circular(10),
+              border: isDark
+                  ? Border.all(color: PremiumHealthcareTheme.border(context))
+                  : null,
             ),
-            child: Icon(icon, size: 20, color: PremiumHealthcareTheme.secondaryBlue),
+            child: Icon(icon, size: 20, color: badgeIcon),
           ),
           const SizedBox(width: 12),
         ],

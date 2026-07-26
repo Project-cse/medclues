@@ -15,6 +15,7 @@ class RazorpayCheckoutResult {
 }
 
 /// Opens Razorpay's native checkout UI (Android / iOS).
+/// Uses default Razorpay display so UPI apps (PhonePe / GPay / Paytm) appear.
 class RazorpayCheckoutService {
   Razorpay? _razorpay;
 
@@ -27,7 +28,6 @@ class RazorpayCheckoutService {
     String? customerName,
     String? customerEmail,
     String? customerPhone,
-    bool preferUpi = true,
   }) async {
     final completer = Completer<RazorpayCheckoutResult>();
     _disposeRazorpay();
@@ -69,7 +69,14 @@ class RazorpayCheckoutService {
         fromError = err['description']?.toString() ?? err['reason']?.toString();
       }
       final msg = response.message ?? fromError ?? 'Payment failed';
-      finishWithError(Exception(msg));
+      final lower = msg.toLowerCase();
+      if (lower.contains('authentication')) {
+        finishWithError(Exception(
+          '$msg — Razorpay Key ID and Secret must be a matching test or live pair in the backend .env.',
+        ));
+      } else {
+        finishWithError(Exception(msg));
+      }
     });
 
     razorpay.on(Razorpay.EVENT_EXTERNAL_WALLET, (_) {});
@@ -87,24 +94,21 @@ class RazorpayCheckoutService {
         'netbanking': true,
         'wallet': true,
       },
+      // Default Razorpay blocks (PhonePe / GPay appear under UPI).
       'config': {
         'display': {
-          'blocks': {
-            'upi': {
-              'name': 'UPI — PhonePe, Google Pay, Paytm & UPI ID',
-              'instruments': [
-                {'method': 'upi'},
-              ],
-            },
+          'sequence': ['upi', 'card', 'netbanking', 'wallet'],
+          'preferences': {
+            'show_default_blocks': true,
           },
-          'sequence': preferUpi ? ['block.upi'] : ['block.upi'],
-          'preferences': {'show_default_blocks': true},
         },
       },
       'theme': {'color': '#009F93'},
     };
 
-    final prefill = <String, String>{};
+    final prefill = <String, String>{
+      'method': 'upi',
+    };
     if (customerName != null && customerName.isNotEmpty) {
       prefill['name'] = customerName;
     }
@@ -114,7 +118,7 @@ class RazorpayCheckoutService {
     if (customerPhone != null && customerPhone.isNotEmpty) {
       prefill['contact'] = customerPhone;
     }
-    if (prefill.isNotEmpty) options['prefill'] = prefill;
+    options['prefill'] = prefill;
 
     razorpay.open(options);
     return completer.future;

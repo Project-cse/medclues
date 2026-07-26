@@ -12,6 +12,7 @@ class PaymentOrderResult {
     required this.razorpayKey,
     required this.checkoutToken,
     required this.appointmentId,
+    this.mock = false,
   });
 
   final String orderId;
@@ -20,6 +21,7 @@ class PaymentOrderResult {
   final String razorpayKey;
   final String checkoutToken;
   final String appointmentId;
+  final bool mock;
 }
 
 class PaymentService {
@@ -77,6 +79,11 @@ class PaymentService {
       },
     );
     final data = res.data ?? {};
+    if (data['success'] == false) {
+      final raw = data['message']?.toString() ??
+          'Cannot start payment — booking not allowed';
+      throw Exception(_friendlyPaymentError(raw));
+    }
     final orderId =
         (data['order_id'] ?? data['orderId'])?.toString();
     final razorpayKey =
@@ -90,7 +97,8 @@ class PaymentService {
         checkoutToken == null ||
         checkoutToken.isEmpty) {
       throw Exception(
-          data['message']?.toString() ?? 'Failed to create payment order');
+          _friendlyPaymentError(
+              data['message']?.toString() ?? 'Failed to create payment order'));
     }
     return PaymentOrderResult(
       orderId: orderId,
@@ -100,12 +108,22 @@ class PaymentService {
       checkoutToken: checkoutToken,
       appointmentId:
           '${data['appointment_id'] ?? data['appointmentId'] ?? ''}',
+      mock: data['mock'] == true || orderId.startsWith('order_mock_'),
     );
   }
 
-  String checkoutUrl(String checkoutToken) {
+  static String _friendlyPaymentError(String raw) {
+    final lower = raw.toLowerCase();
+    if (lower.contains('authentication')) {
+      return '$raw — Razorpay Key ID and Secret must be a matching test or live pair in the backend .env.';
+    }
+    return raw;
+  }
+
+  String checkoutUrl(String checkoutToken, {String? preferredUpi}) {
     final base = ApiConfig.baseUrl.replaceAll(RegExp(r'/$'), '');
-    return '$base${ApiConfig.paymentsCheckout(checkoutToken)}';
+    final path = ApiConfig.paymentsCheckout(checkoutToken, preferredUpi: preferredUpi);
+    return '$base$path';
   }
 
   Future<Map<String, dynamic>> verifyAppointmentPayment({

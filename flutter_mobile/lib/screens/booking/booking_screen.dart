@@ -54,7 +54,6 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
 
   /// Pay in advance via Razorpay on the in-clinic booking flow (not video consult).
   bool _payOnline = false;
-  String _upiMethod = 'PhonePe';
   bool _booking = false;
   final _note = TextEditingController();
   final _dateScroll = ScrollController();
@@ -382,6 +381,16 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
     required PaymentOrderResult order,
     required DoctorModel doctor,
   }) async {
+    // Local DEBUG mock: complete booking without opening Razorpay.
+    if (order.mock || order.orderId.startsWith('order_mock_')) {
+      return paymentService.verifyAppointmentPayment(
+        orderId: order.orderId,
+        paymentId: 'pay_mock_${DateTime.now().millisecondsSinceEpoch}',
+        signature: 'mock_signature',
+        appointmentId: order.appointmentId,
+      );
+    }
+
     final useNativeCheckout = !kIsWeb && (Platform.isAndroid || Platform.isIOS);
     if (useNativeCheckout) {
       final user = ref.read(authProvider).user;
@@ -739,13 +748,13 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
     final slotMode = widget.preferOnline ? 'online' : 'offline';
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      // Prefetch only — do not invalidate (that discarded warm cache and forced a spinner).
       prefetchDoctorSchedule(ref, widget.doctorId, mode: slotMode);
-      _invalidateSchedule();
       if (ref.read(bookingPatientProvider) == null) {
         context.replace(_patientSelectorPath);
       }
     });
-    _slotRefreshTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+    _slotRefreshTimer = Timer.periodic(const Duration(seconds: 60), (_) {
       if (!mounted) return;
       _invalidateSchedule();
     });
@@ -1003,37 +1012,6 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
                           text: l10n.bookingPayOnlineBanner(
                               CurrencyFormatter.format(doctor.consultationFee)),
                         ),
-                        const SizedBox(height: 10),
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            'Pay with UPI',
-                            style: GoogleFonts.poppins(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            _upiChip('PhonePe', Icons.account_balance_wallet_rounded),
-                            _upiChip('Google Pay', Icons.payments_rounded),
-                            _upiChip('Paytm', Icons.qr_code_2_rounded),
-                            _upiChip('UPI ID', Icons.alternate_email_rounded),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          'Opens secure Razorpay checkout with UPI (PhonePe, GPay, Paytm, or UPI ID).',
-                          style: GoogleFonts.inter(
-                            fontSize: 11,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
                       ] else
                         Text(
                           l10n.bookingInClinicPayHint,
@@ -1286,29 +1264,6 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
             color: active ? Colors.white : PremiumBookingTheme.text(context),
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _upiChip(String label, IconData icon) {
-    final active = _upiMethod == label;
-    return ChoiceChip(
-      selected: active,
-      onSelected: (_) => setState(() {
-        _upiMethod = label;
-        _payOnline = true;
-      }),
-      avatar: Icon(icon, size: 16, color: active ? Colors.white : AppColors.medcluesTeal),
-      label: Text(label),
-      labelStyle: GoogleFonts.inter(
-        fontSize: 12,
-        fontWeight: FontWeight.w600,
-        color: active ? Colors.white : AppColors.textPrimary,
-      ),
-      selectedColor: AppColors.medcluesTeal,
-      backgroundColor: Colors.white,
-      side: BorderSide(
-        color: active ? AppColors.medcluesTeal : AppColors.border,
       ),
     );
   }

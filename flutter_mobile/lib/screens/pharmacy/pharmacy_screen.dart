@@ -157,6 +157,9 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
         _error = e.toString().replaceFirst('Exception: ', '');
         _loading = false;
       });
+    }
+  }
+
   Widget _buildMedicineImage(String? imageStr, {double width = 80, double height = 80}) {
     if (imageStr == null || imageStr.trim().isEmpty) {
       return Container(
@@ -252,11 +255,16 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
                     style: TextStyle(
                       fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                       fontSize: 14,
+                      // Selected row uses a light teal fill — keep text dark in dark theme.
+                      color: isSelected ? Colors.black87 : null,
                     ),
                   ),
                   subtitle: Text(
                     '${store['distance']} · ${store['status']}',
-                    style: const TextStyle(fontSize: 11),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isSelected ? Colors.black54 : null,
+                    ),
                   ),
                   trailing: isSelected
                       ? const Icon(Icons.check_circle, color: AppColors.primary)
@@ -308,7 +316,11 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
               };
             }).toList();
 
-            final hasRxItems = cartItems.any((item) => item['med']['requiresRx'] == true);
+            final hasRxItems = cartItems.any((item) {
+              final med = item['med'];
+              if (med is! Map) return false;
+              return med['requiresRx'] == true;
+            });
             final subtotal = _cartTotalAmount;
             final deliveryFee = _selectedDeliveryMode == 'pickup' ? 0.0 : (subtotal > 500 ? 0.0 : 29.0);
             final grandTotal = subtotal + deliveryFee;
@@ -1127,11 +1139,15 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
                     children: const [
                       Text(
                         'Have an External Paper Prescription?',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          color: Colors.black87,
+                        ),
                       ),
                       Text(
                         'Upload a picture to order medicines directly',
-                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                        style: TextStyle(fontSize: 12, color: Colors.black54),
                       ),
                     ],
                   ),

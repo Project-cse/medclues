@@ -159,19 +159,51 @@ async def count_active_by_user(user_id: int) -> int:
     return int(row["c"]) if row else 0
 
 
+async def count_active_self_for_user(user_id: int) -> int:
+    """Active appointments booked for the logged-in user themselves."""
+    row = await db.fetch_row(
+        """
+        SELECT COUNT(*)::int AS c FROM appointments
+        WHERE user_id = $1
+          AND COALESCE(cancelled, false) = false
+          AND COALESCE(is_completed, false) = false
+          AND LOWER(COALESCE(status, '')) NOT IN ('cancelled', 'completed')
+          AND UPPER(COALESCE(NULLIF(lifecycle_status, ''), 'BOOKED')) = ANY($2::varchar[])
+          AND COALESCE(actual_patient_is_self, true) = true
+        """,
+        int(user_id),
+        list(BLOCKING_STATUSES),
+    )
+    return int(row["c"]) if row else 0
+
+
 async def count_active_by_patient(*, patient_phone: str | None, patient_name: str | None, patient_age: Any | None, patient_gender: str | None) -> int:
     """
     Count bookings that still occupy the patient's active slot.
 
-    This is keyed off the *actual patient* (the one being booked), not the
-    logged-in user. That allows:
-    - booking for others while you have your own active appointment
-    - only one active appointment per patient identity
+    Prefer phone + name so two family members sharing one phone are distinct.
     """
     phone = (patient_phone or "").strip()
     name = (patient_name or "").strip()
     gender = (patient_gender or "").strip()
     age = patient_age
+
+    if phone and name:
+        row = await db.fetch_row(
+            """
+            SELECT COUNT(*)::int AS c FROM appointments
+            WHERE COALESCE(cancelled, false) = false
+              AND COALESCE(is_completed, false) = false
+              AND LOWER(COALESCE(status, '')) NOT IN ('cancelled', 'completed')
+              AND UPPER(COALESCE(NULLIF(lifecycle_status, ''), 'BOOKED')) = ANY($1::varchar[])
+              AND COALESCE(NULLIF(TRIM(actual_patient_phone), ''), '') = COALESCE(NULLIF(TRIM($2), ''), '')
+              AND LOWER(COALESCE(TRIM(actual_patient_name), '')) = LOWER(COALESCE(TRIM($3), ''))
+            """,
+            list(BLOCKING_STATUSES),
+            phone,
+            name,
+        )
+        return int(row["c"]) if row else 0
 
     if phone:
         row = await db.fetch_row(
@@ -182,14 +214,17 @@ async def count_active_by_patient(*, patient_phone: str | None, patient_name: st
               AND LOWER(COALESCE(status, '')) NOT IN ('cancelled', 'completed')
               AND UPPER(COALESCE(NULLIF(lifecycle_status, ''), 'BOOKED')) = ANY($1::varchar[])
               AND COALESCE(NULLIF(TRIM(actual_patient_phone), ''), '') = COALESCE(NULLIF(TRIM($2), ''), '')
+              AND COALESCE(actual_patient_is_self, true) = false
             """,
             list(BLOCKING_STATUSES),
             phone,
         )
         return int(row["c"]) if row else 0
 
-    # Fallback (no phone provided): match on name+age+gender, and require
-    # empty phone in DB rows.
+    if not name:
+        return 0
+
+    # Fallback (no phone): match on name+age+gender for non-self rows.
     row = await db.fetch_row(
         """
         SELECT COUNT(*)::int AS c FROM appointments
@@ -197,8 +232,9 @@ async def count_active_by_patient(*, patient_phone: str | None, patient_name: st
           AND COALESCE(is_completed, false) = false
           AND LOWER(COALESCE(status, '')) NOT IN ('cancelled', 'completed')
           AND UPPER(COALESCE(NULLIF(lifecycle_status, ''), 'BOOKED')) = ANY($1::varchar[])
+          AND COALESCE(actual_patient_is_self, true) = false
           AND COALESCE(NULLIF(TRIM(actual_patient_phone), ''), '') = ''
-          AND COALESCE(TRIM(actual_patient_name), '') = COALESCE(TRIM($2), '')
+          AND LOWER(COALESCE(TRIM(actual_patient_name), '')) = LOWER(COALESCE(TRIM($2), ''))
           AND COALESCE(CAST(actual_patient_age AS text), '') = COALESCE(CAST($3 AS text), '')
           AND COALESCE(TRIM(actual_patient_gender), '') = COALESCE(TRIM($4), '')
         """,
@@ -208,6 +244,15 @@ async def count_active_by_patient(*, patient_phone: str | None, patient_name: st
         gender,
     )
     return int(row["c"]) if row else 0
+
+
+def _patient_is_self(actual_patient: dict | None) -> bool:
+    if not actual_patient:
+        return True
+    raw = actual_patient.get("isSelf", actual_patient.get("is_self", True))
+    if isinstance(raw, str):
+        return raw.strip().lower() in {"1", "true", "yes", "y"}
+    return bool(raw)
 
 
 async def assert_can_book(
@@ -261,15 +306,20 @@ async def assert_can_book(
     except Exception as heal_err:
         log.warning("lifecycle heal before book failed for user %s: %s", user_id, heal_err)
 
-    patient_phone = None
-    patient_name = None
-    patient_age = None
-    patient_gender = None
-    if actual_patient:
-        patient_phone = actual_patient.get("phone")
-        patient_name = actual_patient.get("name")
-        patient_age = actual_patient.get("age")
-        patient_gender = actual_patient.get("gender")
+    # Self vs dependent: having your own active visit must NOT block booking for family.
+    if _patient_is_self(actual_patient):
+        active = await count_active_self_for_user(user_id)
+        if active > 0:
+            raise AppointmentPolicyError(
+                "Please complete, cancel, or close your existing appointment "
+                "before creating another one for yourself."
+            )
+        return
+
+    patient_phone = (actual_patient or {}).get("phone")
+    patient_name = (actual_patient or {}).get("name")
+    patient_age = (actual_patient or {}).get("age")
+    patient_gender = (actual_patient or {}).get("gender")
 
     active = await count_active_by_patient(
         patient_phone=patient_phone,
@@ -279,7 +329,7 @@ async def assert_can_book(
     )
     if active > 0:
         raise AppointmentPolicyError(
-            "Please complete, cancel, or close your existing appointment for this patient "
+            "Please complete, cancel, or close the existing appointment for this patient "
             "before creating another one."
         )
 

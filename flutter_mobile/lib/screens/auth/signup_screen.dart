@@ -7,11 +7,13 @@ import 'package:intl/intl.dart';
 
 import '../../constants/app_colors.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/patient_provider.dart';
 import '../../providers/service_providers.dart';
 import '../../routes/route_names.dart';
 import '../../services/google_auth_service.dart';
 import '../../services/phone_auth_service.dart';
 import '../../utils/app_exception.dart';
+import '../../utils/signup_profile_draft.dart';
 import '../../utils/validators.dart';
 import '../../widgets/animations/healthcare_motion.dart';
 import '../../widgets/animations/morph_action_button.dart';
@@ -211,6 +213,20 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
       final state = ref.read(authProvider);
       if (!mounted) return;
       if (state.status == AuthStatus.authenticated) {
+        final genderStorage = _gender == null
+            ? null
+            : LocalizedFormOptions.genderToStorage(_gender!, context.l10n);
+        await SignupProfileDraft.save(
+          SignupProfileDraft(
+            name: _name.text.trim(),
+            email: _email.text.trim(),
+            phone: _phone.text.trim(),
+            gender: genderStorage,
+            dob: _dob != null ? DateFormat('yyyy-MM-dd').format(_dob!) : null,
+            bloodGroup: _bloodGroup,
+          ),
+        );
+        ref.invalidate(patientProfileProvider);
         if (!mounted) return;
         setState(() {
           _btnState = MorphButtonState.success;
@@ -382,6 +398,16 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     try {
       final ok = await ref.read(authProvider.notifier).loginWithGoogle();
       if (!mounted || !ok) return;
+      final u = ref.read(authProvider).user;
+      await SignupProfileDraft.save(
+        SignupProfileDraft(
+          name: u?.name,
+          email: u?.email,
+          phone: u?.phone,
+        ),
+      );
+      ref.invalidate(patientProfileProvider);
+      if (!mounted) return;
       context.go(RouteNames.dashboard);
     } catch (e) {
       if (!mounted) return;

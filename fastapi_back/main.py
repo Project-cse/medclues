@@ -247,20 +247,36 @@ async def lifespan(app: FastAPI):
             asyncio.create_task(start_no_show_scheduler())
         except Exception as ns_err:
             log.warning("No-show scheduler could not start: %s", ns_err)
-    yield
-    # Shutdown logic
-    log.info("Stopping FastAPI application...")
     try:
-        from app.services.telegram_polling import stop_telegram_bot
-        await stop_telegram_bot()
-    except Exception:
-        pass
-    try:
-        from app.services.redis_client import close_redis
-        await close_redis()
-    except Exception:
-        pass
-    await db.disconnect()
+        yield
+    except asyncio.CancelledError:
+        # Normal when the process is stopped (Ctrl+C / --reload). Not an app bug.
+        log.info("Lifespan cancelled — shutting down.")
+        raise
+    finally:
+        # Shutdown logic (always run; ignore cancel during teardown)
+        log.info("Stopping FastAPI application...")
+        try:
+            from app.services.telegram_polling import stop_telegram_bot
+            await stop_telegram_bot()
+        except (asyncio.CancelledError, KeyboardInterrupt):
+            pass
+        except Exception:
+            pass
+        try:
+            from app.services.redis_client import close_redis
+            await close_redis()
+        except (asyncio.CancelledError, KeyboardInterrupt):
+            pass
+        except Exception:
+            pass
+        try:
+            await db.disconnect()
+        except (asyncio.CancelledError, KeyboardInterrupt):
+            pass
+        except Exception:
+            pass
+        log.info("FastAPI application stopped.")
 
 # Initialize FastAPI App
 app = FastAPI(
@@ -471,6 +487,14 @@ if not os.path.exists("uploads"):
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=int(settings.PORT), reload=True)
-
-# Trigger reload comment
+    # Quiet Ctrl+C on Windows: uvicorn>=0.29 re-raises KeyboardInterrupt and
+    # Starlette may log CancelledError during lifespan — neither is an app failure.
+    try:
+        uvicorn.run(
+            "main:app",
+            host="0.0.0.0",
+            port=int(settings.PORT),
+            reload=True,
+        )
+    except KeyboardInterrupt:
+        pass

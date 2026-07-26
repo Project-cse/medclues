@@ -31,13 +31,13 @@ class PremiumThemeColors {
   );
 
   static const dark = PremiumThemeColors(
-    background: Color(0xFF0B0F14),
-    surface: Color(0xFF141A22),
-    text: Color(0xFFF1F5F9),
-    textSecondary: Color(0xFF94A3B8),
-    border: Color(0xFF243044),
-    chipSelectedBg: Color(0xFF152A45),
-    securityBg: Color(0xFF0F1A2E),
+    background: Color(0xFF000000),
+    surface: Color(0xFF1A1A1A),
+    text: Color(0xFFF5F5F5),
+    textSecondary: Color(0xFFB0B0B0),
+    border: Color(0xFF2E2E2E),
+    chipSelectedBg: Color(0xFF2A2A2A),
+    securityBg: Color(0xFF1A1A1A),
   );
 
   static PremiumThemeColors of(BuildContext context) {

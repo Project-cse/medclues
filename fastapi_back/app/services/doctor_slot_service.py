@@ -382,6 +382,70 @@ async def _is_date_blocked_for_doctor(doctor_numeric_id: int, check_date: date) 
     return False
 
 
+async def _blocked_dates_in_range(
+    doctor_numeric_id: int,
+    start: date,
+    end: date,
+) -> set:
+    """Load hospital calendar + leaves once and return blocked dates in [start, end]."""
+    blocked: set = set()
+    hospital_id = None
+    try:
+        row = await db.fetch_row(
+            "SELECT hospital_id FROM doctors WHERE id = $1",
+            int(doctor_numeric_id),
+        )
+        if row and row.get("hospital_id"):
+            hospital_id = int(row["hospital_id"])
+    except Exception:
+        hospital_id = None
+
+    calendar = None
+    if hospital_id is not None:
+        try:
+            calendar = await doctor_schedule_model.get_hospital_calendar(hospital_id)
+        except Exception:
+            calendar = None
+
+    closed_days: list = []
+    holiday_dates: set = set()
+    if calendar:
+        closed_days = list(calendar.get("default_closed_days") or [0])
+        for h in calendar.get("holidays") or []:
+            d = h.get("date") if isinstance(h, dict) else None
+            if d:
+                holiday_dates.add(str(d))
+
+    leave_ranges = []
+    try:
+        leaves = await doctor_schedule_model.get_leaves_for_doctor(int(doctor_numeric_id))
+        for leave in leaves or []:
+            if str(leave.get("status") or "").lower() != "approved":
+                continue
+            ls = leave.get("start_date")
+            le = leave.get("end_date")
+            if ls and le:
+                leave_ranges.append((ls, le))
+    except Exception:
+        leave_ranges = []
+
+    iso_to_ours = {1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 0}
+    cursor = start
+    while cursor <= end:
+        day_num = iso_to_ours[cursor.isoweekday()]
+        if closed_days and day_num in closed_days:
+            blocked.add(cursor)
+        elif cursor.isoformat() in holiday_dates:
+            blocked.add(cursor)
+        else:
+            for ls, le in leave_ranges:
+                if ls <= cursor <= le:
+                    blocked.add(cursor)
+                    break
+        cursor += timedelta(days=1)
+    return blocked
+
+
 async def get_public_slots(doctor_ref: str, mode: str) -> Dict[str, Any]:
     mode = (mode or "offline").lower()
     if mode not in ("offline", "online"):
@@ -558,18 +622,28 @@ async def ensure_doctor_slots_for_doctor(doctor_ref: str):
     effective_days = window if window else SCHEDULE_DAYS
     start = _today_ist()
     end = start + timedelta(days=effective_days - 1)
-    if await doctor_slot_model.schedule_covers_range(
-        doctor_ref, start, end, effective_days
-    ):
+
+    blocked: set = set()
+    if not str(doctor_ref).startswith("emb_"):
+        blocked = await _blocked_dates_in_range(doctor_numeric_id, start, end)
+
+    existing = await doctor_slot_model.slot_dates_in_range(doctor_ref, start, end)
+
+    # Open (bookable) days that already have rows — blocked holidays need not have slots.
+    open_dates = [
+        start + timedelta(days=offset)
+        for offset in range(effective_days)
+        if (start + timedelta(days=offset)) not in blocked
+    ]
+    if open_dates and all(d in existing for d in open_dates):
         return
+
     tasks = []
     for offset in range(effective_days):
         target_date = start + timedelta(days=offset)
-        # Skip blocked dates (hospital holidays / doctor leaves) for dynamic scheduling
-        if not str(doctor_ref).startswith("emb_"):
-            blocked = await _is_date_blocked_for_doctor(doctor_numeric_id, target_date)
-            if blocked:
-                # Drop only available slots on this date; preserve booked/completed
+        if target_date in blocked:
+            # Drop only available slots on blocked dates; preserve booked/completed.
+            if target_date in existing:
                 await db.execute(
                     """
                     DELETE FROM doctor_slots
@@ -578,7 +652,9 @@ async def ensure_doctor_slots_for_doctor(doctor_ref: str):
                     doctor_ref,
                     target_date,
                 )
-                continue
+            continue
+        if target_date in existing:
+            continue
         tasks.append(generate_day_slots(doctor_ref, doctor_numeric_id, target_date))
     if tasks:
         await asyncio.gather(*tasks)

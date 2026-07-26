@@ -113,7 +113,13 @@ class ApiConfig {
   static const String paymentsConfirmOrder = '/api/payments/confirm-order';
   static const String paymentsFailed = '/api/payments/failed';
   static String paymentsStatus(String orderId) => '/api/payments/status/$orderId';
-  static String paymentsCheckout(String token) => '/api/payments/checkout?token=$token';
+  static String paymentsCheckout(String token, {String? preferredUpi}) {
+    final q = StringBuffer('/api/payments/checkout?token=${Uri.encodeQueryComponent(token)}');
+    if (preferredUpi != null && preferredUpi.trim().isNotEmpty) {
+      q.write('&preferred_upi=${Uri.encodeQueryComponent(preferredUpi.trim())}');
+    }
+    return q.toString();
+  }
   static const String paymentsRazorpayKey = '/api/payments/razorpay-key';
 
   static const String authForgotPassword = '/api/auth/forgot-password';

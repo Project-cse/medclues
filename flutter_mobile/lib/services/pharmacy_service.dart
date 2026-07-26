@@ -40,7 +40,7 @@ class PharmacyService {
           final price = (m['price'] is num) ? (m['price'] as num).toDouble() : (m['costPrice'] is num ? (m['costPrice'] as num).toDouble() : 50.0);
           final mrp = (m['mrp'] is num) ? (m['mrp'] as num).toDouble() : (price * 1.25);
           return {
-            'id': m['_id'] ?? m['id'] ?? UniqueKey().toString(),
+            'id': m['_id'] ?? m['id'] ?? 'med_${m['name'] ?? DateTime.now().microsecondsSinceEpoch}',
             '_id': m['_id'] ?? m['id'],
             'name': m['name'] ?? 'Unnamed Medicine',
             'brand': m['brand'] ?? m['distributor'] ?? 'Pharma Brand',
