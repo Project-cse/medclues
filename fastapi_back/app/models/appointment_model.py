@@ -159,6 +159,15 @@ async def create_appointment(app_data: Dict[str, Any]):
         doc = app_data.get('docData') or {}
         if isinstance(doc, dict):
             hospital_id = doc.get('hospitalId') or doc.get('hospital_id')
+    if hospital_id is None:
+        doc_id = app_data.get('docId') or app_data.get('doctor_id')
+        if doc_id is not None:
+            from app.models import doctor_model
+            doctor = await doctor_model.get_doctor_by_id(int(doc_id))
+            if doctor:
+                hospital_id = doctor.get('hospital_id') or doctor.get('hospitalId')
+    if hospital_id is None:
+        raise ValueError("hospital_id is required — doctor has no hospital assigned")
 
     sql = """
         INSERT INTO appointments (
@@ -203,7 +212,7 @@ async def create_appointment(app_data: Dict[str, Any]):
         app_data.get('slotId'),
         public_id,
         (app_data.get('source') or 'ONLINE'),
-        int(hospital_id) if hospital_id is not None else None,
+        int(hospital_id),
     )
     
     return await db.fetch_row(sql, *values)

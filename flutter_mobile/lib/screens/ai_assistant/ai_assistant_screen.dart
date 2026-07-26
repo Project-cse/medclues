@@ -751,6 +751,26 @@ class _MessageBubble extends StatelessWidget {
   }
 }
 
+/// Prefer amount_inr (rupees). Bare `amount` may be paise from payment APIs —
+/// only treat as INR when amount_inr is absent and unit is not paise.
+String _paymentAmountInr(Map<String, dynamic> item) {
+  final inr = item['amount_inr'] ?? item['amountInr'];
+  if (inr != null) {
+    final v = inr is num ? inr.toDouble() : double.tryParse('$inr');
+    if (v != null) return v.toStringAsFixed(v.truncateToDouble() == v ? 0 : 2);
+  }
+  final unit = (item['amount_unit'] ?? item['unit'] ?? '').toString().toLowerCase();
+  final raw = item['amount'] ?? item['amount_paise'] ?? item['amountPaise'];
+  final n = raw is num ? raw.toDouble() : double.tryParse('$raw');
+  if (n == null) return '0';
+  if (unit == 'paise' || item.containsKey('amount_paise') || item.containsKey('amountPaise')) {
+    final rupees = n / 100.0;
+    return rupees.toStringAsFixed(rupees.truncateToDouble() == rupees ? 0 : 2);
+  }
+  // Undocumented bare amount: assume INR (do not ×100 for display).
+  return n.toStringAsFixed(n.truncateToDouble() == n ? 0 : 2);
+}
+
 class _StructuredAssistantResult extends StatelessWidget {
   const _StructuredAssistantResult({
     required this.data,
@@ -889,6 +909,7 @@ class _StructuredAssistantResult extends StatelessWidget {
     if (type == 'payments') {
       return Column(
         children: items.take(5).map((item) {
+          final displayInr = _paymentAmountInr(item);
           return Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: _ResultCard(
@@ -897,7 +918,7 @@ class _StructuredAssistantResult extends StatelessWidget {
                   item['order_id']?.toString() ??
                   'Payment',
               subtitle:
-                  '₹${item['amount_inr'] ?? item['amount'] ?? 0} · ${item['status'] ?? ''}',
+                  '₹$displayInr · ${item['status'] ?? ''}',
             ),
           );
         }).toList(),

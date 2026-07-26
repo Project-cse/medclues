@@ -12,7 +12,7 @@ log = get_logger(__name__)
 
 _cached_token = None
 
-async def get_medichain_bot_token():
+async def get_medclues_bot_token():
     global _cached_token
     if not settings.MEDCLUES_BOT_BASE_URL or not settings.MEDCLUES_BOT_API_KEY:
         log.warning("MedClues Bot not configured")
@@ -38,12 +38,16 @@ async def get_medichain_bot_token():
         log.error("MedClues Bot auth error: %s", type(e).__name__)
         return _cached_token
 
+
+# Legacy alias
+get_medichain_bot_token = get_medclues_bot_token
+
 @router.post("/chat/stream")
 async def ai_chat_stream(req: Request):
     body = await req.json()
     message = body.get('message')
     
-    token = await get_medichain_bot_token()
+    token = await get_medclues_bot_token()
     if not token:
         async def error_generator():
             yield f"data: {json.dumps({'content': 'Authentication with the MedClues Bot service failed. Please check the backend .env configuration.'})}\n\n"

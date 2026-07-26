@@ -7,7 +7,12 @@ from urllib.parse import quote, urlencode
 
 from app.config.config import settings
 
-ANDROID_PACKAGE = "com.medichain.medichain_mobile"
+# Must match flutter_mobile android applicationId until the package-rename sprint.
+# Override via MEDCLUES_ANDROID_PACKAGE when the Play Store id changes.
+ANDROID_PACKAGE = (
+    (getattr(settings, "MEDCLUES_ANDROID_PACKAGE", None) or "").strip()
+    or "com.medichain.medichain_mobile"
+)
 
 
 def _scheme() -> str:

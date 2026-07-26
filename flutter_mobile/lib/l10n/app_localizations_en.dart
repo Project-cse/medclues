@@ -1494,6 +1494,39 @@ class AppLocalizationsEn extends AppLocalizations {
   String get statusDoctorOnBreak => 'Doctor on Break';
 
   @override
+  String get statusNextToConsult => 'Next to consult';
+
+  @override
+  String get statusNoShow => 'No show';
+
+  @override
+  String get statusMissed => 'Missed';
+
+  @override
+  String get statusRefundPending => 'Refund pending';
+
+  @override
+  String get statusRefunded => 'Refunded';
+
+  @override
+  String get statusFollowupAvailable => 'Follow-up available';
+
+  @override
+  String get statusFollowupUsed => 'Follow-up used';
+
+  @override
+  String get statusFollowupExpired => 'Follow-up expired';
+
+  @override
+  String get statusRescheduledOnce => 'Rescheduled';
+
+  @override
+  String get statusExpired => 'Expired';
+
+  @override
+  String get statusClosed => 'Closed';
+
+  @override
   String get queueYourToken => 'Your Token';
 
   @override

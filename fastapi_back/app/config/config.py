@@ -166,6 +166,7 @@ class Config:
     PAYU_MERCHANT_KEY = os.getenv("PAYU_MERCHANT_KEY")
     PAYU_MERCHANT_SALT = os.getenv("PAYU_MERCHANT_SALT")
     PAYU_BASE_URL = os.getenv("PAYU_BASE_URL")
+    MERCHANT_UPI_ID = (os.getenv("MERCHANT_UPI_ID") or "").strip()
 
     # AI
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
@@ -210,6 +211,10 @@ class Config:
     MEDCLUES_APP_DEEP_LINK_ALIASES = (
         os.getenv("MEDCLUES_APP_DEEP_LINK_ALIASES") or "mediclues,medichain"
     ).strip()
+    # Must match flutter_mobile android applicationId until package-rename sprint
+    MEDCLUES_ANDROID_PACKAGE = (
+        os.getenv("MEDCLUES_ANDROID_PACKAGE") or "com.medichain.medichain_mobile"
+    ).strip() or "com.medichain.medichain_mobile"
     EMAIL_USER = os.getenv("EMAIL_USER")
     EMAIL_APP_PASSWORD = os.getenv("EMAIL_APP_PASSWORD")
     # Public support inbox (testing: Gmail until support@medclues.com is provisioned)

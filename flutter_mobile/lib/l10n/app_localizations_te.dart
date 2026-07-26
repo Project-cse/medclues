@@ -1507,6 +1507,39 @@ class AppLocalizationsTe extends AppLocalizations {
   String get statusDoctorOnBreak => 'డాక్టర్ విరామంలో';
 
   @override
+  String get statusNextToConsult => 'తదుపరి కన్సల్ట్';
+
+  @override
+  String get statusNoShow => 'రాలేదు';
+
+  @override
+  String get statusMissed => 'తప్పిపోయింది';
+
+  @override
+  String get statusRefundPending => 'రీఫండ్ పెండింగ్';
+
+  @override
+  String get statusRefunded => 'రీఫండ్ అయింది';
+
+  @override
+  String get statusFollowupAvailable => 'ఫాలో-అప్ అందుబాటులో';
+
+  @override
+  String get statusFollowupUsed => 'ఫాలో-అప్ ఉపయోగించబడింది';
+
+  @override
+  String get statusFollowupExpired => 'ఫాలో-అప్ గడువు ముగిసింది';
+
+  @override
+  String get statusRescheduledOnce => 'మళ్లీ షెడ్యూల్';
+
+  @override
+  String get statusExpired => 'గడువు ముగిసింది';
+
+  @override
+  String get statusClosed => 'మూసివేయబడింది';
+
+  @override
   String get queueYourToken => 'మీ టోకెన్';
 
   @override

@@ -71,10 +71,11 @@ async def create_order(req: Request, user_id: int = Depends(auth_user)):
 
 @router.post("/appointment-order")
 async def appointment_payment_order(req: Request, user_id: int = Depends(auth_user)):
-    """Pay for an already-booked appointment (web book-then-pay flow)."""
-    from app.controllers import user_controller
+    """Pay for an already-booked appointment (amount in DB is INR → paise once)."""
     body = await req.json()
-    return await user_controller.payment_razorpay(body.get("appointmentId") or body.get("appointment_id"))
+    return await payments_controller.create_order_for_existing_appointment(
+        body.get("appointmentId") or body.get("appointment_id")
+    )
 
 
 @router.post("/appointment-verify")

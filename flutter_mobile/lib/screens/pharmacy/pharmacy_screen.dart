@@ -37,8 +37,9 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
 
   // Cart state management
   final Map<dynamic, int> _cart = {}; // medicineId -> quantity
-  late Map<String, dynamic> _selectedStore = _nearbyPharmacies.first;
+  Map<String, dynamic>? _selectedStore;
   String _selectedDeliveryMode = 'pickup'; // 'pickup' (10m counter) or 'delivery' (30m home)
+  List<Map<String, dynamic>> _nearbyPharmacies = [];
 
   int get _cartItemCount => _cart.values.fold(0, (sum, q) => sum + q);
 
@@ -81,39 +82,41 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
     });
   }
 
-  // Catalog data for "All Medicines" (loads live from Express Backend MongoDB)
+  // Catalog data for "All Medicines" (FastAPI /api/user/pharmacy/search)
   List<Map<String, dynamic>> _catalogMedicines = [];
 
-  // Nearby Pharmacies sample data
-  final List<Map<String, dynamic>> _nearbyPharmacies = [
-    {
-      'id': 101,
-      'name': 'KIMS Hospital In-House Pharmacy',
-      'address': 'Ground Floor, KIMS Hospital, Main Road, Guntur',
-      'distance': '0.1 km',
-      'status': 'OPEN 24/7',
-      'phone': '+91 863 2345678',
-      'isInHouse': true,
-    },
-    {
-      'id': 102,
-      'name': 'Apollo Pharmacy - Brodipet',
-      'address': 'D.No 4-5-23, Brodipet 2nd Line, Guntur',
-      'distance': '1.2 km',
-      'status': 'OPEN (Closes 10:30 PM)',
-      'phone': '+91 863 2223344',
-      'isInHouse': false,
-    },
-    {
-      'id': 103,
-      'name': 'MedPlus Pharmacy - Arundelpet',
-      'address': 'Main Road, Opposite SBI, Arundelpet, Guntur',
-      'distance': '2.4 km',
-      'status': 'OPEN (Closes 11:00 PM)',
-      'phone': '+91 863 2556677',
-      'isInHouse': false,
-    },
-  ];
+  List<Map<String, dynamic>> _pharmaciesFromPrescriptions(
+    List<Map<String, dynamic>> prescriptions,
+  ) {
+    final byId = <int, Map<String, dynamic>>{};
+    for (final rx in prescriptions) {
+      final list = (rx['pharmacies'] as List?) ?? const [];
+      for (final raw in list) {
+        if (raw is! Map) continue;
+        final p = Map<String, dynamic>.from(raw);
+        final id = p['id'] is int
+            ? p['id'] as int
+            : int.tryParse('${p['id'] ?? ''}');
+        if (id == null) continue;
+        byId.putIfAbsent(
+          id,
+          () => {
+            'id': id,
+            'name': p['name']?.toString() ?? 'Hospital pharmacy',
+            'address': p['address']?.toString() ?? '',
+            'status': (p['supportsPickup'] == false && p['supportsDelivery'] == false)
+                ? 'Limited'
+                : 'Hospital mapped',
+            'phone': p['phone']?.toString() ?? '',
+            'isInHouse': true,
+            'supportsPickup': p['supportsPickup'] != false,
+            'supportsDelivery': p['supportsDelivery'] == true,
+          },
+        );
+      }
+    }
+    return byId.values.toList();
+  }
 
   @override
   void initState() {
@@ -143,11 +146,17 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
         svc.searchMedicines(_searchController.text).catchError((_) => <Map<String, dynamic>>[]),
       ]);
       if (!mounted) return;
+      final stores = _pharmaciesFromPrescriptions(results[0]);
       setState(() {
         _prescriptions = results[0];
         _orders = results[1];
         _payments = results[2];
         _catalogMedicines = results[3];
+        _nearbyPharmacies = stores;
+        if (_selectedStore == null ||
+            stores.every((s) => s['id'] != _selectedStore?['id'])) {
+          _selectedStore = stores.isNotEmpty ? stores.first : null;
+        }
         _loading = false;
       });
     } catch (e) {
@@ -213,6 +222,13 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
   int? _asInt(dynamic v) => v is int ? v : int.tryParse('$v');
 
   void _showStoreSelectorDialog() {
+    if (_nearbyPharmacies.isEmpty) {
+      AppSnackbar.showError(
+        context,
+        AppLocalizations.of(context)!.pharmacyNoMapped,
+      );
+      return;
+    }
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -234,7 +250,8 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
             ),
             const SizedBox(height: 12),
             ..._nearbyPharmacies.map((store) {
-              final isSelected = store['name'] == _selectedStore['name'];
+              final isSelected = store['id'] == _selectedStore?['id'];
+              final status = (store['status'] ?? '').toString();
               return Container(
                 margin: const EdgeInsets.only(bottom: 8),
                 decoration: BoxDecoration(
@@ -250,16 +267,15 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
                     color: isSelected ? AppColors.primary : Colors.grey,
                   ),
                   title: Text(
-                    store['name'],
+                    store['name']?.toString() ?? 'Pharmacy',
                     style: TextStyle(
                       fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                       fontSize: 14,
-                      // Selected row uses a light teal fill — keep text dark in dark theme.
                       color: isSelected ? Colors.black87 : null,
                     ),
                   ),
                   subtitle: Text(
-                    '${store['distance']} · ${store['status']}',
+                    status.isEmpty ? 'Hospital mapped pharmacy' : status,
                     style: TextStyle(
                       fontSize: 11,
                       color: isSelected ? Colors.black54 : null,
@@ -365,7 +381,7 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            'Fulfilling Store: ${_selectedStore['name']}',
+                            'Fulfilling Store: ${_selectedStore?['name'] ?? 'Select a hospital pharmacy'}',
                             style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blue.shade900),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -536,7 +552,9 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
                     height: 48,
                     child: ElevatedButton.icon(
                       icon: const Icon(Icons.check_circle_outline),
-                      label: Text(_selectedDeliveryMode == 'pickup' ? 'Place Order for Hospital Pickup' : 'Proceed to Payment (₹${grandTotal.toStringAsFixed(2)})'),
+                      label: Text(_selectedDeliveryMode == 'pickup'
+                          ? 'Place Order for Hospital Pickup'
+                          : 'Place delivery order (₹${grandTotal.toStringAsFixed(2)})'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primary,
                         foregroundColor: Colors.white,
@@ -572,9 +590,9 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
     final rx = _prescriptions.first;
     final consultationId = _asInt(rx['consultationId']);
     final pharmacies = (rx['pharmacies'] as List?) ?? [];
-    final pharmacyId = pharmacies.isNotEmpty
-        ? _asInt((pharmacies.first as Map)['id'])
-        : null;
+    final selectedId = _asInt(_selectedStore?['id']);
+    final pharmacyId = selectedId ??
+        (pharmacies.isNotEmpty ? _asInt((pharmacies.first as Map)['id']) : null);
     if (consultationId == null || pharmacyId == null) {
       AppSnackbar.showError(
         context,
@@ -588,7 +606,8 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
             consultationId: consultationId,
             pharmacyId: pharmacyId,
             fulfillment: _selectedDeliveryMode,
-            notes: 'Cart checkout · ${_selectedStore['name']} · ₹$totalAmount',
+            notes:
+                'Cart checkout · ${_selectedStore?['name'] ?? 'pharmacy'} · ₹$totalAmount',
           );
       if (!mounted) return;
       setState(() {
@@ -611,6 +630,50 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
               .startsWith('PHO')) {
         await _showQrDialog(placed);
       }
+    } catch (e) {
+      if (!mounted) return;
+      AppSnackbar.showError(
+        context,
+        e.toString().replaceFirst('Exception: ', ''),
+      );
+    }
+  }
+
+  Future<void> _payPharmacyOrder(Map<String, dynamic> order) async {
+    final orderId = _asInt(order['id']);
+    if (orderId == null) {
+      AppSnackbar.showError(context, 'Order id missing.');
+      return;
+    }
+    try {
+      final pay = await ref.read(pharmacyServiceProvider).createPayment(orderId);
+      final key = (pay['razorpayKey'] ?? pay['key_id'] ?? '').toString();
+      final rzOrderId = (pay['razorpayOrderId'] ?? pay['id'] ?? '').toString();
+      final amountPaise = (pay['amountPaise'] is num)
+          ? (pay['amountPaise'] as num).toInt()
+          : ((pay['amount'] is num)
+              ? ((pay['amount'] as num) * 100).round()
+              : 0);
+      if (key.isEmpty || rzOrderId.isEmpty || amountPaise < 100) {
+        throw Exception(pay['message']?.toString() ?? 'Could not start payment');
+      }
+      final checkout = RazorpayCheckoutService();
+      final result = await checkout.openCheckout(
+        key: key,
+        orderId: rzOrderId,
+        amountPaise: amountPaise,
+        name: 'MedClues Pharmacy',
+        description: 'Pharmacy order #$orderId',
+      );
+      await ref.read(pharmacyServiceProvider).verifyPayment(
+            orderId: orderId,
+            razorpayOrderId: result.orderId,
+            razorpayPaymentId: result.paymentId,
+            razorpaySignature: result.signature,
+          );
+      if (!mounted) return;
+      AppSnackbar.showSuccess(context, 'Payment successful.');
+      await _load();
     } catch (e) {
       if (!mounted) return;
       AppSnackbar.showError(
@@ -786,7 +849,7 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
                           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                         ),
                         Text(
-                          'Fulfilling via ${_selectedStore['name']}',
+                          'Fulfilling via ${_selectedStore?['name'] ?? 'Select pharmacy'}',
                           style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -866,7 +929,7 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Fulfilling Store: ${_selectedStore['name']}',
+                        'Fulfilling Store: ${_selectedStore?['name'] ?? 'Select a hospital pharmacy'}',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 13,
@@ -874,7 +937,11 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
                         ),
                       ),
                       Text(
-                        'Single pharmacy delivery point · ${_selectedStore['address']}',
+                        _selectedStore == null
+                            ? 'Mapped from your prescriptions when available'
+                            : ((_selectedStore!['address']?.toString().isNotEmpty ?? false)
+                                ? _selectedStore!['address'].toString()
+                                : 'Hospital mapped pharmacy'),
                         style: TextStyle(fontSize: 11, color: Colors.blue.shade800),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -1115,7 +1182,10 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
           FilledButton(
             onPressed: () {
               Navigator.pop(ctx);
-              AppSnackbar.show(context, 'Paper prescription uploaded! Pharmacy team is verifying.');
+              AppSnackbar.showError(
+                context,
+                'Paper prescription upload is not available yet. Use an in-app prescription to order.',
+              );
             },
             child: const Text('Upload & Submit'),
           ),
@@ -1483,7 +1553,7 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
         final pho = (o['publicId'] ?? o['public_id'] ?? '').toString().trim();
         final publicId = pho.toUpperCase().startsWith('PHO')
             ? pho.toUpperCase()
-            : (pho.isNotEmpty ? pho : 'Pending ID');
+            : (pho.isNotEmpty ? pho : null);
         final isPickup = '${o['fulfillment'] ?? o['selectedFulfillment'] ?? 'pickup'}'
             .toLowerCase()
             .contains('pickup');
@@ -1537,7 +1607,9 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Order ID: $publicId ${total != null ? '· Total: ₹$total' : ''}',
+                  publicId != null
+                      ? 'Order ID: $publicId${total != null ? ' · Total: ₹$total' : ''}'
+                      : (total != null ? 'ID pending · Total: ₹$total' : 'ID pending'),
                   style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
                 ),
                 const SizedBox(height: 12),
@@ -1632,6 +1704,16 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
                       ),
                       const SizedBox(width: 8),
                     ],
+                    if (rawStatus == 'billed') ...[
+                      Expanded(
+                        child: FilledButton.icon(
+                          icon: const Icon(Icons.payment, size: 16),
+                          label: const Text('Pay bill'),
+                          onPressed: () => _payPharmacyOrder(o),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
                     if (currentStep >= 3 && hasRider) ...[
                       Expanded(
                         child: FilledButton.icon(
@@ -1679,6 +1761,12 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
       return;
     }
     final deliveryOtp = order['otp']?.toString() ?? '—';
+    final etaText = (order['etaText'] ?? order['eta'] ?? order['riderEta'])?.toString().trim();
+    final distanceText = (order['distanceText'] ?? order['riderDistance'])?.toString().trim();
+    final etaLine = [
+      if (distanceText != null && distanceText.isNotEmpty) distanceText,
+      if (etaText != null && etaText.isNotEmpty) etaText,
+    ].join(' · ');
 
     showModalBottomSheet<void>(
       context: context,
@@ -1705,7 +1793,6 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
               ],
             ),
             const Divider(),
-            // Mock Animated Map Box (Swiggy / Rapido Style)
             Container(
               height: 180,
               width: double.infinity,
@@ -1732,15 +1819,20 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
                         ),
                         child: const Icon(Icons.two_wheeler, color: Colors.white, size: 28),
                       ),
-                      const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(8),
+                      if (etaLine.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            etaLine,
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.purple),
+                          ),
                         ),
-                        child: const Text('Rider 1.2 km away · Arriving in 8 mins', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.purple)),
-                      ),
+                      ],
                     ],
                   ),
                 ],
@@ -1864,7 +1956,10 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
             ElevatedButton(
               onPressed: () {
                 Navigator.pop(ctx);
-                AppSnackbar.show(context, 'Thank you! Your $rating-star review has been submitted.');
+                AppSnackbar.showError(
+                  context,
+                  'Order reviews are not available yet. Please contact support if you had an issue.',
+                );
               },
               style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
               child: const Text('Submit Review'),
@@ -1912,15 +2007,30 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
     );
   }
 
-  // 4️⃣ NEARBY PHARMACIES TAB
+  // 4️⃣ HOSPITAL-MAPPED PHARMACIES (from prescriptions API)
   Widget _buildNearbyPharmaciesTab() {
+    if (_nearbyPharmacies.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(
+            AppLocalizations.of(context)!.pharmacyNoMapped,
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.grey.shade700),
+          ),
+        ),
+      );
+    }
     return ListView.builder(
       padding: const EdgeInsets.all(16),
       itemCount: _nearbyPharmacies.length,
       itemBuilder: (_, i) {
         final store = _nearbyPharmacies[i];
         final isInHouse = store['isInHouse'] == true;
-        final isSelected = store['name'] == _selectedStore['name'];
+        final isSelected = store['id'] == _selectedStore?['id'];
+        final phone = (store['phone'] ?? '').toString().trim();
+        final address = (store['address'] ?? '').toString().trim();
+        final status = (store['status'] ?? 'Hospital mapped').toString();
 
         return Card(
           margin: const EdgeInsets.only(bottom: 12),
@@ -1939,7 +2049,7 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
                   children: [
                     Expanded(
                       child: Text(
-                        store['name'],
+                        store['name']?.toString() ?? 'Pharmacy',
                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                       ),
                     ),
@@ -1958,45 +2068,47 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
                       ),
                   ],
                 ),
-                const SizedBox(height: 6),
-                Text(
-                  store['address'],
-                  style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
-                ),
+                if (address.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    address,
+                    style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
+                  ),
+                ],
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    Icon(Icons.near_me, size: 14, color: Colors.blue.shade700),
+                    Icon(Icons.local_pharmacy, size: 14, color: Colors.green.shade700),
                     const SizedBox(width: 4),
-                    Text(store['distance'], style: TextStyle(fontSize: 12, color: Colors.blue.shade700)),
-                    const SizedBox(width: 16),
-                    Icon(Icons.access_time, size: 14, color: Colors.green.shade700),
-                    const SizedBox(width: 4),
-                    Text(store['status'], style: TextStyle(fontSize: 12, color: Colors.green.shade700)),
+                    Text(status, style: TextStyle(fontSize: 12, color: Colors.green.shade700)),
                   ],
                 ),
                 const SizedBox(height: 12),
                 Row(
                   children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        icon: const Icon(Icons.phone, size: 14),
-                        label: const Text('Call Store', style: TextStyle(fontSize: 12)),
-                        onPressed: () => launchUrl(Uri.parse('tel:${store['phone']}')),
+                    if (phone.isNotEmpty) ...[
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          icon: const Icon(Icons.phone, size: 14),
+                          label: const Text('Call Store', style: TextStyle(fontSize: 12)),
+                          onPressed: () => launchUrl(Uri.parse('tel:$phone')),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        icon: const Icon(Icons.directions, size: 14),
-                        label: const Text('Directions', style: TextStyle(fontSize: 12)),
-                        onPressed: () {
-                          final query = Uri.encodeComponent('${store['name']} ${store['address']}');
-                          launchUrl(Uri.parse('https://www.google.com/maps/search/?api=1&query=$query'));
-                        },
+                      const SizedBox(width: 6),
+                    ],
+                    if (address.isNotEmpty) ...[
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          icon: const Icon(Icons.directions, size: 14),
+                          label: const Text('Directions', style: TextStyle(fontSize: 12)),
+                          onPressed: () {
+                            final query = Uri.encodeComponent('${store['name']} $address');
+                            launchUrl(Uri.parse('https://www.google.com/maps/search/?api=1&query=$query'));
+                          },
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 6),
+                      const SizedBox(width: 6),
+                    ],
                     Expanded(
                       child: FilledButton.icon(
                         icon: const Icon(Icons.shopping_bag, size: 14),
@@ -2007,7 +2119,7 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
                         onPressed: () {
                           setState(() {
                             _selectedStore = store;
-                            _tabs.animateTo(0); // Switch to All Medicines tab
+                            _tabs.animateTo(0);
                           });
                           AppSnackbar.show(
                             context,

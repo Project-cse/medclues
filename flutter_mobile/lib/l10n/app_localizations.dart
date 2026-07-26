@@ -2887,19 +2887,19 @@ abstract class AppLocalizations {
   /// No description provided for @statusCheckedIn.
   ///
   /// In en, this message translates to:
-  /// **'Checked In'**
+  /// **'Checked in'**
   String get statusCheckedIn;
 
   /// No description provided for @statusInQueue.
   ///
   /// In en, this message translates to:
-  /// **'In Queue'**
+  /// **'Checked in'**
   String get statusInQueue;
 
   /// No description provided for @statusInConsultation.
   ///
   /// In en, this message translates to:
-  /// **'In Consultation'**
+  /// **'In progress'**
   String get statusInConsultation;
 
   /// No description provided for @statusCompleted.
@@ -2931,6 +2931,72 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Doctor on Break'**
   String get statusDoctorOnBreak;
+
+  /// No description provided for @statusNextToConsult.
+  ///
+  /// In en, this message translates to:
+  /// **'Next to consult'**
+  String get statusNextToConsult;
+
+  /// No description provided for @statusNoShow.
+  ///
+  /// In en, this message translates to:
+  /// **'No show'**
+  String get statusNoShow;
+
+  /// No description provided for @statusMissed.
+  ///
+  /// In en, this message translates to:
+  /// **'Missed'**
+  String get statusMissed;
+
+  /// No description provided for @statusRefundPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Refund pending'**
+  String get statusRefundPending;
+
+  /// No description provided for @statusRefunded.
+  ///
+  /// In en, this message translates to:
+  /// **'Refunded'**
+  String get statusRefunded;
+
+  /// No description provided for @statusFollowupAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Follow-up available'**
+  String get statusFollowupAvailable;
+
+  /// No description provided for @statusFollowupUsed.
+  ///
+  /// In en, this message translates to:
+  /// **'Follow-up used'**
+  String get statusFollowupUsed;
+
+  /// No description provided for @statusFollowupExpired.
+  ///
+  /// In en, this message translates to:
+  /// **'Follow-up expired'**
+  String get statusFollowupExpired;
+
+  /// No description provided for @statusRescheduledOnce.
+  ///
+  /// In en, this message translates to:
+  /// **'Rescheduled'**
+  String get statusRescheduledOnce;
+
+  /// No description provided for @statusExpired.
+  ///
+  /// In en, this message translates to:
+  /// **'Expired'**
+  String get statusExpired;
+
+  /// No description provided for @statusClosed.
+  ///
+  /// In en, this message translates to:
+  /// **'Closed'**
+  String get statusClosed;
 
   /// No description provided for @queueYourToken.
   ///

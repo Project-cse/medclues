@@ -917,12 +917,15 @@ async def admin_counter_update_status(order_id: int, status: str) -> dict:
 
 
 async def sync_prescription_to_express(consultation_id: int, hospital_id: int | None) -> None:
-    """Sync published prescription to Express Pharmacy backend (Port 5001)."""
+    """Optional sync to Express Pharmacy when PHARMACY_SERVICE_URL is set."""
     import os
     import httpx
     from app.config.db import db
 
-    pharmacy_url = os.getenv("PHARMACY_SERVICE_URL", "http://localhost:5001")
+    pharmacy_url = (os.getenv("PHARMACY_SERVICE_URL") or "").strip().rstrip("/")
+    if not pharmacy_url:
+        log.info("PHARMACY_SERVICE_URL unset — skip Express prescription sync")
+        return
     internal_key = os.getenv("INTERNAL_API_KEY") or os.getenv("PHARMACY_INTERNAL_API_KEY", "")
 
     try:

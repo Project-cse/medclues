@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../constants/app_colors.dart';
 import '../../l10n/l10n_extension.dart';
+import '../../models/appointment_model.dart';
 import '../../providers/appointment_provider.dart';
 import '../../providers/booking_state_provider.dart';
 import '../../providers/patient_provider.dart';
@@ -12,9 +13,11 @@ import '../../utils/appointment_receipt_actions.dart';
 import '../../utils/appointment_receipt_pdf.dart';
 import '../../utils/currency_formatter.dart';
 import '../../utils/date_formatter.dart';
+import '../../utils/appointment_status_utils.dart';
 import '../../widgets/booking/appointment_receipt_card.dart';
 import '../../widgets/common/app_loader.dart';
 import '../../widgets/common/app_snackbar.dart';
+import '../../widgets/common/appointment_status_chip.dart';
 
 /// View receipt later from appointment history (mockup style).
 class BookingReceiptScreen extends ConsumerStatefulWidget {
@@ -29,10 +32,12 @@ class BookingReceiptScreen extends ConsumerStatefulWidget {
 class _BookingReceiptScreenState extends ConsumerState<BookingReceiptScreen> {
   bool _busy = false;
 
-  String _statusFromAppointment(dynamic a) {
-    if (a.cancelled) return context.l10n.appointmentsCancelled;
-    if (a.isCompleted) return context.l10n.appointmentsCompleted;
-    return context.l10n.receiptStatusConfirmed;
+  String _statusFromAppointment(AppointmentModel a) {
+    final info = resolveAppointmentStatus(
+      a,
+      labelFor: (key) => appointmentStatusLabelFor(context, key),
+    );
+    return info.label;
   }
 
   Future<void> _run(Future<void> Function(AppointmentReceiptData) action, AppointmentReceiptData receipt) async {

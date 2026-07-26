@@ -1493,6 +1493,39 @@ class AppLocalizationsHi extends AppLocalizations {
   String get statusDoctorOnBreak => 'डॉक्टर ब्रेक पर';
 
   @override
+  String get statusNextToConsult => 'अगला परामर्श';
+
+  @override
+  String get statusNoShow => 'नहीं आए';
+
+  @override
+  String get statusMissed => 'छूटा';
+
+  @override
+  String get statusRefundPending => 'रिफंड लंबित';
+
+  @override
+  String get statusRefunded => 'रिफंड हो गया';
+
+  @override
+  String get statusFollowupAvailable => 'फॉलो-अप उपलब्ध';
+
+  @override
+  String get statusFollowupUsed => 'फॉलो-अप उपयोग हुआ';
+
+  @override
+  String get statusFollowupExpired => 'फॉलो-अप समाप्त';
+
+  @override
+  String get statusRescheduledOnce => 'पुनर्निर्धारित';
+
+  @override
+  String get statusExpired => 'समाप्त';
+
+  @override
+  String get statusClosed => 'बंद';
+
+  @override
   String get queueYourToken => 'आपका टोकन';
 
   @override

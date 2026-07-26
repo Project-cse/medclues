@@ -361,9 +361,9 @@ async def verify_appointment(id: int):
 
 
 @router.get("/appointment/by-booking/{booking_id}")
-async def appointment_by_booking_id(booking_id: str):
-    """Alias for staff lookup by Booking ID (same as GET /api/appointments/{booking_id})."""
-    return await user_controller.get_appointment_by_booking_id(booking_id)
+async def appointment_by_booking_id(booking_id: str, sig: str | None = None):
+    """Alias for signed BK lookup (same as GET /api/appointments/{booking_id}?sig=)."""
+    return await user_controller.get_appointment_by_booking_id(booking_id, sig=sig)
 
 # Public contact form
 @router.post("/contact")

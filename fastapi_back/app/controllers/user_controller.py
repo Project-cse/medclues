@@ -1341,31 +1341,12 @@ async def _post_cancel_cleanup(user_id: int, appointment_id: int):
     except Exception as e:
         print(f"[WARNING] post-cancel cleanup failed: {e}")
 
-# --- Razorpay Payment ---
+# --- Razorpay Payment (legacy helpers — prefer payments_controller) ---
 
 async def payment_razorpay(appointment_id: int):
-    try:
-        appointment = await appointment_model.get_appointment_by_id(int(appointment_id))
-        if not appointment or appointment['cancelled']:
-            return {"success": False, "message": "Invalid appointment"}
-
-        amount_paise = int(float(appointment['amount']) * 100)
-        
-        order_data = {
-            "amount": amount_paise,
-            "currency": settings.CURRENCY or "INR",
-            "receipt": str(appointment['id']),
-            "notes": {"appointmentId": str(appointment['id'])}
-        }
-        
-        order = razorpay_client.order.create(data=order_data)
-        
-        # Include key_id for frontend
-        order['key_id'] = settings.RAZORPAY_KEY_ID
-        
-        return {"success": True, "order": order}
-    except Exception as e:
-        return {"success": False, "message": str(e)}
+    """Delegate to payments_controller: appointments.amount is INR → paise once."""
+    from app.controllers import payments_controller
+    return await payments_controller.create_order_for_existing_appointment(appointment_id)
 
 async def verify_razorpay(req_body: dict):
     try:
@@ -1788,14 +1769,21 @@ async def verify_appointment(appointment_id: int, user_id: int = None):
         return {"success": False, "message": str(e)}
 
 
-async def get_appointment_by_booking_id(booking_id: str):
-    """Public staff lookup: return minimal fields only (no full staff dump)."""
+async def get_appointment_by_booking_id(booking_id: str, sig: str | None = None):
+    """BK lookup — requires valid HMAC sig (unauthenticated public route)."""
     try:
+        from fastapi import HTTPException
         from app.utils.booking_id import is_valid_booking_id, normalize_booking_id
+        from app.utils.appointment_summary_qr import verify_booking_lookup_sig
 
         code = normalize_booking_id(booking_id)
         if not is_valid_booking_id(code):
             return {"success": False, "message": "Invalid booking ID format"}
+        if not verify_booking_lookup_sig(code, sig):
+            raise HTTPException(
+                status_code=401,
+                detail="Missing or invalid signature. Pass ?sig= from sign_booking_lookup.",
+            )
 
         appointment = await appointment_model.get_appointment_by_booking_id(code)
         if not appointment:
@@ -1833,6 +1821,8 @@ async def get_appointment_by_booking_id(booking_id: str):
                 "hospitalId": appointment.get("hospital_id"),
             },
         }
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"[ERROR] Booking ID lookup: {e}")
         return {"success": False, "message": str(e)}
@@ -1849,9 +1839,19 @@ async def init_payu_payment(user_id: int, req_body: dict):
         phone = req_body.get('phone')
         productinfo = req_body.get('productinfo')
 
-        merchant_key = settings.PAYU_MERCHANT_KEY or 'gtKFFx'
-        merchant_salt = settings.PAYU_MERCHANT_SALT or 'eCwWELxi'
-        payu_base_url = settings.PAYU_BASE_URL or 'https://test.payu.in/_payment'
+        merchant_key = (settings.PAYU_MERCHANT_KEY or "").strip()
+        merchant_salt = (settings.PAYU_MERCHANT_SALT or "").strip()
+        payu_base_url = (settings.PAYU_BASE_URL or "").strip()
+        if not merchant_key or not merchant_salt:
+            return {
+                "success": False,
+                "message": "PayU is not configured. Set PAYU_MERCHANT_KEY and PAYU_MERCHANT_SALT.",
+            }
+        if not payu_base_url:
+            return {
+                "success": False,
+                "message": "PayU is not configured. Set PAYU_BASE_URL.",
+            }
 
         txnid = f"TXN_{appointment_id}_{int(time.time() * 1000)}"
         udf1 = str(appointment_id)
@@ -1882,7 +1882,10 @@ async def init_payu_payment(user_id: int, req_body: dict):
         return {"success": False, "message": str(e)}
 
 async def get_merchant_upi():
-    return {"success": True, "merchantUPI": settings.MERCHANT_UPI_ID or "demo@upi"}
+    upi = (getattr(settings, "MERCHANT_UPI_ID", None) or "").strip()
+    if not upi:
+        return {"success": False, "message": "Merchant UPI is not configured. Set MERCHANT_UPI_ID."}
+    return {"success": True, "merchantUPI": upi}
 
 
 async def register_fcm_token(user_id: int, body: dict):

@@ -117,6 +117,48 @@ def _amount_to_paise(amount_raw) -> int:
     return max(0, int(round(float(amount_raw or 0))))
 
 
+def _appointment_inr_to_paise(amount_inr) -> int:
+    """`appointments.amount` is stored in INR (rupees) — convert once to paise."""
+    return max(0, int(round(float(amount_inr or 0) * 100)))
+
+
+async def create_order_for_existing_appointment(appointment_id: int):
+    """Pay an already-booked appointment. DB amount is INR → Razorpay paise."""
+    try:
+        from app.models import appointment_model
+        if appointment_id is None:
+            return {"success": False, "message": "appointmentId required"}
+        _require_client()
+        appointment = await appointment_model.get_appointment_by_id(int(appointment_id))
+        if not appointment or appointment.get("cancelled"):
+            return {"success": False, "message": "Invalid appointment"}
+
+        amount_paise = _appointment_inr_to_paise(appointment.get("amount"))
+        if amount_paise < 100:
+            return {"success": False, "message": "Minimum amount is ₹1"}
+
+        order_data = {
+            "amount": amount_paise,
+            "currency": settings.CURRENCY or "INR",
+            "receipt": str(appointment["id"]),
+            "notes": {"appointmentId": str(appointment["id"])},
+            "payment_capture": 1,
+        }
+        if razorpay_mock_enabled():
+            order = {
+                "id": f"order_mock_{uuid.uuid4().hex[:12]}",
+                "amount": amount_paise,
+                "currency": order_data["currency"],
+                "key_id": settings.RAZORPAY_KEY_ID or "rzp_test_mock",
+            }
+            return {"success": True, "order": order}
+        order = await asyncio.to_thread(razorpay_client.order.create, data=order_data)
+        order["key_id"] = settings.RAZORPAY_KEY_ID
+        return {"success": True, "order": order}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+
 async def create_order(amount_paise: float, currency: str = "INR", receipt: str | None = None):
     """Generic Razorpay order. `amount_paise` is always paise (same contract as create-appointment-order)."""
     try:

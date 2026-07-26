@@ -124,7 +124,7 @@ AppointmentStatusInfo resolveAppointmentStatus(
   if (lifecycle == 'CLOSED') {
     return AppointmentStatusInfo(
       status: AppointmentDisplayStatus.completed,
-      label: 'Closed',
+      label: labelFor('closed'),
       backgroundColor: Colors.grey.withValues(alpha: 0.15),
       textColor: Colors.grey.shade700,
     );

@@ -157,8 +157,14 @@ class ApiConfig {
 
   static String confirmTomorrowReschedule(String appointmentId) =>
       '/api/user/appointments/$appointmentId/confirm-tomorrow-reschedule';
-  static String appointmentByBookingId(String bookingId) =>
-      '/api/appointments/$bookingId';
+  /// Signed public BK lookup. [sig] is required (HMAC from sign_booking_lookup).
+  static String appointmentByBookingId(String bookingId, {required String sig}) {
+    final trimmed = sig.trim();
+    if (trimmed.isEmpty) {
+      throw ArgumentError.value(sig, 'sig', 'HMAC signature is required for BK lookup');
+    }
+    return '/api/appointments/$bookingId?sig=${Uri.encodeQueryComponent(trimmed)}';
+  }
   static String publicAppointmentSummary(String bookingId, String sig) =>
       '/api/public/appointment-summary/$bookingId?sig=${Uri.encodeQueryComponent(sig)}';
   static String callRequestForAppointment(String appointmentId) =>
