@@ -91,7 +91,7 @@ const ContactLocation = () => {
                                 {/* Email */}
                                 <div className='group'>
                                     <a 
-                                        href='mailto:medichain123@gmail.com'
+                                        href='mailto:support@medclues.com'
                                         className='flex items-start gap-4 cursor-pointer w-full'
                                     >
                                         <div className='w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center shrink-0 group-hover:bg-blue-500 group-hover:scale-110 shadow-sm transition-all duration-300'>
@@ -102,7 +102,7 @@ const ContactLocation = () => {
                                         <div className='min-w-0'>
                                             <p className='text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 mb-0.5'>Email Us</p>
                                             <p className='text-gray-900 font-black text-sm sm:text-base group-hover:text-blue-600 transition-colors break-all'>
-                                                medichain123@gmail.com
+                                                support@medclues.com
                                             </p>
                                             <p className='text-gray-400 text-[10px] sm:text-xs mt-1 font-bold'>
                                                 Typical response time: <span className="text-blue-400">Within 2 hours</span>

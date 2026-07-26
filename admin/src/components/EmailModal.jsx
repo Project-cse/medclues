@@ -129,7 +129,7 @@ MedClues Team`;
                     <div className="bg-blue-50 border-l-4 border-blue-400 rounded-md p-3">
                         <p className="text-xs text-blue-800 leading-relaxed">
                             <strong>Note:</strong> This email is sent by the server using configured Brevo/Gmail SMTP
-                            (inbox/support address from <code>SUPPORT_EMAIL</code>, default <strong>medichain123@gmail.com</strong>).
+                            (inbox/support address from <code>SUPPORT_EMAIL</code>, default <strong>support@medclues.com</strong>).
                         </p>
                     </div>
                 </div>

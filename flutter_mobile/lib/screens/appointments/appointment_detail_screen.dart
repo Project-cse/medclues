@@ -21,6 +21,7 @@ import '../../widgets/common/app_snackbar.dart';
 import '../../widgets/common/appointment_status_chip.dart';
 import '../../widgets/appointments/live_queue_panel.dart';
 import '../../widgets/common/avatar_image.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 /// Matches mobile/app/(patient)/appointment-detail.tsx
 class AppointmentDetailScreen extends ConsumerWidget {
@@ -250,6 +251,17 @@ class AppointmentDetailScreen extends ConsumerWidget {
                 ),
                 if (isCompleted) ...[
                   const SizedBox(height: 16),
+                  if (a.bookingId != null &&
+                      a.bookingId!.isNotEmpty &&
+                      (a.summaryQrUrl ?? '').isNotEmpty)
+                    _VisitSummaryQrCard(
+                      bookingId: a.bookingId!,
+                      summaryQrUrl: a.summaryQrUrl!,
+                    ),
+                  if (a.bookingId != null &&
+                      a.bookingId!.isNotEmpty &&
+                      (a.summaryQrUrl ?? '').isNotEmpty)
+                    const SizedBox(height: 16),
                   _ConsultationSummarySection(appointmentId: appointmentId),
                 ],
               ],
@@ -669,6 +681,68 @@ class _ConsultationSummarySection extends ConsumerWidget {
             body,
             style: GoogleFonts.poppins(
                 fontSize: 14, height: 1.45, color: AppColors.textPrimary),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _VisitSummaryQrCard extends StatelessWidget {
+  const _VisitSummaryQrCard({
+    required this.bookingId,
+    required this.summaryQrUrl,
+  });
+
+  final String bookingId;
+  final String summaryQrUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
+        boxShadow: AppShadows.card,
+      ),
+      child: Column(
+        children: [
+          Text(
+            'Visit summary',
+            style: GoogleFonts.poppins(
+              fontWeight: FontWeight.w700,
+              fontSize: 15,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Not for reception check-in — phone camera opens your appointment details',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.poppins(
+              fontSize: 12,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 14),
+          QrImageView(
+            data: summaryQrUrl,
+            size: 168,
+            backgroundColor: Colors.white,
+            errorCorrectionLevel: QrErrorCorrectLevel.H,
+            padding: const EdgeInsets.all(8),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            bookingId.toUpperCase(),
+            style: GoogleFonts.poppins(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: AppColors.logoTeal,
+            ),
           ),
         ],
       ),

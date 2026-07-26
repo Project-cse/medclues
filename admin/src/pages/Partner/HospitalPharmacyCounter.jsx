@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useContext } from 'react';
 import {
   QrCode,
   Search,
@@ -15,10 +15,12 @@ import {
   ToggleRight,
   RefreshCw
 } from 'lucide-react';
-
-const INITIAL_ORDERS = [];
+import { AdminContext } from '../../context/AdminContext';
+import { useQrPharmacyScanner } from '../../hooks/useQrPharmacyScanner';
+import { extractPharmacyOrderId } from '../../utils/pharmacyOrderId';
 
 const HospitalPharmacyCounter = () => {
+  const { aToken, backendUrl } = useContext(AdminContext);
   const [orders, setOrders] = useState([]);
   const [inventory, setInventory] = useState([]);
   const [activeTab, setActiveTab] = useState('queue');
@@ -32,72 +34,62 @@ const HospitalPharmacyCounter = () => {
 
   const [invSearch, setInvSearch] = useState('');
 
-  const getBackendUrl = () => 'http://localhost:5001';
+  const getBackendUrl = () =>
+    (backendUrl || import.meta.env.VITE_BACKEND_URL || '').replace(/\/$/, '');
 
-  const fetchInventoryFromDB = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(`${getBackendUrl()}/api/inventory`);
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data)) {
-          const mapped = data.map((item) => ({
-            id: item._id || `MED-${Math.floor(1000 + Math.random() * 9000)}`,
-            _id: item._id,
-            name: item.name || 'Unnamed',
-            salt: item.salt || item.composition || 'Generic Salt',
-            brand: item.brand || item.distributor || 'Pharma Brand',
-            mrp: item.mrp || item.price || 50,
-            localPrice: item.price || item.costPrice || 40,
-            stockQty: item.stock || 0,
-            inStock: (item.stock || 0) > 0,
-            requiresRx: item.requiresRx || false,
-          }));
-          setInventory(mapped);
-        }
-      }
-    } catch (err) {
-      console.warn('Backend fetch error:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const authHeaders = () => (aToken ? { aToken } : {});
+
+  const mapOrder = (o) => ({
+    id: String(o.id),
+    token: o.publicId || o.token || `PHO-${o.id}`,
+    patientName: o.patientName || 'Patient',
+    patientPhone: o.patientPhone || '',
+    type: String(o.fulfillment || '').includes('delivery') ? 'express_delivery' : 'counter_pickup',
+    status:
+      o.status === 'delivered' || o.status === 'cancelled'
+        ? 'completed'
+        : o.status === 'ready' || o.status === 'billed' || o.status === 'paid'
+          ? 'packed'
+          : 'pending',
+    items: (o.items || []).map((it, index) => ({
+      id: String(it.id || index + 1),
+      name: it.name || 'Medicine',
+      qty: it.qty || it.quantity || 1,
+      price: it.price || 0,
+      requiresRx: false,
+    })),
+    total: o.total ?? o.amountTotal ?? 0,
+    time: o.createdAt ? new Date(o.createdAt).toLocaleString() : '—',
+  });
 
   const fetchOrdersFromDB = async () => {
+    const base = getBackendUrl();
+    if (!base || !aToken) return;
     try {
-      const res = await fetch(`${getBackendUrl()}/api/orders/all`);
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
-          const mapped = data.map((o) => ({
-            id: o._id || o.id || `ORD-${Math.floor(1000 + Math.random() * 9000)}`,
-            token: o.publicId || `RX-${Math.floor(1000 + Math.random() * 9000)}`,
-            patientName: o.patientName || o.pharmacy?.name || 'Walk-in Patient',
-            patientPhone: o.patientPhone || o.pharmacy?.phone || '+91 98765 43210',
-            type: o.orderType === 'delivery' || o.fulfillment === 'delivery' ? 'express_delivery' : 'counter_pickup',
-            status: o.status === 'delivered' ? 'completed' : (o.status === 'packed' ? 'packed' : 'pending'),
-            items: (o.items || []).map((it, index) => ({
-              id: String(index + 1),
-              name: it.name || it.product?.name || 'Medicine',
-              qty: it.quantity || 1,
-              price: it.price || 50,
-              requiresRx: false,
-            })),
-            total: o.totalAmount || 100,
-            time: 'Just now',
-          }));
-          setOrders(mapped);
-        }
+      const res = await fetch(`${base}/api/admin/pharmacy/counter/orders?limit=50`, {
+        headers: authHeaders(),
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data?.success && Array.isArray(data.orders)) {
+        setOrders(data.orders.map(mapOrder));
       }
     } catch (err) {
       console.warn('Orders fetch error:', err);
     }
   };
 
+  const fetchInventoryFromDB = async () => {
+    setLoading(true);
+    // Inventory mapping remains optional Express pharmacy — not required for PHO pickup.
+    setInventory([]);
+    setLoading(false);
+  };
+
   useEffect(() => {
-    fetchInventoryFromDB();
     fetchOrdersFromDB();
-  }, []);
+    fetchInventoryFromDB();
+  }, [aToken, backendUrl]);
 
   const filteredOrders = orders.filter((o) => {
     if (filterStatus === 'all') return true;
@@ -107,49 +99,91 @@ const HospitalPharmacyCounter = () => {
     return true;
   });
 
-  const handleUpdateOrderStatus = (orderId, nextStatus) => {
+  const handleUpdateOrderStatus = async (orderId, nextStatus) => {
     setOrders(
       orders.map((o) => (o.id === orderId ? { ...o, status: nextStatus } : o))
     );
-  };
-
-  const handleScanToken = (tokenInput) => {
-    const found = orders.find(
-      (o) =>
-        o.token.toLowerCase() === tokenInput.trim().toLowerCase() ||
-        o.id.toLowerCase() === tokenInput.trim().toLowerCase()
-    );
-
-    if (found) {
-      setMatchedOrder(found);
-      setScanMessage(null);
-    } else {
-      setMatchedOrder(null);
-      setScanMessage(`No active prescription or order found for token "${tokenInput}"`);
+    const base = getBackendUrl();
+    if (!base || !aToken) return;
+    try {
+      await fetch(`${base}/api/admin/pharmacy/counter/orders/${orderId}/status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({ status: nextStatus }),
+      });
+    } catch (err) {
+      console.warn('Status update failed:', err);
     }
   };
+
+  const handleScanToken = useCallback(async (tokenInput) => {
+    const token = extractPharmacyOrderId(tokenInput) || String(tokenInput || '').trim().toUpperCase();
+    if (!token) {
+      setMatchedOrder(null);
+      setScanMessage('Scan or enter a pickup token (PHO…)');
+      return;
+    }
+    setScannedToken(token);
+    const local = orders.find(
+      (o) =>
+        o.token.toLowerCase() === token.toLowerCase() ||
+        o.id.toLowerCase() === token.toLowerCase()
+    );
+    if (local) {
+      setMatchedOrder(local);
+      setScanMessage(null);
+      return;
+    }
+    const base = getBackendUrl();
+    if (!base || !aToken) {
+      setMatchedOrder(null);
+      setScanMessage(`No active order found for token "${token}"`);
+      return;
+    }
+    try {
+      const res = await fetch(
+        `${base}/api/admin/pharmacy/counter/lookup?token=${encodeURIComponent(token)}`,
+        { headers: authHeaders() }
+      );
+      const data = await res.json();
+      if (data?.success && data.order) {
+        const mapped = mapOrder(data.order);
+        setMatchedOrder(mapped);
+        setScanMessage(null);
+        setOrders((prev) => {
+          if (prev.some((o) => o.id === mapped.id)) return prev;
+          return [mapped, ...prev];
+        });
+      } else {
+        setMatchedOrder(null);
+        setScanMessage(data?.message || `No active order found for token "${token}"`);
+      }
+    } catch {
+      setMatchedOrder(null);
+      setScanMessage(`Lookup failed for "${token}"`);
+    }
+  }, [orders, aToken, backendUrl]);
+
+  const onPharmacyScan = useCallback(
+    (code, raw) => {
+      void handleScanToken(code || raw);
+    },
+    [handleScanToken]
+  );
+
+  const { videoRef, camOn, toggleCam } = useQrPharmacyScanner({
+    enabled: isScannerOpen,
+    onCode: onPharmacyScan,
+  });
 
   const handleToggleStock = async (item) => {
     const nextInStock = !item.inStock;
     const nextQty = nextInStock ? 100 : 0;
-
     setInventory(
       inventory.map((inv) =>
         inv.id === item.id ? { ...inv, inStock: nextInStock, stockQty: nextQty } : inv
       )
     );
-
-    if (item._id) {
-      try {
-        await fetch(`${getBackendUrl()}/api/inventory/update/${item._id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ stock: nextQty }),
-        });
-      } catch (err) {
-        console.warn(err);
-      }
-    }
   };
 
   const handleUpdatePriceQty = async (item, field, value) => {
@@ -160,20 +194,8 @@ const HospitalPharmacyCounter = () => {
           : inv
       )
     );
-
-    if (item._id) {
-      try {
-        const payload = field === 'localPrice' ? { price: value } : { stock: value };
-        await fetch(`${getBackendUrl()}/api/inventory/update/${item._id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-      } catch (err) {
-        console.warn(err);
-      }
-    }
   };
+
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
@@ -198,9 +220,9 @@ const HospitalPharmacyCounter = () => {
 
         <div className="flex flex-wrap items-center gap-3">
           <button
-            onClick={fetchInventoryFromDB}
+            onClick={fetchOrdersFromDB}
             className="flex items-center px-3 py-2 bg-white/10 hover:bg-white/20 text-white text-xs font-semibold rounded-xl transition-all"
-            title="Refresh Inventory"
+            title="Refresh Orders"
           >
             <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${loading ? 'animate-spin' : ''}`} />
             Refresh
@@ -211,6 +233,7 @@ const HospitalPharmacyCounter = () => {
               setMatchedOrder(null);
               setScanMessage(null);
               setIsScannerOpen(true);
+              void fetchOrdersFromDB();
             }}
             className="flex items-center px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold rounded-xl transition-all shadow-lg hover:shadow-xl"
           >
@@ -535,23 +558,33 @@ const HospitalPharmacyCounter = () => {
             </div>
 
             <div className="bg-slate-900 text-white p-6 rounded-2xl text-center space-y-3 relative overflow-hidden">
-              <div className="w-32 h-32 border-2 border-dashed border-emerald-400 rounded-xl mx-auto flex items-center justify-center relative">
-                <QrCode className="w-20 h-20 text-emerald-400 opacity-80" />
-                <div className="absolute inset-x-0 top-0 h-0.5 bg-emerald-400 animate-pulse shadow-lg" />
+              <div className="w-full max-w-xs aspect-square border-2 border-dashed border-emerald-400 rounded-xl mx-auto flex items-center justify-center relative overflow-hidden bg-black">
+                {camOn ? (
+                  <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+                ) : (
+                  <QrCode className="w-20 h-20 text-emerald-400 opacity-80" />
+                )}
               </div>
+              <button
+                type="button"
+                onClick={() => void toggleCam()}
+                className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-semibold rounded-lg"
+              >
+                {camOn ? 'Stop camera' : 'Start camera'}
+              </button>
               <p className="text-xs text-slate-300">
-                Position patient's mobile QR code in front of camera or enter token below
+                Scan patient pickup QR (PHO…) or enter token below
               </p>
             </div>
 
             <div className="space-y-2">
               <label className="block text-xs font-semibold text-slate-700">
-                Enter Prescription Token / Order ID manually:
+                Enter pickup token / order ID manually:
               </label>
               <div className="flex space-x-2">
                 <input
                   type="text"
-                  placeholder="e.g. RX-9842"
+                  placeholder="e.g. PHO00000001"
                   value={scannedToken}
                   onChange={(e) => setScannedToken(e.target.value)}
                   className="flex-1 px-3 py-2 border rounded-lg uppercase tracking-wider font-bold text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"

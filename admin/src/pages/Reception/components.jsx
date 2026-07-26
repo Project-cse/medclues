@@ -358,7 +358,7 @@ const PILL_STYLES = {
   ARRIVED: 'bg-rd-good-bg text-rd-good',
   VERIFIED: 'bg-rd-good-bg text-rd-good',
   PENDING: 'bg-rd-pending-bg text-rd-pending',
-  IN_QUEUE: 'bg-rd-info-bg text-rd-info',
+  IN_QUEUE: 'bg-rd-good-bg text-rd-good',
   READY: 'bg-rd-good-bg text-rd-good',
   READY_FOR_DOCTOR: 'bg-rd-good-bg text-rd-good',
   WAITING: 'bg-rd-pending-bg text-rd-pending',

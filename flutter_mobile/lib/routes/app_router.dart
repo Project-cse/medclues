@@ -6,6 +6,7 @@ import '../onboarding/onboarding_tour_steps.dart';
 import '../onboarding/providers/onboarding_provider.dart';
 import '../providers/auth_provider.dart';
 import '../screens/appointments/appointment_detail_screen.dart';
+import '../screens/appointments/appointment_summary_qr_screen.dart';
 import '../screens/appointments/upcoming_appointments_screen.dart';
 import '../screens/auth/forgot_password_screen.dart';
 import '../screens/auth/login_screen.dart';
@@ -100,9 +101,11 @@ String? _authRedirect(Ref ref, GoRouterState state) {
     final onboarding = ref.read(onboardingProvider);
     if (onboarding.needsOnboarding &&
         onboarding.phase == OnboardingPhase.tour) {
-      final idx = onboarding.tourIndex.clamp(0, onboardingTourSteps.length - 1);
-      final expected = onboardingTourSteps[idx].route;
-      if (loc != expected) return expected;
+      if (!loc.startsWith('/a/')) {
+        final idx = onboarding.tourIndex.clamp(0, onboardingTourSteps.length - 1);
+        final expected = onboardingTourSteps[idx].route;
+        if (loc != expected) return expected;
+      }
     }
 
     final isEmergencyRoute = loc == RouteNames.emergency ||
@@ -117,6 +120,8 @@ String? _authRedirect(Ref ref, GoRouterState state) {
       loc == RouteNames.emergencySettings ||
       loc == RouteNames.emergencyActive;
   if (isEmergencyRoute) return null;
+
+  if (loc.startsWith('/a/')) return null;
 
   if (loc == RouteNames.permissionsSetup) return null;
 
@@ -421,6 +426,13 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         path: RouteNames.emergencyActive,
         builder: (_, __) =>
             const ForceLightTheme(child: EmergencyActiveScreen()),
+      ),
+      GoRoute(
+        path: '/a/:bookingId',
+        builder: (context, state) => AppointmentSummaryQrScreen(
+          bookingId: state.pathParameters['bookingId'] ?? '',
+          sig: state.uri.queryParameters['sig'],
+        ),
       ),
     ],
   );

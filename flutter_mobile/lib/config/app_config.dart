@@ -14,7 +14,7 @@ class AppConfig {
   /// Testing default until support@medclues.com is provisioned.
   static const String supportEmail = String.fromEnvironment(
     'SUPPORT_EMAIL',
-    defaultValue: 'medichain123@gmail.com',
+    defaultValue: 'support@medclues.com',
   );
 
   static const String supportPhone = String.fromEnvironment(

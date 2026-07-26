@@ -5,6 +5,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import QRCode from 'react-qr-code';
 import html2pdf from 'html2pdf.js';
 import { toast } from 'react-toastify';
+import { checkInQrPayload, verifyAppointmentUrl } from '../utils/bookingQr';
 
 const AppointmentConfirmation = () => {
     const navigate = useNavigate();
@@ -35,6 +36,12 @@ const AppointmentConfirmation = () => {
         location: "MedClues Clinic, Road No. 12, Banjara Hills",
         id: "MCN-483920"
     };
+
+    const qrValue =
+        data.qrData ||
+        checkInQrPayload(data) ||
+        verifyAppointmentUrl(data.id) ||
+        String(data.id || '');
 
     // ACTION: Download as PDF
     const handleDownload = () => {
@@ -200,7 +207,7 @@ const AppointmentConfirmation = () => {
                             <div className="w-full md:w-[240px] p-8 flex flex-col items-center justify-center bg-slate-50/20">
                                 <div className="bg-white p-5 rounded-[2.5rem] shadow-xl shadow-blue-900/5 border border-slate-100 mb-6 transform hover:scale-105 transition-all duration-500">
                                     <QRCode 
-                                        value={data.qrData || `https://MedClues.plus/verify/${data.id}`} 
+                                        value={qrValue} 
                                         size={120} 
                                         level="H"
                                         fgColor="#1e293b"

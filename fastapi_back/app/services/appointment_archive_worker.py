@@ -5,6 +5,7 @@ import asyncio
 
 from app.config.config import settings
 from app.config.db import db
+from app.services.appointment_lifecycle_service import CLOSED_FOR_CAPACITY
 from app.utils.app_logger import get_logger
 
 log = get_logger(__name__)
@@ -42,12 +43,18 @@ async def archive_old_appointments(batch_size: int | None = None) -> int:
     if not db.pool:
         await db.connect()
 
+    closed = list(CLOSED_FOR_CAPACITY)
+
     async with db.pool.acquire() as conn:
         async with conn.transaction():
             rows = await conn.fetch(
                 """
                 SELECT id FROM appointments
-                WHERE (cancelled = true OR is_completed = true)
+                WHERE (
+                      cancelled = true
+                   OR is_completed = true
+                   OR lifecycle_status = ANY($3::varchar[])
+                )
                   AND created_at < NOW() - ($1 || ' days')::interval
                 ORDER BY created_at ASC
                 LIMIT $2
@@ -55,6 +62,7 @@ async def archive_old_appointments(batch_size: int | None = None) -> int:
                 """,
                 str(days),
                 limit,
+                closed,
             )
             ids = [int(r["id"]) for r in rows]
             if not ids:

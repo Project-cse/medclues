@@ -8,10 +8,10 @@ from app.config.db import db
 from app.models import hospital_policy_model
 from app.services.appointment_lifecycle_service import ACTIVE_STATUSES
 
-# Seat occupancy must not count follow-up windows — those visits already
-# completed and must not block new bookings into the same slot.
+# Seat occupancy must not count follow-up windows or MISSED — those must not
+# block new bookings into the same slot after policy.
 OCCUPYING_STATUSES = frozenset(
-    s for s in ACTIVE_STATUSES if s != "FOLLOWUP_AVAILABLE"
+    s for s in ACTIVE_STATUSES if s not in ("FOLLOWUP_AVAILABLE", "MISSED")
 )
 ACTIVE_LIST = list(OCCUPYING_STATUSES | {"CHECKED_IN"})
 

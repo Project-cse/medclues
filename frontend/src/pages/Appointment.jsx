@@ -15,6 +15,7 @@ import { toast } from 'react-toastify'
 import { motion, AnimatePresence } from 'framer-motion'
 import QRCode from 'react-qr-code'
 import { mapScheduleToDocSlots, consultationFee } from '../utils/scheduleSlots'
+import { checkInQrPayload } from '../utils/bookingQr'
 
 const Appointment = () => {
 
@@ -240,35 +241,9 @@ const Appointment = () => {
         setDocSlots(allDaysSlots)
     }
 
-    const generateAppointmentId = () => {
-        const timestamp = Date.now()
-        const random = Math.floor(Math.random() * 100000)
-        const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-        const randomLetter = letters[Math.floor(Math.random() * letters.length)]
-        return `APT-${randomLetter}${timestamp.toString().slice(-6)}${random.toString().padStart(5, '0')}`
-    }
-
-    const generateQRData = (appointmentId, docId, slotDate, slotTime, patientName, doctorName, doctorSpecialty) => {
-        // Generate a URL that can be scanned to view patient details
-        const baseUrl = window.location.origin
-        const verifyUrl = `${baseUrl}/verify-appointment?id=${appointmentId}`
-
-        // Also include structured data for direct scanning
-        const qrData = {
-            type: 'appointment',
-            id: appointmentId,
-            doctorId: docId,
-            date: slotDate,
-            time: slotTime,
-            patientName: patientName || 'Patient',
-            doctorName: doctorName || 'Doctor',
-            specialty: doctorSpecialty || 'General Medicine',
-            timestamp: Date.now(),
-            url: verifyUrl
-        }
-
-        // Return URL for easy scanning (most QR scanners prefer URLs)
-        return verifyUrl
+    const generateQRData = (appointmentId, bookingId) => {
+        const bk = checkInQrPayload({ bookingId, booking_id: bookingId })
+        return bk || ''
     }
 
     const getDoctorHighlights = (doctor) => {
@@ -365,7 +340,7 @@ const Appointment = () => {
         try {
             if (gateway === 'razorpay') {
                 // Razorpay payment
-                const { data } = await axios.post(backendUrl + '/api/user/payment-razorpay', {
+                const { data } = await axios.post(backendUrl + '/api/payments/appointment-order', {
                     appointmentId
                 }, {
                     headers: { token }
@@ -381,7 +356,7 @@ const Appointment = () => {
                         order_id: data.order.id,
                         handler: async function (response) {
                             try {
-                                const verifyResponse = await axios.post(backendUrl + '/api/user/verify-razorpay', {
+                                const verifyResponse = await axios.post(backendUrl + '/api/payments/appointment-verify', {
                                     razorpay_order_id: response.razorpay_order_id,
                                     razorpay_payment_id: response.razorpay_payment_id,
                                     razorpay_signature: response.razorpay_signature
@@ -580,7 +555,23 @@ const Appointment = () => {
                     return
                 }
 
-                const appointmentId = generateAppointmentId()
+                const bookingId =
+                    data.bookingId ||
+                    data.booking_id ||
+                    data.appointment?.bookingId ||
+                    data.appointment?.booking_id ||
+                    ''
+                const appointmentId =
+                    data.appointmentId ||
+                    data.appointment_id ||
+                    data.appointment?._id ||
+                    data.appointment?.id ||
+                    null
+                if (!appointmentId && !bookingId) {
+                    toast.error('Booking succeeded but IDs missing. Refresh My Appointments.')
+                    setIsBooking(false)
+                    return
+                }
 
                 // Use actual patient name if booking for someone else
                 const displayPatientName = patientData && !patientData.isSelf
@@ -602,8 +593,11 @@ const Appointment = () => {
                     total: docInfo?.fees || 0
                 }
 
+                const qrPayload = generateQRData(appointmentId, bookingId)
+
                 const ticketData = {
                     id: appointmentId,
+                    bookingId: bookingId || null,
                     patientName: displayPatientName || 'Patient',
                     doctorName: getDoctorNameWithMD(docInfo?.name, docInfo?.degree || docInfo?.qualification),
                     doctorSpecialty: docInfo?.speciality || docInfo?.specialization || 'General Medicine',
@@ -612,15 +606,7 @@ const Appointment = () => {
                     time: slotTime || 'N/A',
                     price: costBreakdown.total,
                     costBreakdown: costBreakdown,
-                    qrData: generateQRData(
-                        appointmentId,
-                        docId,
-                        slotDate,
-                        slotTime,
-                        displayPatientName || 'Patient',
-                        docInfo?.name || 'Doctor',
-                        docInfo?.speciality || docInfo?.specialization || 'General Medicine'
-                    ),
+                    qrData: qrPayload,
                     whatsappLink: data?.whatsappLink || null,
                     actualPatient: patientData || null,
                     hospitalName: doctorLoc.hospitalName,
@@ -640,7 +626,9 @@ const Appointment = () => {
                                 date: date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
                                 time: slotTime || 'N/A',
                                 location: `${ticketData.hospitalName} - ${ticketData.location}`,
-                                id: appointmentId
+                                id: appointmentId,
+                                bookingId: bookingId || null,
+                                qrData: qrPayload,
                             }
                         } 
                     });

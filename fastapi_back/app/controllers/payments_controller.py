@@ -113,21 +113,20 @@ def _js_str(value: str) -> str:
 
 
 def _amount_to_paise(amount_raw) -> int:
-    value = float(amount_raw)
-    if value >= 100 and value == int(value):
-        return int(value)
-    return int(round(value * 100))
+    """Appointment create-order amounts are always paise (Flutter sends fee×100)."""
+    return max(0, int(round(float(amount_raw or 0))))
 
 
-async def create_order(amount_inr: float, currency: str = "INR", receipt: str | None = None):
+async def create_order(amount_paise: float, currency: str = "INR", receipt: str | None = None):
+    """Generic Razorpay order. `amount_paise` is always paise (same contract as create-appointment-order)."""
     try:
         _require_client()
-        amount_paise = int(round(float(amount_inr) * 100))
-        if amount_paise < 100:
-            return {"success": False, "message": "Minimum amount is ₹1"}
+        amount_paise_i = _amount_to_paise(amount_paise)
+        if amount_paise_i < 100:
+            return {"success": False, "message": "Minimum amount is ₹1 (100 paise)"}
 
         order_data = {
-            "amount": amount_paise,
+            "amount": amount_paise_i,
             "currency": currency or (settings.CURRENCY or "INR"),
             "payment_capture": 1,
         }
@@ -140,7 +139,7 @@ async def create_order(amount_inr: float, currency: str = "INR", receipt: str | 
         checkout_token = uuid.uuid4().hex
         await pt_model.create_pending(
             razorpay_order_id=order_id,
-            amount_paise=amount_paise,
+            amount_paise=amount_paise_i,
             checkout_token=checkout_token,
             currency=order.get("currency", currency),
             doctor_name="MedClues Payment",

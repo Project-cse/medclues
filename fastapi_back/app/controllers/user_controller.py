@@ -665,13 +665,16 @@ async def _send_booking_confirmation_email(
         email_details = {
             "patientName": actual_patient.get('name') if not actual_patient.get('isSelf') else user_name,
             "doctorName": doc_data['name'],
-            "speciality": doc_data['speciality'],
+            "speciality": doc_data.get('speciality')
+                or doc_data.get('specialty')
+                or doc_data.get('specialization')
+                or 'General Medicine',
             "date": slot_date.replace('_', '/'),
             "time": slot_time,
             "fee": amount,
             "tokenNumber": token_number,
-            "publicId": appointment_public_id or f"APT{appointment_id}",
-            "bookingId": booking_id or f"#APT{appointment_id}",
+            "publicId": appointment_public_id or None,
+            "bookingId": booking_id or None,
         }
 
         hospital_name, hospital_location_str, hosp_lat, hosp_lng = await _resolve_booking_hospital_location(
@@ -1143,6 +1146,7 @@ async def list_appointments(
         from app.utils.pagination import pagination_meta, with_pagination
 
         from app.services import appointment_lifecycle_service
+        from app.services import appointment_summary_service
 
         total = await appointment_model.count_appointments_by_user_id(user_id)
         appointments = await appointment_model.get_appointments_by_user_id(
@@ -1206,6 +1210,13 @@ async def list_appointments(
                 "bookingId": apt.get('booking_id'),
                 "queuePosition": apt['queue_position'],
                 "estimatedWaitTime": apt['estimated_wait_time'],
+                "summaryQrUrl": (
+                    (
+                        bool(apt.get('is_completed'))
+                        or str(apt.get('lifecycle_status') or '').upper() == 'COMPLETED'
+                    )
+                    and appointment_summary_service.summary_qr_url_for_booking(apt.get('booking_id'))
+                ) or None,
                 **appointment_lifecycle_service.lifecycle_payload(apt),
             })
         payload = {"success": True, "appointments": formatted}
@@ -1303,8 +1314,8 @@ async def _post_cancel_cleanup(user_id: int, appointment_id: int):
                     "date": str(appointment.get("slot_date", "")).replace("_", "/"),
                     "time": appointment.get("slot_time", ""),
                     "tokenNumber": appointment.get("token_number", "N/A"),
-                    "publicId": appointment.get("public_id") or f"APT{appointment_id}",
-                    "bookingId": appointment.get("booking_id") or f"#APT{appointment_id}",
+                    "publicId": appointment.get("public_id") or None,
+                    "bookingId": appointment.get("booking_id") or None,
                 }
                 await email_service.send_appointment_cancelled(
                     user_data["email"],
@@ -1733,6 +1744,18 @@ def _format_staff_appointment_view(appointment: dict, queue_status: dict | None 
         "isNextUp": (queue_status or {}).get('currentAppointmentId') == appt_id,
     }
     try:
+        from app.services import appointment_summary_service
+        completed = bool(appointment.get("is_completed")) or (
+            str(appointment.get("lifecycle_status") or "").upper() == "COMPLETED"
+        )
+        view["summaryQrUrl"] = (
+            appointment_summary_service.summary_qr_url_for_booking(appointment.get("booking_id"))
+            if completed
+            else None
+        )
+    except Exception:
+        view["summaryQrUrl"] = None
+    try:
         from app.services import appointment_lifecycle_service
         view.update(appointment_lifecycle_service.lifecycle_payload(appointment))
     except Exception:
@@ -1766,7 +1789,7 @@ async def verify_appointment(appointment_id: int, user_id: int = None):
 
 
 async def get_appointment_by_booking_id(booking_id: str):
-    """Public staff lookup: QR contains Booking ID only → fetch full details."""
+    """Public staff lookup: return minimal fields only (no full staff dump)."""
     try:
         from app.utils.booking_id import is_valid_booking_id, normalize_booking_id
 
@@ -1778,12 +1801,37 @@ async def get_appointment_by_booking_id(booking_id: str):
         if not appointment:
             return {"success": False, "message": "Appointment not found"}
 
-        doc_id = appointment['doctor_id']
-        queue_status = await queue_service.get_doctor_queue_status(doc_id, appointment['slot_date'])
+        doc_data = appointment.get("doctor_data")
+        if isinstance(doc_data, str):
+            try:
+                doc_data = json.loads(doc_data) if doc_data else {}
+            except Exception:
+                doc_data = {}
+        if not isinstance(doc_data, dict):
+            doc_data = {}
+        user_data = appointment.get("user_data")
+        if isinstance(user_data, str):
+            try:
+                user_data = json.loads(user_data) if user_data else {}
+            except Exception:
+                user_data = {}
+        if not isinstance(user_data, dict):
+            user_data = {}
 
         return {
             "success": True,
-            "appointment": _format_staff_appointment_view(appointment, queue_status),
+            "appointment": {
+                "bookingId": appointment.get("booking_id"),
+                "slotDate": str(appointment.get("slot_date") or ""),
+                "slotTime": appointment.get("slot_time"),
+                "lifecycleStatus": appointment.get("lifecycle_status"),
+                "tokenNumber": appointment.get("token_number"),
+                "cancelled": bool(appointment.get("cancelled")),
+                "isCompleted": bool(appointment.get("is_completed")),
+                "patientName": appointment.get("actual_patient_name") or user_data.get("name"),
+                "doctorName": doc_data.get("name"),
+                "hospitalId": appointment.get("hospital_id"),
+            },
         }
     except Exception as e:
         print(f"[ERROR] Booking ID lookup: {e}")

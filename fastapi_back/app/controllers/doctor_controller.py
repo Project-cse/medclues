@@ -156,7 +156,10 @@ async def appointment_cancel(doc_id: int, appointment_id: int, reason: Optional[
     try:
         appointment = await appointment_model.get_appointment_by_id(appointment_id)
         if appointment and appointment['doctor_id'] == doc_id:
-            await appointment_model.cancel_appointment(appointment_id)
+            try:
+                await appointment_model.cancel_appointment(appointment_id)
+            except ValueError as ve:
+                return {"success": False, "message": str(ve)}
             try:
                 from app.services import doctor_slot_service
                 await doctor_slot_service.release_slot_for_appointment(appointment)
@@ -175,8 +178,8 @@ async def appointment_cancel(doc_id: int, appointment_id: int, reason: Optional[
                             "date": str(appointment.get('slot_date', '')).replace('_', '/'),
                             "time": appointment.get('slot_time', ''),
                             "tokenNumber": appointment.get('token_number', 'N/A'),
-                            "publicId": appointment.get("public_id") or f"APT{appointment_id}",
-                            "bookingId": appointment.get("booking_id") or f"#APT{appointment_id}",
+                            "publicId": appointment.get("public_id") or None,
+                            "bookingId": appointment.get("booking_id") or None,
                             "reason": reason or "Administrative conflict",
                         },
                     )

@@ -10,7 +10,7 @@ TAGLINE = "Your Health, Our Priority"
 
 
 def support_email() -> str:
-    return (settings.SUPPORT_EMAIL or "medichain123@gmail.com").strip() or "medichain123@gmail.com"
+    return (settings.SUPPORT_EMAIL or "support@medclues.com").strip() or "support@medclues.com"
 
 
 def support_phone() -> str:

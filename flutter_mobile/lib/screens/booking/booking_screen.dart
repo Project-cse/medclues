@@ -112,7 +112,7 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
     ref.invalidate(todayAppointmentsProvider);
     ref.invalidate(
         doctorScheduleProvider((doctorId: widget.doctorId, mode: _slotMode)));
-    if (mounted) context.go(RouteNames.bookingSuccess);
+    if (mounted) context.go(RouteNames.bookingConfirmation);
   }
 
   void _invalidateSchedule() {

@@ -175,8 +175,15 @@ const ReceptionContextProvider = ({ children }) => {
   const bookWalkIn = (payload) =>
     handle(axios.post(`${backendUrl}/api/reception/walk-in`, payload, { headers: authHeader }));
 
-  const checkIn = (bookingId) =>
-    handle(axios.post(`${backendUrl}/api/reception/check-in`, { bookingId }, { headers: authHeader }));
+  const checkIn = (bookingId) => {
+    const id =
+      bookingId && typeof bookingId === 'object'
+        ? bookingId.bookingId || bookingId.booking_id
+        : bookingId
+    return handle(
+      axios.post(`${backendUrl}/api/reception/check-in`, { bookingId: id }, { headers: authHeader })
+    )
+  }
 
   const queueAction = (id, action) =>
     handle(

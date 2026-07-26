@@ -89,13 +89,19 @@ const PharmacyMasterCatalog = () => {
   const categories = ['All', 'Fever & Pain', 'Diabetes', 'Blood Pressure', 'Vitamins & Supplements', 'Stomach Care', 'Antibiotics', 'Allergy & Asthma'];
 
   const getBackendUrl = () => {
-    return 'http://localhost:5001';
+    // Optional Express pharmacy catalog. Patient search uses FastAPI.
+    // Leave unset to disable inventory sync (no localhost:5001 hardcode).
+    return (import.meta.env.VITE_PHARMACY_SERVICE_URL || '').replace(/\/$/, '');
   };
 
   const fetchCatalogFromDB = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${getBackendUrl()}/api/inventory`);
+      const base = getBackendUrl();
+      if (!base) {
+        return;
+      }
+      const res = await fetch(`${base}/api/inventory`);
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data)) {

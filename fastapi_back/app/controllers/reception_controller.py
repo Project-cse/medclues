@@ -165,13 +165,17 @@ def _verification(apt: dict) -> dict:
 def _desk_status(apt: dict) -> str:
     rs = apt.get("reception_status")
     if rs:
+        # Normalize desk alias to lifecycle-aligned labels for UI.
+        if str(rs).upper() in ("IN_QUEUE", "CHECKED_IN"):
+            return "CHECKED_IN"
         return rs
     lifecycle = (apt.get("lifecycle_status") or "").upper()
     return {
         "BOOKED": "PENDING",
         "CONFIRMED": "VERIFIED",
-        "CHECKED_IN": "IN_QUEUE",
-        "IN_PROGRESS": "IN_CONSULTATION",
+        "CHECKED_IN": "CHECKED_IN",
+        "READY_FOR_DOCTOR": "CHECKED_IN",
+        "IN_PROGRESS": "IN_PROGRESS",
         "COMPLETED": "COMPLETED",
         "NO_SHOW": "NO_SHOW",
         "CANCELLED": "CANCELLED",
@@ -424,7 +428,15 @@ async def mark_no_show(appointment_id: int, receptionist_id: int, hospital_id: O
         )
     except Exception:
         await db.execute(
-            "UPDATE appointments SET reception_status = 'NO_SHOW', status = 'no-show' WHERE id = $1",
+            """
+            UPDATE appointments SET
+                reception_status = 'NO_SHOW',
+                status = 'no-show',
+                lifecycle_status = 'NO_SHOW',
+                closed_at = COALESCE(closed_at, NOW()),
+                updated_at = NOW()
+            WHERE id = $1
+            """,
             int(appointment_id),
         )
     return {"success": True, "message": "Marked as no-show"}

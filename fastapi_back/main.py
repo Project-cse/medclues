@@ -35,6 +35,7 @@ from app.routes import (
     dean_community_routes,
     search_routes,
     ops_routes,
+    public_appointment_routes,
 )
 from app.middleware.request_logging import RequestLoggingMiddleware
 from app.middleware.maintenance import MaintenanceModeMiddleware
@@ -357,6 +358,7 @@ app.include_router(dean_community_routes.router)
 # Enterprise search + ops/SLO/chaos
 app.include_router(search_routes.router)
 app.include_router(ops_routes.router)
+app.include_router(public_appointment_routes.router)
 
 # --- Real-time Socket.IO ---
 from app.services.socket_service import sio_app

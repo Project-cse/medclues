@@ -321,7 +321,7 @@ const Footer = () => {
 
                   {/* Email */}
                   <a
-                    href="mailto:medichain123@gmail.com"
+                    href="mailto:support@medclues.com"
                     className='relative z-40 flex items-center gap-4 group cursor-pointer w-full'
                   >
                     <div className='w-12 h-12 rounded-2xl bg-white/50 backdrop-blur-sm border border-white/40 flex items-center justify-center flex-shrink-0 group-hover:bg-cyan-500 group-hover:border-cyan-400 group-hover:scale-110 shadow-sm transition-all duration-300'>
@@ -332,7 +332,7 @@ const Footer = () => {
                     <div className='flex flex-col'>
                       <p className='text-[10px] font-black text-cyan-700/60 uppercase tracking-widest mb-0.5'>Official Inquiries</p>
                       <p className='text-lg sm:text-base text-gray-800 group-hover:text-cyan-700 transition-colors duration-200 font-bold break-all'>
-                        medichain123@gmail.com
+                        support@medclues.com
                       </p>
                     </div>
                   </a>

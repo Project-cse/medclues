@@ -6,7 +6,7 @@ from app.config.config import settings
 from datetime import datetime
 from app.services import email_templates as tpl
 
-APP_NAME = "MEDCLUES"
+APP_NAME = "MedClues"
 
 
 def _app_login_url(path: str = "") -> str:

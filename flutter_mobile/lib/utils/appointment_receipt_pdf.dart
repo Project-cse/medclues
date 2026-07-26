@@ -13,6 +13,7 @@ class AppointmentReceiptData {
     required this.bookingId,
     this.publicId,
     this.tokenNumber,
+    this.summaryQrUrl,
     required this.patientName,
     required this.doctorName,
     required this.specialization,
@@ -29,6 +30,7 @@ class AppointmentReceiptData {
   final String bookingId;
   final String? publicId;
   final int? tokenNumber;
+  final String? summaryQrUrl;
   final String patientName;
   final String doctorName;
   final String specialization;
@@ -41,7 +43,17 @@ class AppointmentReceiptData {
   final String status;
   final num? amount;
 
-  String get qrData => bookingId.toUpperCase();
+  /// Prefer signed summary URL for phone cameras; else booking ID for check-in.
+  String get qrData {
+    final url = summaryQrUrl?.trim();
+    if (url != null && url.isNotEmpty) return url;
+    return bookingId.toUpperCase();
+  }
+
+  bool get isSummaryUrlQr {
+    final d = qrData;
+    return d.startsWith('http://') || d.startsWith('https://');
+  }
 
   String get tokenLabel {
     if (tokenNumber != null && tokenNumber! > 0) return 'A-$tokenNumber';
@@ -389,7 +401,9 @@ pw.Widget _ticketCard({
               crossAxisAlignment: pw.CrossAxisAlignment.center,
               children: [
                 pw.BarcodeWidget(
-                  barcode: pw.Barcode.qrCode(),
+                  barcode: pw.Barcode.qrCode(
+                    errorCorrectLevel: pw.BarcodeQRCorrectionLevel.high,
+                  ),
                   data: pdfSafe(data.qrData),
                   width: 88,
                   height: 88,
@@ -397,7 +411,11 @@ pw.Widget _ticketCard({
                 ),
                 pw.SizedBox(height: 6),
                 pw.Text(
-                  pdfSafe(l10n.receiptBookingId),
+                  pdfSafe(
+                    data.isSummaryUrlQr
+                        ? 'Scan for visit summary'
+                        : l10n.receiptBookingId,
+                  ),
                   style: labelStyle.copyWith(
                     fontSize: 8,
                     fontWeight: pw.FontWeight.bold,

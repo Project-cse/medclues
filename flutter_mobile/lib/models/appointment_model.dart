@@ -26,6 +26,7 @@ class AppointmentModel {
   final String? bookingId;
   final String? publicId;
   final String? lifecycleStatus;
+  final String? summaryQrUrl;
   final int? visitCount;
   final int? maxVisits;
   final String? validUntil;
@@ -65,6 +66,7 @@ class AppointmentModel {
     this.bookingId,
     this.publicId,
     this.lifecycleStatus,
+    this.summaryQrUrl,
     this.visitCount,
     this.maxVisits,
     this.validUntil,
@@ -146,6 +148,8 @@ class AppointmentModel {
       publicId: (json['publicId'] ?? json['public_id'])?.toString(),
       lifecycleStatus:
           (json['lifecycleStatus'] ?? json['lifecycle_status'])?.toString(),
+      summaryQrUrl:
+          (json['summaryQrUrl'] ?? json['summary_qr_url'])?.toString(),
       visitCount: (json['visitCount'] ?? json['visit_count']) is num
           ? ((json['visitCount'] ?? json['visit_count']) as num).toInt()
           : int.tryParse('${json['visitCount'] ?? json['visit_count'] ?? ''}'),

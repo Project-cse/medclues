@@ -823,6 +823,99 @@ async def admin_list_pharmacy_orders(partner_id: int, limit: int = 50) -> dict:
     return {"success": True, "data": data}
 
 
+async def admin_counter_list_orders(limit: int = 50) -> dict:
+    """Hospital pharmacy counter — recent pickup orders (admin desk)."""
+    rows = await pharmacy_order_model.list_recent_all(limit=limit)
+    data = []
+    for r in rows:
+        r = dict(r)
+        data.append({
+            "id": r["id"],
+            "publicId": r.get("public_id"),
+            "token": r.get("public_id"),
+            "status": r.get("status"),
+            "patientName": r.get("patient_name") or "Patient",
+            "patientPhone": r.get("patient_phone"),
+            "pharmacyName": r.get("pharmacy_name"),
+            "fulfillment": r.get("fulfillment") or r.get("order_type") or "pickup",
+            "total": float(r["amount_total"]) if r.get("amount_total") is not None else None,
+            "createdAt": r.get("created_at").isoformat() if r.get("created_at") else None,
+        })
+    return {"success": True, "orders": data}
+
+
+async def admin_counter_lookup_order(token: str) -> dict:
+    """Lookup by PHO public id for counter QR scan."""
+    from app.models import pharmacy_order_model as pom
+
+    pid = (token or "").strip().upper()
+    if not pid:
+        return {"success": False, "message": "Enter a pickup token (PHO…)"}
+    order = await pom.get_by_public_id(pid)
+    if not order:
+        # Allow numeric id fallback for desk staff
+        if pid.isdigit():
+            order = await pom.get_by_id(int(pid))
+    if not order:
+        return {"success": False, "message": f'No order found for "{pid}"'}
+    items = await pom.list_items(int(order["id"]))
+    return {
+        "success": True,
+        "order": {
+            "id": order["id"],
+            "publicId": order.get("public_id"),
+            "token": order.get("public_id"),
+            "status": order.get("status"),
+            "total": float(order["amount_total"]) if order.get("amount_total") is not None else None,
+            "items": [
+                {
+                    "id": it.get("id"),
+                    "name": it.get("name") or "Medicine",
+                    "qty": it.get("quantity") or 1,
+                    "price": float(it["unit_price"]) if it.get("unit_price") is not None else None,
+                }
+                for it in items
+            ],
+        },
+    }
+
+
+async def admin_counter_update_status(order_id: int, status: str) -> dict:
+    """Persist hospital counter status change (admin desk)."""
+    from app.models import pharmacy_order_model as pom
+
+    status_map = {
+        "pending": "placed",
+        "packed": "ready",
+        "completed": "delivered",
+        "ready": "ready",
+        "delivered": "delivered",
+        "accepted": "accepted",
+        "cancelled": "cancelled",
+    }
+    to_status = status_map.get((status or "").strip().lower(), (status or "").strip().lower())
+    order = await pom.get_by_id(int(order_id))
+    if not order:
+        return {"success": False, "message": "Order not found"}
+    try:
+        updated = await pom.update_status(
+            int(order_id),
+            to_status,
+            actor_role="admin",
+            notes="Hospital pharmacy counter",
+        )
+    except ValueError as exc:
+        return {"success": False, "message": str(exc)}
+    return {
+        "success": True,
+        "order": {
+            "id": updated["id"] if updated else order_id,
+            "publicId": (updated or order).get("public_id"),
+            "status": (updated or order).get("status"),
+        },
+    }
+
+
 async def sync_prescription_to_express(consultation_id: int, hospital_id: int | None) -> None:
     """Sync published prescription to Express Pharmacy backend (Port 5001)."""
     import os
@@ -853,7 +946,10 @@ async def sync_prescription_to_express(consultation_id: int, hospital_id: int | 
         payload = {
             "externalPrescriptionId": f"RX-{consultation_id}",
             "doctorName": doc_data.get("name") or "Hospital Doctor",
-            "doctorSpecialty": doc_data.get("specialty") or "General Medicine",
+            "doctorSpecialty": doc_data.get("speciality")
+                or doc_data.get("specialty")
+                or doc_data.get("specialization")
+                or "General Medicine",
             "patient": {
                 "name": row.get("patient_name") or "Patient",
                 "phone": row.get("patient_phone") or "0000000000",
@@ -981,24 +1077,60 @@ async def _notify_patient_status(order: dict | None) -> None:
 
 
 async def search_medicine_catalog(query: str) -> dict[str, Any]:
-    """Forward medicine search queries to Express Pharmacy backend (Port 5001)."""
-    import os
-    import httpx
-
-    pharmacy_url = os.getenv("PHARMACY_SERVICE_URL", "http://localhost:5001")
-    internal_key = os.getenv("INTERNAL_API_KEY") or os.getenv("PHARMACY_INTERNAL_API_KEY", "")
-
+    """Patient pharmacy search via FastAPI medicine module (no Express :5001 required)."""
+    q = (query or "").strip()
+    if len(q) < 2:
+        q = "paracetamol"
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(
-                f"{pharmacy_url}/api/integration/catalog/search",
-                params={"query": query},
-                headers={"x-internal-api-key": internal_key},
-            )
-            if resp.status_code == 200:
-                return resp.json()
-    except Exception as exc:
-        log.warning("Pharmacy catalog search HTTP failed: %s", exc)
+        from app.services import medicine_service
 
-    return {"success": True, "data": [], "query": query}
+        result = await medicine_service.search_medicines(
+            q, user_id=None, page=1, limit=20, record_history=False
+        )
+        raw = result.get("results") or result.get("data") or []
+        if not isinstance(raw, list):
+            raw = []
+        data = []
+        for i, item in enumerate(raw):
+            if not isinstance(item, dict):
+                continue
+            openfda = item.get("openfda") if isinstance(item.get("openfda"), dict) else {}
+            brand = item.get("brand_name") or item.get("name")
+            if not brand and openfda:
+                bn = openfda.get("brand_name")
+                brand = bn[0] if isinstance(bn, list) and bn else bn
+            generic = item.get("generic_name") or item.get("substance_name") or item.get("salt")
+            if not generic and openfda:
+                gn = openfda.get("generic_name") or openfda.get("substance_name")
+                generic = gn[0] if isinstance(gn, list) and gn else gn
+            if isinstance(brand, list):
+                brand = brand[0] if brand else "Medicine"
+            if isinstance(generic, list):
+                generic = generic[0] if generic else None
+            labeler = item.get("labeler_name") or item.get("brand")
+            if not labeler and openfda:
+                lb = openfda.get("manufacturer_name") or openfda.get("labeler_name")
+                labeler = lb[0] if isinstance(lb, list) and lb else lb
+            data.append({
+                "id": item.get("id") or item.get("set_id") or f"med_{i}",
+                "_id": item.get("id") or item.get("set_id"),
+                "name": brand or "Medicine",
+                "brand": labeler or "Pharma",
+                "salt": generic or item.get("composition") or "Generic",
+                "category": item.get("product_type") or item.get("category") or "General",
+                "price": item.get("price") or 50,
+                "mrp": item.get("mrp") or 65,
+                "requiresRx": bool(item.get("requiresRx") or item.get("rx") or False),
+                "stock": item.get("stock") if item.get("stock") is not None else 100,
+                "image": item.get("image") or "",
+            })
+        return {"success": True, "data": data, "query": q}
+    except Exception as exc:
+        from app.services.openfda_service import OpenFDAError
+        if isinstance(exc, OpenFDAError):
+            log.warning("Pharmacy catalog OpenFDA: %s", exc)
+        else:
+            log.warning("Pharmacy catalog search failed: %s", exc)
+        return {"success": True, "data": [], "query": q, "message": str(exc)}
+
 

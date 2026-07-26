@@ -100,6 +100,7 @@ class _BookingReceiptScreenState extends ConsumerState<BookingReceiptScreen> {
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                 child: AppointmentReceiptCard(
                   bookingId: receipt.bookingId,
+                  summaryQrUrl: receipt.summaryQrUrl,
                   tokenNumber: receipt.tokenNumber,
                   patientName: receipt.patientName,
                   doctorName: receipt.doctorName,
@@ -133,6 +134,10 @@ class _BookingReceiptScreenState extends ConsumerState<BookingReceiptScreen> {
       bookingId: bookingId,
       publicId: appt?.publicId ?? draft?.publicId,
       tokenNumber: appt?.tokenNumber ?? draft?.tokenNumber,
+      summaryQrUrl: (appt?.isCompleted == true ||
+              (appt?.lifecycleStatus ?? '').toUpperCase() == 'COMPLETED')
+          ? appt?.summaryQrUrl
+          : null,
       patientName: appt?.patientName ?? draft?.patient.name ?? p?.name ?? context.l10n.receiptPatient,
       doctorName: appt?.doctorName?.isNotEmpty == true ? appt!.doctorName : (draft?.doctor.name ?? ''),
       specialization: appt?.specialization?.isNotEmpty == true

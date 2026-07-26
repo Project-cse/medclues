@@ -1470,13 +1470,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get statusInProgress => 'In progress';
 
   @override
-  String get statusCheckedIn => 'Checked In';
+  String get statusCheckedIn => 'Checked in';
 
   @override
-  String get statusInQueue => 'In Queue';
+  String get statusInQueue => 'Checked in';
 
   @override
-  String get statusInConsultation => 'In Consultation';
+  String get statusInConsultation => 'In progress';
 
   @override
   String get statusCompleted => 'Completed';

@@ -31,7 +31,6 @@ BLOCKING_STATUSES = frozenset({
     "READY_FOR_DOCTOR",
     "IN_PROGRESS",
     "RESCHEDULED_ONCE",
-    "MISSED",
 })
 
 TERMINAL_STATUSES = frozenset({
@@ -41,6 +40,21 @@ TERMINAL_STATUSES = frozenset({
     "REFUNDED",
     "CLOSED",
     "FOLLOWUP_EXPIRED",
+})
+
+# Patient cannot cancel these (completed visits / follow-up window / already terminal).
+NON_CANCELLABLE_STATUSES = TERMINAL_STATUSES | frozenset({
+    "COMPLETED",
+    "FOLLOWUP_AVAILABLE",
+    "REFUND_PENDING",
+})
+
+# Shared “done for capacity / archive” set (not occupying a live seat).
+CLOSED_FOR_CAPACITY = TERMINAL_STATUSES | frozenset({
+    "COMPLETED",
+    "FOLLOWUP_AVAILABLE",
+    "REFUND_PENDING",
+    "MISSED",
 })
 
 ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {

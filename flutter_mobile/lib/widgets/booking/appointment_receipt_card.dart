@@ -12,6 +12,7 @@ class AppointmentReceiptCard extends StatelessWidget {
   const AppointmentReceiptCard({
     super.key,
     this.bookingId,
+    this.summaryQrUrl,
     required this.patientName,
     required this.doctorName,
     required this.specialization,
@@ -31,8 +32,24 @@ class AppointmentReceiptCard extends StatelessWidget {
   });
 
   final String? bookingId;
+  /// Signed HTTPS URL for post-visit summary (phone camera). When set, QR encodes this.
+  final String? summaryQrUrl;
 
   bool get _hasBookingId => bookingId != null && bookingId!.trim().isNotEmpty;
+
+  String? get qrPayload {
+    final url = summaryQrUrl?.trim();
+    if (url != null && url.isNotEmpty) return url;
+    if (_hasBookingId) return bookingId!.toUpperCase();
+    return null;
+  }
+
+  bool get _hasQrPayload => qrPayload != null && qrPayload!.isNotEmpty;
+
+  bool get _isSummaryUrlQr {
+    final p = qrPayload;
+    return p != null && (p.startsWith('http://') || p.startsWith('https://'));
+  }
   final int? tokenNumber;
   final String patientName;
   final String doctorName;
@@ -327,7 +344,7 @@ class AppointmentReceiptCard extends StatelessWidget {
               Container(width: 4, height: 4, decoration: const BoxDecoration(color: _tokenBlue, shape: BoxShape.circle)),
               const SizedBox(width: 5),
               Text(
-                'SCAN AT RECEPTION',
+                _isSummaryUrlQr ? 'SCAN FOR VISIT SUMMARY' : 'SCAN AT RECEPTION',
                 style: GoogleFonts.poppins(
                   fontSize: 9,
                   fontWeight: FontWeight.w700,
@@ -358,7 +375,7 @@ class AppointmentReceiptCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Secure & Verified',
+                        _isSummaryUrlQr ? 'Visit summary' : 'Scan at reception',
                         style: GoogleFonts.poppins(
                           fontSize: 9,
                           fontWeight: FontWeight.w700,
@@ -366,7 +383,9 @@ class AppointmentReceiptCard extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        'This QR is unique to your appointment',
+                        _isSummaryUrlQr
+                            ? 'Any phone camera opens your appointment details'
+                            : 'Show this BK code at hospital reception check-in',
                         style: GoogleFonts.poppins(fontSize: 8, color: _tokenBlue.withValues(alpha: 0.85), height: 1.3),
                       ),
                     ],
@@ -381,7 +400,7 @@ class AppointmentReceiptCard extends StatelessWidget {
   }
 
   Widget _qrWidget() {
-    if (_hasBookingId) {
+    if (_hasQrPayload) {
       return SizedBox(
         width: 108,
         height: 108,
@@ -389,10 +408,11 @@ class AppointmentReceiptCard extends StatelessWidget {
           alignment: Alignment.center,
           children: [
             QrImageView(
-              data: bookingId!.toUpperCase(),
+              data: qrPayload!,
               size: 108,
               backgroundColor: Colors.white,
-              errorCorrectionLevel: QrErrorCorrectLevel.M,
+              errorCorrectionLevel: QrErrorCorrectLevel.H,
+              padding: const EdgeInsets.all(4),
             ),
             Container(
               width: 28,

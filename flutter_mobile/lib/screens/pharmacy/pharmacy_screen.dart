@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing/printing.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'package:qr_flutter/qr_flutter.dart';
+
 import '../../constants/app_colors.dart';
 import '../../l10n/app_localizations.dart';
 import '../../providers/service_providers.dart';
@@ -556,59 +558,66 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
   }
 
   void _placeCartOrder(double totalAmount) async {
-    final orderItems = <Map<String, dynamic>>[];
-    _cart.forEach((medId, qty) {
-      final med = _catalogMedicines.firstWhere(
-        (m) => (m['id'] == medId || m['_id'] == medId),
-        orElse: () => {},
+    // Cart checkout requires a prescription-linked pharmacy order API.
+    // Do not invent fake #ORD ids or mark success when the backend rejects.
+    if (_prescriptions.isEmpty) {
+      AppSnackbar.showError(
+        context,
+        'Cart checkout needs an active prescription. Use the Prescriptions tab to order.',
       );
-      if (med.isNotEmpty) {
-        orderItems.add({
-          'product': med['_id'] ?? med['id'],
-          'name': med['name'],
-          'price': med['price'],
-          'quantity': qty,
-        });
-      }
-    });
+      _tabs.animateTo(1);
+      return;
+    }
 
-    final newOrderId = DateTime.now().millisecondsSinceEpoch % 100000;
-    final newOrder = {
-      'id': newOrderId,
-      'publicId': '#ORD-$newOrderId',
-      'amountTotal': totalAmount,
-      'status': 'received',
-      'fulfillment': _selectedDeliveryMode,
-      'store': _selectedStore['name'],
-      'items': orderItems,
-      'createdAt': DateTime.now().toIso8601String(),
-      'riderName': 'Ramesh Kumar',
-      'riderPhone': '+91 98765 43210',
-      'vehicleNo': 'KA 05 EQ 8821',
-    };
+    final rx = _prescriptions.first;
+    final consultationId = _asInt(rx['consultationId']);
+    final pharmacies = (rx['pharmacies'] as List?) ?? [];
+    final pharmacyId = pharmacies.isNotEmpty
+        ? _asInt((pharmacies.first as Map)['id'])
+        : null;
+    if (consultationId == null || pharmacyId == null) {
+      AppSnackbar.showError(
+        context,
+        'No in-house pharmacy mapped for your prescription.',
+      );
+      return;
+    }
 
     try {
-      final svc = ref.read(pharmacyServiceProvider);
-      await svc.placeOrder(
-        consultationId: newOrderId,
-        pharmacyId: 101,
-        fulfillment: _selectedDeliveryMode,
-        notes: 'Placed via Mobile App Cart',
+      final placed = await ref.read(pharmacyServiceProvider).placeOrder(
+            consultationId: consultationId,
+            pharmacyId: pharmacyId,
+            fulfillment: _selectedDeliveryMode,
+            notes: 'Cart checkout · ${_selectedStore['name']} · ₹$totalAmount',
+          );
+      if (!mounted) return;
+      setState(() {
+        _orders.insert(0, placed);
+        _cart.clear();
+      });
+      AppSnackbar.showSuccess(
+        context,
+        _selectedDeliveryMode == 'pickup'
+            ? 'Order placed! Show pickup QR at the hospital pharmacy counter.'
+            : 'Order placed! Track delivery under Orders.',
       );
-    } catch (_) {}
-
-    setState(() {
-      _orders.insert(0, newOrder);
-      _cart.clear();
-    });
-
-    AppSnackbar.showSuccess(
-      context,
-      _selectedDeliveryMode == 'pickup'
-          ? 'Order #$newOrderId placed! Pickup QR generated for Hospital Counter.'
-          : 'Order #$newOrderId placed! Delivery partner assigned (30 Mins).',
-    );
-    _tabs.animateTo(2); // Switch to Orders tab for live tracking
+      _tabs.animateTo(2);
+      await _load();
+      if (!mounted) return;
+      if (_selectedDeliveryMode == 'pickup' &&
+          (placed['publicId'] ?? placed['public_id'] ?? '')
+              .toString()
+              .toUpperCase()
+              .startsWith('PHO')) {
+        await _showQrDialog(placed);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      AppSnackbar.showError(
+        context,
+        e.toString().replaceFirst('Exception: ', ''),
+      );
+    }
   }
 
   Future<void> _orderMeds(Map<String, dynamic> rx) async {
@@ -625,28 +634,50 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
     if (pharmacyId == null) return;
 
     try {
-      await ref.read(pharmacyServiceProvider).placeOrder(
+      final placed = await ref.read(pharmacyServiceProvider).placeOrder(
             consultationId: consultationId,
             pharmacyId: pharmacyId,
             fulfillment: 'pickup',
           );
       if (!mounted) return;
+      setState(() {
+        _orders.insert(0, placed);
+      });
       AppSnackbar.showSuccess(context, 'Prescription order sent to In-House Hospital Pharmacy!');
       _tabs.animateTo(2); // Switch to Orders tab
       await _load();
+      if (!mounted) return;
+      if ((placed['publicId'] ?? placed['public_id'] ?? '')
+          .toString()
+          .toUpperCase()
+          .startsWith('PHO')) {
+        await _showQrDialog(placed);
+      }
     } catch (e) {
       if (!mounted) return;
       AppSnackbar.showError(context, e.toString().replaceFirst('Exception: ', ''));
     }
   }
 
-  Future<void> _showQrDialog(Map<String, dynamic> rx) async {
-    final rxId = rx['consultationId'] ?? 'RX-9842';
+  Future<void> _showQrDialog(Map<String, dynamic> orderOrRx) async {
+    final raw = (orderOrRx['publicId'] ?? orderOrRx['public_id'] ?? '')
+        .toString()
+        .trim()
+        .toUpperCase();
+    // Pickup QR must be real PHO… order public id (counter scan), never consultation id.
+    if (!raw.startsWith('PHO')) {
+      AppSnackbar.showError(
+        context,
+        'Pickup QR available after order is placed (PHO…). Open Orders tab.',
+      );
+      return;
+    }
+    final token = raw;
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Row(
-          children: const [
+        title: const Row(
+          children: [
             Icon(Icons.qr_code_scanner, color: AppColors.primary),
             SizedBox(width: 8),
             Text('Hospital Pickup QR'),
@@ -656,47 +687,28 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
           mainAxisSize: MainAxisSize.min,
           children: [
             const Text(
-              'Show this QR code at the Hospital In-House Pharmacy Counter to collect your packed medicines.',
+              'Show this QR at the hospital pharmacy counter to collect your order.',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 13),
             ),
             const SizedBox(height: 16),
             Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.grey.shade100,
+                color: Colors.white,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: Colors.grey.shade300),
               ),
-              child: Icon(
-                Icons.qr_code_2,
-                size: 160,
-                color: Colors.blue.shade900,
+              child: QrImageView(
+                data: token,
+                size: 180,
+                backgroundColor: Colors.white,
+                errorCorrectionLevel: QrErrorCorrectLevel.H,
               ),
             ),
             const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.green.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.green.shade300),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: const [
-                  Icon(Icons.shield_outlined, size: 14, color: Colors.green),
-                  SizedBox(width: 4),
-                  Text(
-                    'Encrypted JWT · Dynamic 15-Min TTL Expiry',
-                    style: TextStyle(fontSize: 10, color: Colors.green, fontWeight: FontWeight.bold),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 8),
             SelectableText(
-              'Order Token: #$rxId',
+              token,
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
             ),
           ],
@@ -1332,7 +1344,26 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
                                   child: OutlinedButton.icon(
                                     icon: const Icon(Icons.qr_code),
                                     label: const Text('Show Hospital Pickup QR'),
-                                    onPressed: () => _showQrDialog(rx),
+                                    onPressed: () {
+                                      // QR only after a real PHO order exists — find matching order.
+                                      final cid = rx['consultationId'];
+                                      Map<String, dynamic>? match;
+                                      for (final o in _orders) {
+                                        if (o['consultationId'] == cid ||
+                                            o['consultation_id'] == cid) {
+                                          match = o;
+                                          break;
+                                        }
+                                      }
+                                      if (match != null) {
+                                        _showQrDialog(match);
+                                      } else {
+                                        AppSnackbar.showError(
+                                          context,
+                                          'Place counter order first to get a PHO pickup QR.',
+                                        );
+                                      }
+                                    },
                                   ),
                                 ),
                                 const SizedBox(width: 8),
@@ -1353,11 +1384,40 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
                                 label: const Text('Confirm Express 30-Min Home Delivery'),
                                 style: FilledButton.styleFrom(backgroundColor: Colors.purple.shade700),
                                 onPressed: () async {
-                                  AppSnackbar.showSuccess(
-                                    context,
-                                    'Express Home Delivery ordered! Nearest MedClues partner pharmacy is dispatching in 30 mins.',
-                                  );
-                                  _tabs.animateTo(2);
+                                  final pharmacies = (rx['pharmacies'] as List?) ?? [];
+                                  final consultationId = _asInt(rx['consultationId']);
+                                  if (pharmacies.isEmpty || consultationId == null) {
+                                    AppSnackbar.showError(
+                                      context,
+                                      'No pharmacy mapped for delivery.',
+                                    );
+                                    return;
+                                  }
+                                  final pharmacyId = _asInt((pharmacies.first as Map)['id']);
+                                  if (pharmacyId == null) return;
+                                  try {
+                                    final placed = await ref
+                                        .read(pharmacyServiceProvider)
+                                        .placeOrder(
+                                          consultationId: consultationId,
+                                          pharmacyId: pharmacyId,
+                                          fulfillment: 'delivery',
+                                        );
+                                    if (!mounted) return;
+                                    setState(() => _orders.insert(0, placed));
+                                    AppSnackbar.showSuccess(
+                                      context,
+                                      'Home delivery order placed. Track it under Orders.',
+                                    );
+                                    _tabs.animateTo(2);
+                                    await _load();
+                                  } catch (e) {
+                                    if (!mounted) return;
+                                    AppSnackbar.showError(
+                                      context,
+                                      e.toString().replaceFirst('Exception: ', ''),
+                                    );
+                                  }
                                 },
                               ),
                             ),
@@ -1420,11 +1480,17 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
         final status = rawStatus.replaceAll('_', ' ').toUpperCase();
         final total = o['amountTotal'];
         final orderId = o['id'];
-        final publicId = o['publicId'] ?? '#ORD-$orderId';
+        final pho = (o['publicId'] ?? o['public_id'] ?? '').toString().trim();
+        final publicId = pho.toUpperCase().startsWith('PHO')
+            ? pho.toUpperCase()
+            : (pho.isNotEmpty ? pho : 'Pending ID');
+        final isPickup = '${o['fulfillment'] ?? o['selectedFulfillment'] ?? 'pickup'}'
+            .toLowerCase()
+            .contains('pickup');
 
         Color statusColor = Colors.blue;
         int currentStep = 1;
-        if (rawStatus == 'packed' || rawStatus == 'verified') {
+        if (rawStatus == 'packed' || rawStatus == 'verified' || rawStatus == 'ready' || rawStatus == 'billed' || rawStatus == 'paid') {
           statusColor = Colors.orange;
           currentStep = 2;
         } else if (rawStatus == 'out_for_delivery' || rawStatus == 'dispatched' || rawStatus == 'ready_for_pickup') {
@@ -1435,10 +1501,10 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
           currentStep = 4;
         }
 
-        // Mock delivery executive info for out_for_delivery orders
-        final riderName = o['riderName'] ?? 'Ramesh Kumar';
-        final riderPhone = o['riderPhone'] ?? '+91 98765 43210';
-        final vehicleNo = o['vehicleNo'] ?? 'KA 05 EQ 8821';
+        final riderName = o['riderName']?.toString();
+        final riderPhone = o['riderPhone']?.toString();
+        final vehicleNo = o['vehicleNo']?.toString();
+        final hasRider = (riderName ?? '').isNotEmpty && (riderPhone ?? '').isNotEmpty;
 
         return Card(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -1507,8 +1573,8 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
                   ),
                 ),
 
-                // Assigned Delivery Partner Card
-                if (currentStep >= 3) ...[
+                // Assigned Delivery Partner Card (only when API provides rider)
+                if (currentStep >= 3 && hasRider) ...[
                   const SizedBox(height: 10),
                   Container(
                     padding: const EdgeInsets.all(10),
@@ -1537,7 +1603,7 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
                                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                               ),
                               Text(
-                                'Vehicle: $vehicleNo · Mobile: $riderPhone',
+                                'Vehicle: ${vehicleNo ?? '—'} · Mobile: $riderPhone',
                                 style: TextStyle(fontSize: 11, color: Colors.purple.shade900),
                               ),
                             ],
@@ -1556,7 +1622,17 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
                 const Divider(height: 20),
                 Row(
                   children: [
-                    if (currentStep >= 3) ...[
+                    if (isPickup && pho.toUpperCase().startsWith('PHO')) ...[
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          icon: const Icon(Icons.qr_code, size: 16),
+                          label: const Text('Pickup QR'),
+                          onPressed: () => _showQrDialog(o),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                    if (currentStep >= 3 && hasRider) ...[
                       Expanded(
                         child: FilledButton.icon(
                           icon: const Icon(Icons.map, size: 16),
@@ -1595,10 +1671,14 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
   }
 
   void _showLiveRiderTrackerModal(Map<String, dynamic> order) {
-    final riderName = order['riderName'] ?? 'Ramesh Kumar';
-    final riderPhone = order['riderPhone'] ?? '+91 98765 43210';
-    final vehicleNo = order['vehicleNo'] ?? 'KA 05 EQ 8821';
-    final deliveryOtp = order['otp'] ?? '4892';
+    final riderName = order['riderName']?.toString();
+    final riderPhone = order['riderPhone']?.toString();
+    final vehicleNo = order['vehicleNo']?.toString();
+    if (riderName == null || riderPhone == null) {
+      AppSnackbar.showError(context, 'Rider details not available yet.');
+      return;
+    }
+    final deliveryOtp = order['otp']?.toString() ?? '—';
 
     showModalBottomSheet<void>(
       context: context,

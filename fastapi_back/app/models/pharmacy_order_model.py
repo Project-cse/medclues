@@ -124,6 +124,20 @@ async def get_by_public_id(public_id: str) -> Optional[dict]:
     return dict(row) if row else None
 
 
+async def list_recent_all(limit: int = 50) -> list:
+    return await db.query(
+        """
+        SELECT o.*, ph.name AS pharmacy_name, u.name AS patient_name, u.phone AS patient_phone
+        FROM pharmacy_orders o
+        LEFT JOIN pharmacies ph ON ph.id = o.pharmacy_id
+        LEFT JOIN users u ON u.id = o.patient_id
+        ORDER BY o.created_at DESC
+        LIMIT $1
+        """,
+        limit,
+    )
+
+
 async def list_for_partner(partner_id: int, status: str | None = None, limit: int = 50) -> list:
     if status:
         return await db.query(

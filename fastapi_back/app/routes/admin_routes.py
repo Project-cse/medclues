@@ -215,3 +215,30 @@ async def patient_by_appointment(
 ):
     return await admin_controller.patient_by_appointment(appointment_id)
 
+
+@router.get("/pharmacy/counter/orders")
+async def pharmacy_counter_orders(
+    limit: int = 50, admin_email: str = Depends(auth_admin)
+):
+    from app.services import pharmacy_service
+    return await pharmacy_service.admin_counter_list_orders(limit=min(limit, 100))
+
+
+@router.get("/pharmacy/counter/lookup")
+async def pharmacy_counter_lookup(
+    token: str = "", admin_email: str = Depends(auth_admin)
+):
+    from app.services import pharmacy_service
+    return await pharmacy_service.admin_counter_lookup_order(token)
+
+
+@router.post("/pharmacy/counter/orders/{order_id}/status")
+async def pharmacy_counter_update_status(
+    order_id: int, req: Request, admin_email: str = Depends(auth_admin)
+):
+    from app.services import pharmacy_service
+    body = await req.json()
+    return await pharmacy_service.admin_counter_update_status(
+        order_id, body.get("status") or body.get("nextStatus") or ""
+    )
+

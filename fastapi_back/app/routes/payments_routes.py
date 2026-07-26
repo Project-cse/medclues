@@ -55,14 +55,33 @@ async def create_order(req: Request, user_id: int = Depends(auth_user)):
     parsed = validate_body(CreateOrderRequest, body)
     if hasattr(parsed, "status_code"):
         return parsed
-    data = parsed.model_dump()
+    data = parsed.model_dump(by_alias=False)
+    # Preserve camelCase keys the controller also accepts.
+    if data.get("actual_patient") is not None:
+        data["actualPatient"] = data["actual_patient"]
     if data.get("doctor_id"):
         return await payments_controller.create_appointment_order(user_id, data)
 
     amount = data.get("amount")
     currency = data.get("currency", "INR")
     receipt = data.get("receipt")
+    # amount is always paise
     return await payments_controller.create_order(amount, currency, receipt)
+
+
+@router.post("/appointment-order")
+async def appointment_payment_order(req: Request, user_id: int = Depends(auth_user)):
+    """Pay for an already-booked appointment (web book-then-pay flow)."""
+    from app.controllers import user_controller
+    body = await req.json()
+    return await user_controller.payment_razorpay(body.get("appointmentId") or body.get("appointment_id"))
+
+
+@router.post("/appointment-verify")
+async def appointment_payment_verify(req: Request, user_id: int = Depends(auth_user)):
+    from app.controllers import user_controller
+    body = await req.json()
+    return await user_controller.verify_razorpay(body)
 
 
 @router.post("/verify")

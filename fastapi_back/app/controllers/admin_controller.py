@@ -112,8 +112,8 @@ async def appointment_cancel(appointment_id: int, reason: Optional[str] = None):
                         "date": str(appointment.get('slot_date', '')).replace('_', '/'),
                         "time": appointment.get('slot_time', ''),
                         "tokenNumber": appointment.get('token_number', 'N/A'),
-                        "publicId": appointment.get("public_id") or f"APT{appointment_id}",
-                        "bookingId": appointment.get("booking_id") or f"#APT{appointment_id}",
+                        "publicId": appointment.get("public_id") or None,
+                        "bookingId": appointment.get("booking_id") or None,
                         "reason": reason or "Administrative change",
                     },
                 )

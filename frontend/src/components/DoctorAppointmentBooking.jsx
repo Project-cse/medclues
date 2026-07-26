@@ -114,12 +114,8 @@ const DoctorAppointmentBooking = ({ doctors = [], userData = null }) => {
       day: dateInfo.day,
       time: dateInfo.time,
       price: selectedDoctor.fees,
-      qrData: JSON.stringify({
-        appointmentId,
-        doctorId: selectedDoctor._id,
-        date: selectedDate,
-        time: selectedTime
-      })
+      // Unfinished demo component — no real booking_id; do not emit fake check-in QR.
+      bookingId: null,
     }
 
     setAppointmentData(appointment)
@@ -463,15 +459,22 @@ const DoctorAppointmentBooking = ({ doctors = [], userData = null }) => {
                         </div>
                       </div>
 
-                      {/* QR Code */}
+                      {/* QR Code — only real BK check-in codes (demo booking has none) */}
                       <div className="flex justify-center mb-6">
-                        <div className="bg-white p-4 rounded-xl">
-                          <QRCode
-                            value={appointmentData.qrData}
-                            size={150}
-                            level="H"
-                            style={{ height: "auto", maxWidth: "100%", width: "100%" }}
-                          />
+                        <div className="bg-white p-4 rounded-xl text-center max-w-xs">
+                          {appointmentData.bookingId ? (
+                            <QRCode
+                              value={String(appointmentData.bookingId).toUpperCase()}
+                              size={150}
+                              level="H"
+                              style={{ height: "auto", maxWidth: "100%", width: "100%" }}
+                            />
+                          ) : (
+                            <p className="text-sm text-gray-600 px-2">
+                              Demo ticket only — not a reception check-in QR. Use the live Appointment booking flow for a BK code.
+                            </p>
+                          )}
+                          <p className="text-xs text-gray-500 mt-2">Scan at reception</p>
                         </div>
                       </div>
 

@@ -154,6 +154,12 @@ async def create_appointment(app_data: Dict[str, Any]):
 
     public_id = await public_id_service.new_appointment_public_id()
     
+    hospital_id = app_data.get('hospitalId') or app_data.get('hospital_id')
+    if hospital_id is None:
+        doc = app_data.get('docData') or {}
+        if isinstance(doc, dict):
+            hospital_id = doc.get('hospitalId') or doc.get('hospital_id')
+
     sql = """
         INSERT INTO appointments (
             user_id, doctor_id, slot_date, slot_time, user_data, doctor_data,
@@ -162,8 +168,8 @@ async def create_appointment(app_data: Dict[str, Any]):
             actual_patient_gender, actual_patient_relationship, actual_patient_phone,
             actual_patient_is_self,
             token_number, status, queue_position, estimated_wait_time, selected_symptoms,
-            booking_id, slot_id, public_id, appointment_source
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)
+            booking_id, slot_id, public_id, appointment_source, hospital_id
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30)
         RETURNING *
     """
     
@@ -197,6 +203,7 @@ async def create_appointment(app_data: Dict[str, Any]):
         app_data.get('slotId'),
         public_id,
         (app_data.get('source') or 'ONLINE'),
+        int(hospital_id) if hospital_id is not None else None,
     )
     
     return await db.fetch_row(sql, *values)
@@ -232,6 +239,21 @@ async def update_appointment(app_id: Union[int, str], app_data: Dict[str, Any]):
     return await db.fetch_row(sql, *values)
 
 async def cancel_appointment(app_id: int):
+    """Staff cancel — refuse completed / follow-up / already-terminal visits."""
+    row = await db.fetch_row(
+        "SELECT id, lifecycle_status, is_completed, cancelled FROM appointments WHERE id = $1",
+        app_id,
+    )
+    if not row:
+        return None
+    if row.get("cancelled"):
+        return dict(row)
+    ls = (row.get("lifecycle_status") or "").upper()
+    from app.services.appointment_lifecycle_service import NON_CANCELLABLE_STATUSES
+    if row.get("is_completed") or ls in NON_CANCELLABLE_STATUSES:
+        raise ValueError(
+            f"Cannot cancel appointment in status {ls or 'COMPLETED'}."
+        )
     sql = """
         UPDATE appointments
         SET cancelled = true,

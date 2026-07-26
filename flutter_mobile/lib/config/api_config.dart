@@ -159,6 +159,8 @@ class ApiConfig {
       '/api/user/appointments/$appointmentId/confirm-tomorrow-reschedule';
   static String appointmentByBookingId(String bookingId) =>
       '/api/appointments/$bookingId';
+  static String publicAppointmentSummary(String bookingId, String sig) =>
+      '/api/public/appointment-summary/$bookingId?sig=${Uri.encodeQueryComponent(sig)}';
   static String callRequestForAppointment(String appointmentId) =>
       '/api/user/appointments/$appointmentId/call/request';
   static String callStatusForAppointment(String appointmentId) =>

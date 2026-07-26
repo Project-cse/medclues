@@ -188,7 +188,7 @@ Password recovery: `/doctor-forgot-password` (`src/pages/DoctorForgotPassword.js
 
 ## Shared UI
 
-Reusable MediChain design-system components in `src/components/mc/`:
+Reusable MedClues design-system components in `src/components/mc/`:
 
 | Component | Role |
 |-----------|------|
@@ -215,7 +215,7 @@ admin/
 │   ├── components/
 │   │   ├── Navbar.jsx, Sidebar.jsx
 │   │   ├── AddDoctorForm.jsx
-│   │   └── mc/                  # MediChain design system
+│   │   └── mc/                  # MedClues design system
 │   ├── context/                 # AdminContext, DeanContext, ReceptionContext
 │   ├── services/                # authApi, authInterceptor
 │   └── pages/                   # Admin / Dean / Doctor / Reception

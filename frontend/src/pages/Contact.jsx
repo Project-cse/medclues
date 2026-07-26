@@ -124,7 +124,7 @@ const Contact = () => {
 
               {/* Email Row */}
               <a 
-                href="mailto:medichain123@gmail.com" 
+                href="mailto:support@medclues.com" 
                 className='flex items-start sm:items-center gap-3 sm:gap-4 group cursor-pointer'
               >
                 <div className='w-10 h-10 bg-cyan-50 rounded-lg flex items-center justify-center flex-shrink-0 group-hover:bg-cyan-500 transition-all duration-300 shadow-sm'>
@@ -135,8 +135,7 @@ const Contact = () => {
                 <div className='flex-1 min-w-0'>
                   <span className='block text-xs sm:text-sm text-gray-500 mb-1 group-hover:text-cyan-700 font-bold uppercase tracking-widest'>Inquiry Email</span>
                   <span className='block text-sm sm:text-base text-gray-900 font-bold group-hover:text-cyan-600 transition-colors break-all'>
-                    medichain123@gmail.com
-                  </span>
+                    support@medclues.com                  </span>
                 </div>
               </a>
             </div>

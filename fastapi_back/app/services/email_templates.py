@@ -18,7 +18,7 @@ TAGLINE = "Your Health, Our Priority"
 
 
 def support_email() -> str:
-    return (settings.SUPPORT_EMAIL or "medichain123@gmail.com").strip() or "medichain123@gmail.com"
+    return (settings.SUPPORT_EMAIL or "support@medclues.com").strip() or "support@medclues.com"
 
 
 def support_phone() -> str:
@@ -266,7 +266,7 @@ def appointment_confirmed(details: dict, view_url: str) -> str:
     if hospital_location:
         rows.append(("Location", hospital_location))
     rows.extend([
-        ("Booking ID", details.get("bookingId", details.get("publicId", ""))),
+        ("Booking ID", details.get("bookingId") or ""),
         ("Consultation Fee", f"Rs. {details.get('fee', '')}"),
     ])
 

@@ -1,6 +1,8 @@
-import React, { useContext, useRef, useState, useEffect } from 'react'
+import React, { useCallback, useContext, useEffect, useState } from 'react'
 import { toast } from 'react-toastify'
 import { ReceptionContext } from '../../context/ReceptionContext'
+import { useQrBookingScanner } from '../../hooks/useQrBookingScanner'
+import { extractBookingId, looksLikeVisitSummaryPayload } from '../../utils/bookingId'
 import { PageWrap, RcHeader, Avatar, Pill, EmptyState, ReceptionTabs, RECEPTION_TAB_GROUPS } from './components'
 
 const inputCls = 'w-full px-3 py-2 rounded-rd border border-rd-border bg-rd-surface focus:border-rd-primary outline-none text-sm font-medium text-rd-text'
@@ -9,44 +11,75 @@ const QRCheckIn = () => {
   const { checkIn, searchPatients } = useContext(ReceptionContext)
   const [bookingId, setBookingId] = useState('')
   const [busy, setBusy] = useState(false)
-  const [camOn, setCamOn] = useState(false)
+  const [lastSuccess, setLastSuccess] = useState(null)
   const [recent, setRecent] = useState([])
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
-  const videoRef = useRef(null)
-  const streamRef = useRef(null)
 
-  const toggleCam = async () => {
-    if (camOn) {
-      streamRef.current?.getTracks().forEach((t) => t.stop())
-      streamRef.current = null
-      setCamOn(false)
+  const doCheckIn = useCallback(async (id, rawScan) => {
+    const raw = rawScan || id || bookingId
+    // Reject visit-summary before BK extract (URLs embed BK…).
+    if (looksLikeVisitSummaryPayload(raw)) {
+      toast.error('This is a visit-summary QR, not a check-in booking code. Ask the patient for the Scan at reception QR (BK…).')
       return
     }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-      streamRef.current = stream
-      if (videoRef.current) videoRef.current.srcObject = stream
-      setCamOn(true)
-    } catch {
-      toast.error('Could not access camera. Enter the Booking ID manually.')
+    const code = extractBookingId(raw)
+    if (!code) {
+      toast.error('Enter a valid Booking ID (e.g. BK8X4P2Q)')
+      return
     }
-  }
-
-  useEffect(() => () => streamRef.current?.getTracks().forEach((t) => t.stop()), [])
-
-  const doCheckIn = async (id) => {
-    const code = (id || bookingId).trim()
-    if (!code) return toast.error('Enter a Booking ID')
     setBusy(true)
     const res = await checkIn(code)
     setBusy(false)
     if (res?.success) {
+      const name = res.patientName || res.appointment?.userData?.name || 'Patient'
+      const token = res.tokenNumber
       toast.success(res.message || 'Checked in')
-      setRecent((r) => [{ bookingId: code, name: res.patientName || res.appointment?.userData?.name || 'Patient', time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }), status: 'COMPLETED', image: res.appointment?.userData?.image }, ...r].slice(0, 8))
+      setLastSuccess({
+        bookingId: res.bookingId || code,
+        name,
+        doctorName: res.doctorName,
+        tokenNumber: token,
+        visitNumber: res.visitNumber,
+        maxVisits: res.maxVisits,
+      })
+      setRecent((r) => [{
+        bookingId: res.bookingId || code,
+        name,
+        doctorName: res.doctorName,
+        tokenNumber: token,
+        time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+        status: 'CHECKED_IN',
+        image: res.appointment?.userData?.image,
+      }, ...r].slice(0, 8))
       setBookingId('')
     } else {
-      setRecent((r) => [{ bookingId: code, name: 'Unknown', time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }), status: 'NO_SHOW' }, ...r].slice(0, 8))
+      toast.error(res?.message || 'Check-in failed')
+      setRecent((r) => [{
+        bookingId: code,
+        name: '—',
+        time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+        status: 'NO_SHOW',
+      }, ...r].slice(0, 8))
+    }
+  }, [bookingId, checkIn])
+
+  const onScan = useCallback((code, raw) => {
+    if (busy) return
+    const display = code || String(raw || '').trim()
+    setBookingId(display)
+    void doCheckIn(code, raw)
+  }, [busy, doCheckIn])
+
+  const { videoRef, camOn, toggleCam } = useQrBookingScanner({
+    enabled: true,
+    onCode: onScan,
+  })
+
+  const handleToggleCam = async () => {
+    const ok = await toggleCam()
+    if (ok === false && !camOn) {
+      toast.error('Could not access camera. Enter the Booking ID manually.')
     }
   }
 
@@ -57,16 +90,16 @@ const QRCheckIn = () => {
       if (r?.success) setResults(r.patients || [])
     }, 350)
     return () => clearTimeout(t)
-  }, [query])
+  }, [query, searchPatients])
 
   return (
     <PageWrap>
-      <RcHeader title='Check-In' subtitle='Scan patient QR code or enter booking ID' />
+      <RcHeader title='Check-In' subtitle='Scan patient booking QR to check in' />
       <ReceptionTabs items={RECEPTION_TAB_GROUPS.checkin} />
 
       <div className='grid lg:grid-cols-2 gap-5'>
         <div className='rd-panel p-5'>
-          <p className='text-sm font-bold text-rd-text mb-4'>Scan QR Code</p>
+          <p className='text-sm font-bold text-rd-text mb-4'>Scan patient booking QR</p>
           <div className='aspect-square max-w-xs mx-auto rounded-rd bg-rd-sidebar overflow-hidden flex items-center justify-center relative'>
             {camOn ? (
               <video ref={videoRef} autoPlay playsInline muted className='w-full h-full object-cover' />
@@ -75,18 +108,52 @@ const QRCheckIn = () => {
             )}
             <div className='absolute inset-6 border-2 border-blue-400/60 rounded-rd pointer-events-none' />
           </div>
-          <p className='text-center text-xs text-rd-muted mt-3'>Position the QR code within the frame</p>
-          <button onClick={toggleCam} className='mt-4 w-full py-3 rounded-rd bg-rd-primary text-white text-sm font-bold hover:bg-rd-primary-hover'>{camOn ? 'Turn off Camera' : 'Turn on Camera'}</button>
+          <p className='text-center text-xs text-rd-muted mt-3'>
+            {camOn ? 'Point the camera at the booking QR — check-in runs automatically' : 'Turn on the camera or enter the Booking ID'}
+          </p>
+          <button type='button' onClick={handleToggleCam} className='mt-4 w-full py-3 rounded-rd bg-rd-primary text-white text-sm font-bold hover:bg-rd-primary-hover'>
+            {camOn ? 'Turn off Camera' : 'Turn on Camera'}
+          </button>
         </div>
 
         <div className='space-y-5'>
           <div className='rd-panel p-5'>
-            <p className='text-sm font-bold text-rd-text mb-3'>Or Enter Booking ID</p>
+            <p className='text-sm font-bold text-rd-text mb-3'>Or enter Booking ID</p>
             <div className='flex gap-2'>
-              <input className={inputCls} value={bookingId} onChange={(e) => setBookingId(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && doCheckIn()} placeholder='Enter booking ID' />
-              <button disabled={busy} onClick={() => doCheckIn()} className='px-5 py-2.5 rounded-rd bg-rd-primary text-white text-sm font-bold hover:bg-rd-primary-hover disabled:opacity-50 shrink-0'>Check</button>
+              <input
+                className={inputCls}
+                value={bookingId}
+                onChange={(e) => setBookingId(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && doCheckIn()}
+                placeholder='BK8X4P2Q'
+                autoComplete='off'
+              />
+              <button type='button' disabled={busy} onClick={() => doCheckIn()} className='px-5 py-2.5 rounded-rd bg-rd-primary text-white text-sm font-bold hover:bg-rd-primary-hover disabled:opacity-50 shrink-0'>
+                {busy ? '…' : 'Check In'}
+              </button>
             </div>
+            <p className='text-[11px] text-rd-muted mt-2'>USB barcode scanners type into this field — press Enter to check in.</p>
           </div>
+
+          {lastSuccess && (
+            <div className='rd-panel p-5 border border-emerald-200 bg-emerald-50/60'>
+              <p className='text-sm font-bold text-emerald-800 mb-2'>Checked in</p>
+              <p className='text-sm text-rd-text font-semibold'>{lastSuccess.name}</p>
+              {lastSuccess.doctorName && (
+                <p className='text-xs text-rd-muted mt-1'>Doctor: {lastSuccess.doctorName}</p>
+              )}
+              <p className='text-xs text-rd-muted mt-1 font-mono'>{lastSuccess.bookingId}</p>
+              {(lastSuccess.tokenNumber != null && lastSuccess.tokenNumber !== '') && (
+                <p className='text-xs text-rd-muted mt-1'>Token: #{lastSuccess.tokenNumber}</p>
+              )}
+              {lastSuccess.visitNumber != null && (
+                <p className='text-xs text-rd-muted mt-1'>
+                  Visit {lastSuccess.visitNumber}
+                  {lastSuccess.maxVisits != null ? ` of ${lastSuccess.maxVisits}` : ''}
+                </p>
+              )}
+            </div>
+          )}
 
           <div className='rd-panel p-5'>
             <p className='text-sm font-bold text-rd-text mb-3'>Search Patient</p>

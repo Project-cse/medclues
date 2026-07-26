@@ -12,6 +12,7 @@ import QRCode from 'react-qr-code'
 import PaymentModal from '../components/PaymentModal'
 import { isOnlineVideoAppointment } from '../utils/videoConsult'
 import { labelForAppointment } from '../utils/lifecycleLabels'
+import { checkInQrPayload, appointmentQrPayload } from '../utils/bookingQr'
 // Dynamic imports to avoid Vite pre-bundling issues
 
 const MyAppointments = () => {
@@ -66,18 +67,9 @@ const MyAppointments = () => {
         return formattedName.startsWith('Dr.') ? formattedName : `Dr. ${formattedName}`;
     }
 
-    // Generate QR code data for appointment
+    // Reception check-in QR = bare BK…; completed visits use visit-summary URL.
     const generateQRData = (item) => {
-        return JSON.stringify({
-            type: 'appointment',
-            appointmentId: item._id,
-            tokenNumber: item.tokenNumber,
-            doctorName: item.docData?.name,
-            patientName: item.userData?.name,
-            date: item.slotDate,
-            time: item.slotTime,
-            amount: item.amount
-        })
+        return appointmentQrPayload(item) || checkInQrPayload(item) || ''
     }
 
     // Download receipt
@@ -95,7 +87,7 @@ APPOINTMENT DETAILS
 -------------------
 Patient Name: ${item.userData?.name || 'N/A'}
 Doctor: ${item.docData?.name || 'N/A'}
-Specialty: ${item.docData?.speciality || 'N/A'}
+Specialty: ${item.docData?.speciality || item.docData?.specialty || item.docData?.specialization || 'N/A'}
 ${item.docData?.address ? `Address: ${item.docData.address.line1}${item.docData.address.line2 ? ', ' + item.docData.address.line2 : ''}` : ''}
 
 PAYMENT DETAILS
@@ -134,7 +126,7 @@ Thank you for choosing MedClues Healthcare!
         try {
             // Step 1: Create Razorpay order on backend
             const { data } = await axios.post(
-                backendUrl + '/api/user/payment-razorpay',
+                backendUrl + '/api/payments/appointment-order',
                 { appointmentId: appointmentId.toString() },
                 { headers: { token } }
             )
@@ -157,7 +149,7 @@ Thank you for choosing MedClues Healthcare!
                     try {
                         // Step 3: Verify payment signature
                         const { data: verifyData } = await axios.post(
-                            backendUrl + '/api/user/verify-razorpay',
+                            backendUrl + '/api/payments/appointment-verify',
                             {
                                 razorpay_order_id: response.razorpay_order_id,
                                 razorpay_payment_id: response.razorpay_payment_id,
@@ -501,7 +493,7 @@ Thank you for choosing MedClues Healthcare!
         <div class="footer">
             <div>
                 <p>System Generated Document - MedClues Digital Health Platform</p>
-                <p>Support: medichain123@gmail.com | ID: ${String(item._id)}</p>
+                <p>Support: support@medclues.com | ID: ${String(item._id)}</p>
             </div>
             <div class="stamp-box">Hospital Stamp</div>
             <div style="text-align: center;">
@@ -539,8 +531,8 @@ Thank you for choosing MedClues Healthcare!
                 })
                 return
             }
-            // Always generate QR code - it's compulsory on 2nd page
-            const qrData = generateQRCodeSVG(item._id)
+            // Always generate QR code - compulsory on 2nd page (bare BK when available)
+            const qrData = generateQRCodeSVG(item)
             qrContainer.innerHTML = qrData
 
             // Wait for images to load, then generate PDF using dynamic imports
@@ -635,57 +627,22 @@ Thank you for choosing MedClues Healthcare!
         }
     }
 
-    // Helper function to generate QR code SVG (simplified representation)
-    // This QR code is COMPULSORY and must always be generated for the 2nd page
-    const generateQRCodeSVG = (id) => {
+    // Print helper: BK text only (never decorative ID-{numeric} as check-in).
+    const generateQRCodeSVG = (item) => {
         try {
-            const text = id ? String(id) : 'DEFAULT'
-            const qrData = `OP-${text.substring(0, 12)}`
-            // Create a more realistic QR code pattern
-            const pattern = []
-            for (let i = 0; i < 25; i++) {
-                for (let j = 0; j < 25; j++) {
-                    // Create a pattern that looks like a QR code
-                    const shouldFill = (i + j) % 3 === 0 || (i * j) % 7 === 0 || i === 0 || j === 0 || i === 24 || j === 24
-                    if (shouldFill) {
-                        pattern.push(`<rect x="${j * 4 + 10}" y="${i * 4 + 10}" width="4" height="4" fill="#0c4a6e"/>`)
-                    }
-                }
+            const code = checkInQrPayload(item)
+            if (!code) {
+                return '<div style="font-size:11px;color:#64748b;">Booking ID unavailable</div>'
             }
             return `
-                <svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120">
-                    <rect width="120" height="120" fill="white" stroke="#0ea5e9" stroke-width="2" rx="4"/>
-                    <!-- QR Code Pattern -->
-                    ${pattern.join('')}
-                    <!-- Corner markers -->
-                    <rect x="10" y="10" width="30" height="30" fill="#0c4a6e" rx="2"/>
-                    <rect x="15" y="15" width="20" height="20" fill="white" rx="1"/>
-                    <rect x="17" y="17" width="16" height="16" fill="#0c4a6e"/>
-                    <rect x="80" y="10" width="30" height="30" fill="#0c4a6e" rx="2"/>
-                    <rect x="85" y="15" width="20" height="20" fill="white" rx="1"/>
-                    <rect x="87" y="17" width="16" height="16" fill="#0c4a6e"/>
-                    <rect x="10" y="80" width="30" height="30" fill="#0c4a6e" rx="2"/>
-                    <rect x="15" y="85" width="20" height="20" fill="white" rx="1"/>
-                    <rect x="17" y="87" width="16" height="16" fill="#0c4a6e"/>
-                </svg>
+                <div style="text-align:center;font-family:monospace;padding:12px;border:2px solid #0f172a;border-radius:8px;width:120px;">
+                    <div style="font-size:9px;font-weight:700;margin-bottom:6px;">SCAN AT RECEPTION</div>
+                    <div style="font-size:13px;font-weight:800;letter-spacing:0.06em;word-break:break-all;">${code}</div>
+                </div>
             `
         } catch (error) {
             console.error('Error generating QR code:', error)
-            // Return a fallback QR code even if generation fails
-            return `
-                <svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120">
-                    <rect width="120" height="120" fill="white" stroke="#0ea5e9" stroke-width="2" rx="4"/>
-                    <rect x="10" y="10" width="30" height="30" fill="#0c4a6e" rx="2"/>
-                    <rect x="15" y="15" width="20" height="20" fill="white" rx="1"/>
-                    <rect x="17" y="17" width="16" height="16" fill="#0c4a6e"/>
-                    <rect x="80" y="10" width="30" height="30" fill="#0c4a6e" rx="2"/>
-                    <rect x="85" y="15" width="20" height="20" fill="white" rx="1"/>
-                    <rect x="87" y="17" width="16" height="16" fill="#0c4a6e"/>
-                    <rect x="10" y="80" width="30" height="30" fill="#0c4a6e" rx="2"/>
-                    <rect x="15" y="85" width="20" height="20" fill="white" rx="1"/>
-                    <rect x="17" y="87" width="16" height="16" fill="#0c4a6e"/>
-                </svg>
-            `
+            return '<div>QR unavailable</div>'
         }
     }
 
@@ -1048,13 +1005,19 @@ Thank you for choosing MedClues Healthcare!
                                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                                                         {/* QR Code */}
                                                         <div className="flex flex-col items-center sm:items-start">
-                                                            <p className="text-xs text-gray-600 mb-3 font-semibold">Appointment QR Code</p>
+                                                            <p className="text-xs text-gray-600 mb-3 font-semibold">
+                                                                {item.isCompleted ? 'Visit summary QR' : 'Scan at reception'}
+                                                            </p>
                                                             <div className="bg-white p-3 rounded-lg shadow-sm border-2 border-gray-200">
+                                                                {generateQRData(item) ? (
                                                                 <QRCode
                                                                     value={generateQRData(item)}
                                                                     size={140}
                                                                     level="H"
                                                                 />
+                                                                ) : (
+                                                                  <p className="text-xs text-gray-500 p-4">Booking QR unavailable</p>
+                                                                )}
                                                             </div>
                                                         </div>
 

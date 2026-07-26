@@ -214,12 +214,15 @@ class Config:
     EMAIL_APP_PASSWORD = os.getenv("EMAIL_APP_PASSWORD")
     # Public support inbox (testing: Gmail until support@medclues.com is provisioned)
     SUPPORT_EMAIL = (
-        os.getenv("SUPPORT_EMAIL") or "medichain123@gmail.com"
-    ).strip() or "medichain123@gmail.com"
+        os.getenv("SUPPORT_EMAIL") or "support@medclues.com"
+    ).strip() or "support@medclues.com"
     SUPPORT_PHONE = (os.getenv("SUPPORT_PHONE") or "1800-123-4567").strip() or "1800-123-4567"
 
     # URLs
     FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
+    # Flutter web (or hosted app) origin for Visit Summary QR hash routes: /#/a/{BK}?sig=
+    # When empty, QR falls back to BACKEND_URL /link/appointment-summary/...
+    PUBLIC_WEB_BASE_URL = (os.getenv("PUBLIC_WEB_BASE_URL") or "").strip()
     BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:5000")
     ADMIN_PANEL_URL = (os.getenv("ADMIN_PANEL_URL") or os.getenv("ADMIN_URL") or "https://medclues-admin.vercel.app").strip()
 

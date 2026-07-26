@@ -146,7 +146,7 @@ async def cancel_with_policy(
         return {"success": False, "message": "Unauthorized or not found"}
 
     ls = (appointment.get("lifecycle_status") or "BOOKED").upper()
-    if ls in appointment_lifecycle_service.TERMINAL_STATUSES:
+    if ls in appointment_lifecycle_service.NON_CANCELLABLE_STATUSES:
         return {"success": False, "message": "Appointment already closed."}
 
     paid = bool(appointment.get("payment") or appointment.get("paid_at_booking"))
@@ -187,7 +187,15 @@ async def cancel_with_policy(
         print(f"[WARNING] lifecycle transition failed, forcing cancel: {transition_err}")
         try:
             await db.execute(
-                "UPDATE appointments SET cancelled = true, status = 'cancelled' WHERE id = $1",
+                """
+                UPDATE appointments SET
+                    cancelled = true,
+                    status = 'cancelled',
+                    lifecycle_status = 'CANCELLED',
+                    closed_at = COALESCE(closed_at, NOW()),
+                    updated_at = NOW()
+                WHERE id = $1
+                """,
                 int(appointment_id),
             )
         except Exception as force_err:
@@ -590,7 +598,7 @@ async def complete_consultation(
                     is_completed = true,
                     status = 'completed',
                     completed_at = COALESCE(completed_at, NOW()),
-                    lifecycle_status = COALESCE(NULLIF(lifecycle_status, ''), 'COMPLETED'),
+                    lifecycle_status = 'COMPLETED',
                     updated_at = NOW()
                 WHERE id = $1
                 """,

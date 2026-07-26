@@ -260,13 +260,21 @@ async def booking_constraints(user_id: int = Depends(auth_user)):
 
 @router.post("/payment-razorpay")
 async def payment_razorpay(req: Request, user_id: int = Depends(auth_user)):
-    body = await req.json()
-    return await user_controller.payment_razorpay(body.get('appointmentId'))
+    """Deprecated — use POST /api/payments/appointment-order."""
+    from fastapi import HTTPException
+    raise HTTPException(
+        status_code=410,
+        detail="Deprecated. Use /api/payments/appointment-order or /api/payments/create-order (amount in paise).",
+    )
 
 @router.post("/verify-razorpay")
 async def verify_razorpay(req: Request, user_id: int = Depends(auth_user)):
-    body = await req.json()
-    return await user_controller.verify_razorpay(body)
+    """Deprecated — use POST /api/payments/appointment-verify."""
+    from fastapi import HTTPException
+    raise HTTPException(
+        status_code=410,
+        detail="Deprecated. Use /api/payments/appointment-verify or /api/payments/verify.",
+    )
 
 # Health Records - accessible under /api/user/health-records (frontend uses this path)
 @router.get("/health-records")

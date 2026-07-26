@@ -121,7 +121,15 @@ AppointmentStatusInfo resolveAppointmentStatus(
       textColor: Colors.grey.shade700,
     );
   }
-  if (lifecycle == 'COMPLETED' || lifecycle == 'CLOSED') {
+  if (lifecycle == 'CLOSED') {
+    return AppointmentStatusInfo(
+      status: AppointmentDisplayStatus.completed,
+      label: 'Closed',
+      backgroundColor: Colors.grey.withValues(alpha: 0.15),
+      textColor: Colors.grey.shade700,
+    );
+  }
+  if (lifecycle == 'COMPLETED') {
     return AppointmentStatusInfo(
       status: AppointmentDisplayStatus.completed,
       label: labelFor('completed'),
@@ -197,8 +205,10 @@ AppointmentStatusInfo resolveAppointmentStatus(
       textColor: const Color(0xFF16A34A),
     );
   }
-  // Backend emits CHECKED_IN (not IN_QUEUE). Map legacy in-queue status → checked in.
-  if (lifecycle == 'CHECKED_IN' || status == 'in-queue') {
+  // CHECKED_IN is canonical; IN_QUEUE / in-queue are reception desk aliases.
+  if (lifecycle == 'CHECKED_IN' ||
+      lifecycle == 'IN_QUEUE' ||
+      status == 'in-queue') {
     return AppointmentStatusInfo(
       status: AppointmentDisplayStatus.checkedIn,
       label: labelFor('checkedIn'),

@@ -60,4 +60,6 @@ class RouteNames {
   static const hpChat = '/health-protection/chat';
   static const hpEmergencyCard = '/health-protection/emergency-card';
   static const hpAnalytics = '/health-protection/analytics';
+  /// Public signed visit summary (QR scan landing). Path: `/a/:bookingId?sig=`
+  static const appointmentSummaryQr = '/a/:bookingId';
 }

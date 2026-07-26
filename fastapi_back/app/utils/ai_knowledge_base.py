@@ -54,10 +54,10 @@ def get_contact():
     """Support contact aligned with SUPPORT_EMAIL / SUPPORT_PHONE config."""
     from app.config.config import settings
 
-    email = (getattr(settings, "SUPPORT_EMAIL", None) or "medichain123@gmail.com").strip()
+    email = (getattr(settings, "SUPPORT_EMAIL", None) or "support@medclues.com").strip()
     phone = (getattr(settings, "SUPPORT_PHONE", None) or "1800-123-4567").strip()
     return {
-        "email": email or "medichain123@gmail.com",
+        "email": email or "support@medclues.com",
         "phone": phone or "1800-123-4567",
         "support": PLATFORM_KNOWLEDGE["contact"]["support"],
     }

@@ -8,6 +8,8 @@ import {
   patientName, doctorName, tokenLabel,
 } from './components'
 import { OnlineBookingsList } from './OnlineBookings'
+import { useQrBookingScanner } from '../../hooks/useQrBookingScanner'
+import { extractBookingId, looksLikeVisitSummaryPayload } from '../../utils/bookingId'
 
 // ─── Shared styles ────────────────────────────────────────────────────────────
 const inputCls = 'w-full px-3 py-2 rounded-rd border border-rd-border bg-rd-surface focus:border-rd-primary outline-none text-sm font-medium text-rd-text'
@@ -478,13 +480,11 @@ const CheckInTab = ({ doctorSessionActive }) => {
   const navigate = useNavigate()
   const [bookingId, setBookingId] = useState('')
   const [busy, setBusy]           = useState(false)
-  const [camOn, setCamOn]         = useState(false)
   const [query, setQuery]         = useState('')
   const [results, setResults]     = useState([])
   const [queuePatients, setQueuePatients] = useState([])
   const [queueLoading, setQueueLoading]   = useState(true)
-  const videoRef  = useRef(null)
-  const streamRef = useRef(null)
+  const [lastSuccess, setLastSuccess] = useState(null)
 
   // Load checked-in queue patients
   const loadQueue = async () => {
@@ -509,38 +509,51 @@ const CheckInTab = ({ doctorSessionActive }) => {
     }
   }, [doctorSessionActive])
 
-  const toggleCam = async () => {
-    if (camOn) {
-      streamRef.current?.getTracks().forEach(t => t.stop())
-      streamRef.current = null
-      setCamOn(false)
-      return
+  const doCheckIn = useCallback(async (id, rawScan) => {
+    const raw = rawScan || id || bookingId
+    if (looksLikeVisitSummaryPayload(raw)) {
+      return toast.error('This is a visit-summary QR, not a check-in booking code. Ask for the Scan at reception QR (BK…).')
     }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-      streamRef.current = stream
-      if (videoRef.current) videoRef.current.srcObject = stream
-      setCamOn(true)
-    } catch {
-      toast.error('Could not access camera. Enter the Booking ID manually.')
+    const code = extractBookingId(raw)
+    if (!code) {
+      return toast.error('Enter a valid Booking ID (e.g. BK8X4P2Q)')
     }
-  }
-
-  useEffect(() => () => streamRef.current?.getTracks().forEach(t => t.stop()), [])
-
-  const doCheckIn = async (id) => {
-    const code = (id || bookingId).trim()
-    if (!code) return toast.error('Enter a Booking ID')
     setBusy(true)
-    const res = await checkIn({ bookingId: code })
+    const res = await checkIn(code)
     if (res?.success) {
-      toast.success('✅ Checked in successfully!')
+      toast.success(res.message || 'Checked in successfully!')
+      setLastSuccess({
+        bookingId: res.bookingId || code,
+        name: res.patientName || 'Patient',
+        doctorName: res.doctorName,
+        tokenNumber: res.tokenNumber,
+        visitNumber: res.visitNumber,
+        maxVisits: res.maxVisits,
+      })
       setBookingId('')
       loadQueue()
     } else {
       toast.error(res?.message || 'Check-in failed')
     }
     setBusy(false)
+  }, [bookingId, checkIn])
+
+  const onScan = useCallback((code, raw) => {
+    if (busy) return
+    setBookingId(code || String(raw || '').trim())
+    void doCheckIn(code, raw)
+  }, [busy, doCheckIn])
+
+  const { videoRef, camOn, toggleCam } = useQrBookingScanner({
+    enabled: doctorSessionActive,
+    onCode: onScan,
+  })
+
+  const handleToggleCam = async () => {
+    const ok = await toggleCam()
+    if (ok === false && !camOn) {
+      toast.error('Could not access camera. Enter the Booking ID manually.')
+    }
   }
 
   const doSearch = async (q) => {
@@ -575,8 +588,8 @@ const CheckInTab = ({ doctorSessionActive }) => {
         {/* Card 1: Scanner & Manual ID */}
         <div className='rd-panel p-5 space-y-4'>
           <div className='flex items-center justify-between'>
-            <h3 className='text-sm font-bold text-rd-text uppercase tracking-wider'>QR Scan / Manual Input</h3>
-            <button onClick={toggleCam} className='flex items-center gap-2 text-xs font-bold text-rd-primary hover:underline'>
+            <h3 className='text-sm font-bold text-rd-text uppercase tracking-wider'>Scan booking QR</h3>
+            <button type='button' onClick={handleToggleCam} className='flex items-center gap-2 text-xs font-bold text-rd-primary hover:underline'>
               <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'><path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z'/><path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M15 13a3 3 0 11-6 0 3 3 0 016 0'/></svg>
               {camOn ? 'Close Camera' : 'Open Camera'}
             </button>
@@ -584,14 +597,29 @@ const CheckInTab = ({ doctorSessionActive }) => {
 
           <div className='flex gap-3'>
             <input value={bookingId} onChange={e => setBookingId(e.target.value)} onKeyDown={e => e.key === 'Enter' && doCheckIn()}
-              placeholder='Booking ID e.g. BK-2025-0001' className={inputCls} />
-            <button onClick={() => doCheckIn()} disabled={busy}
+              placeholder='BK8X4P2Q' className={inputCls} autoComplete='off' />
+            <button type='button' onClick={() => doCheckIn()} disabled={busy}
               className='px-5 py-2.5 bg-rd-primary text-white rounded-rd font-bold text-sm hover:bg-rd-primary-hover transition-colors disabled:opacity-60 shrink-0'>
               {busy ? '…' : 'Check In'}
             </button>
           </div>
 
-          {camOn && <video ref={videoRef} autoPlay playsInline className='w-full rounded-rd border border-rd-border max-h-64 object-cover' />}
+          {camOn && (
+            <div className='relative'>
+              <video ref={videoRef} autoPlay playsInline muted className='w-full rounded-rd border border-rd-border max-h-64 object-cover' />
+              <p className='text-[11px] text-rd-muted mt-2'>Point at the patient booking QR — check-in runs automatically</p>
+            </div>
+          )}
+
+          {lastSuccess && (
+            <div className='rounded-rd border border-emerald-200 bg-emerald-50/70 px-4 py-3 text-sm'>
+              <p className='font-bold text-emerald-800'>Checked in · {lastSuccess.name}</p>
+              <p className='text-xs text-rd-muted font-mono mt-1'>{lastSuccess.bookingId}</p>
+              {lastSuccess.tokenNumber != null && lastSuccess.tokenNumber !== '' && (
+                <p className='text-xs text-rd-muted mt-1'>Token #{lastSuccess.tokenNumber}</p>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Card 2: Manual Patient Search */}
@@ -609,7 +637,7 @@ const CheckInTab = ({ doctorSessionActive }) => {
                       <p className='text-xs text-rd-muted'>{p.phone || p.email}</p>
                     </div>
                   </div>
-                  <button onClick={() => navigate('/reception-today', { state: { tab: 'ops' } })}
+                  <button type='button' onClick={() => navigate('/reception-today', { state: { tab: 'ops' } })}
                     className='text-xs font-bold text-rd-primary hover:underline'>View Bookings →</button>
                 </div>
               ))}
