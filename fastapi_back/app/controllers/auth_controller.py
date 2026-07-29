@@ -118,7 +118,7 @@ async def reset_password(email: str, otp: str, new_password: str, role: str):
             return {"success": False, "message": "OTP expired. Please resend."}
         return {"success": False, "message": verify.get("message", "Invalid OTP")}
 
-    hashed = get_password_hash(new_password)
+    hashed = await get_password_hash(new_password)
 
     if role == "patient":
         user = await user_model.get_user_by_email(email_key)

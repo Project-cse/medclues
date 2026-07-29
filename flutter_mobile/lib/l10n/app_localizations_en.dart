@@ -401,6 +401,27 @@ class AppLocalizationsEn extends AppLocalizations {
   String get dashboardSearchHint => 'Search doctors, hospitals…';
 
   @override
+  String get homeSearchScopeTitle => 'Search in';
+
+  @override
+  String get homeSearchScopeSubtitle => 'Limit results to one category';
+
+  @override
+  String get homeSearchScopeAll => 'All';
+
+  @override
+  String get homeSearchScopeDoctors => 'Doctors';
+
+  @override
+  String get homeSearchScopeHospitals => 'Hospitals';
+
+  @override
+  String get homeSearchScopeSpecialities => 'Specialities';
+
+  @override
+  String get homeSearchScopeLabsPharmacy => 'Labs & Pharmacy';
+
+  @override
   String get dashboardTopDoctors => 'Top Doctors';
 
   @override

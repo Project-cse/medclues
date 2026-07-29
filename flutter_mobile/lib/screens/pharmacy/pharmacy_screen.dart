@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -32,6 +33,8 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
 
   // Search & Filters for "All Medicines"
   final TextEditingController _searchController = TextEditingController();
+  Timer? _searchDebounce;
+  bool _catalogSearching = false;
   String _selectedCategory = 'All';
   String _selectedDisease = 'All';
 
@@ -127,9 +130,37 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _tabs.dispose();
     _searchController.dispose();
     super.dispose();
+  }
+
+  Future<void> _searchCatalog(String query) async {
+    final svc = ref.read(pharmacyServiceProvider);
+    if (mounted) setState(() => _catalogSearching = true);
+    try {
+      final list = await svc.searchMedicines(query);
+      if (!mounted) return;
+      setState(() {
+        _catalogMedicines = list;
+        _catalogSearching = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _catalogMedicines = [];
+        _catalogSearching = false;
+      });
+    }
+  }
+
+  void _onCatalogSearchChanged(String value) {
+    setState(() {});
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 300), () {
+      _searchCatalog(value.trim());
+    });
   }
 
   Future<void> _load() async {
@@ -891,15 +922,12 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
 
   // 1️⃣ ALL MEDICINES TAB
   Widget _buildAllMedicinesTab() {
+    final q = _searchController.text.toLowerCase().trim();
     final filtered = _catalogMedicines.where((item) {
-      final matchesSearch = item['name']
-              .toString()
-              .toLowerCase()
-              .contains(_searchController.text.toLowerCase()) ||
-          item['brand']
-              .toString()
-              .toLowerCase()
-              .contains(_searchController.text.toLowerCase());
+      final matchesSearch = q.isEmpty ||
+          item['name'].toString().toLowerCase().contains(q) ||
+          item['brand'].toString().toLowerCase().contains(q) ||
+          item['salt'].toString().toLowerCase().contains(q);
       final matchesCategory = _selectedCategory == 'All' ||
           item['category'] == _selectedCategory;
       return matchesSearch && matchesCategory;
@@ -958,16 +986,28 @@ class _PharmacyScreenState extends ConsumerState<PharmacyScreen>
         // Search Bar
         TextField(
           controller: _searchController,
-          onChanged: (_) => setState(() {}),
+          onChanged: _onCatalogSearchChanged,
           decoration: InputDecoration(
             hintText: 'Search medicines, tablets, supplements...',
             prefixIcon: const Icon(Icons.search),
-            suffixIcon: _searchController.text.isNotEmpty
-                ? IconButton(
-                    icon: const Icon(Icons.clear),
-                    onPressed: () => setState(() => _searchController.clear()),
+            suffixIcon: _catalogSearching
+                ? const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
                   )
-                : null,
+                : (_searchController.text.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: () {
+                          _searchController.clear();
+                          _onCatalogSearchChanged('');
+                        },
+                      )
+                    : null),
             filled: true,
             fillColor: Colors.white,
             contentPadding: const EdgeInsets.symmetric(horizontal: 16),

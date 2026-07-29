@@ -403,6 +403,27 @@ class AppLocalizationsHi extends AppLocalizations {
   String get dashboardSearchHint => 'डॉक्टर, अस्पताल खोजें…';
 
   @override
+  String get homeSearchScopeTitle => 'इसमें खोजें';
+
+  @override
+  String get homeSearchScopeSubtitle => 'परिणाम एक श्रेणी तक सीमित करें';
+
+  @override
+  String get homeSearchScopeAll => 'सभी';
+
+  @override
+  String get homeSearchScopeDoctors => 'डॉक्टर';
+
+  @override
+  String get homeSearchScopeHospitals => 'अस्पताल';
+
+  @override
+  String get homeSearchScopeSpecialities => 'विशेषज्ञताएँ';
+
+  @override
+  String get homeSearchScopeLabsPharmacy => 'लैब और फार्मेसी';
+
+  @override
   String get dashboardTopDoctors => 'शीर्ष डॉक्टर';
 
   @override

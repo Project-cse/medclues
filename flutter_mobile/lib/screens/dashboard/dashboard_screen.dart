@@ -19,7 +19,7 @@ import '../../routes/route_names.dart';
 import '../../utils/speciality_match.dart';
 import '../../utils/time_greeting.dart';
 import '../../widgets/common/app_snackbar.dart';
-import '../../widgets/home/hero_banner_illustration.dart';
+import '../../widgets/home/home_promo_carousel.dart';
 import '../../widgets/home/home_search_bar.dart';
 import '../../widgets/home/home_search_results.dart';
 import '../../widgets/home/speciality_grid.dart';
@@ -28,9 +28,10 @@ import '../../services/doctor_service.dart';
 import '../../widgets/home/top_doctor_card.dart';
 import '../../widgets/home/top_doctors_grid.dart';
 import '../../widgets/animations/healthcare_motion.dart';
-import '../../features/emergency/widgets/emergency_help_button.dart';
 import '../../onboarding/onboarding_tour_keys.dart';
 import '../../widgets/layout/patient_drawer.dart';
+import '../../widgets/home/home_search_scope.dart';
+import '../../widgets/home/blinking_emergency_icon.dart';
 
 /// Matches mobile/app/(patient)/home.tsx — inline search results on home.
 class DashboardScreen extends ConsumerStatefulWidget {
@@ -45,6 +46,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   final _searchController = TextEditingController();
   Timer? _debounce;
   String _query = '';
+  HomeSearchScope _searchScope = HomeSearchScope.all;
 
   @override
   void dispose() {
@@ -65,34 +67,46 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final q = _query.toLowerCase();
     if (q.isEmpty) return [];
     final out = <HomeSearchResultItem>[];
+    final scope = _searchScope;
 
-    final services = [
-      (l10n.dashboardHospitals, RouteNames.hospitals, null),
-      ('Doctors', RouteNames.doctors, null),
-      (l10n.dashboardLabs, RouteNames.labs, 'labs'),
-      (l10n.dashboardBloodBanks, RouteNames.bloodBanks, 'blood'),
-      ('By symptom', RouteNames.symptomSearch, null),
-      ('Emergency', RouteNames.emergency, null),
+    final services = <(String, String, String?, HomeSearchScope)>[
+      (l10n.dashboardHospitals, RouteNames.hospitals, null, HomeSearchScope.hospitals),
+      ('Doctors', RouteNames.doctors, null, HomeSearchScope.doctors),
+      (l10n.dashboardLabs, RouteNames.labs, 'labs', HomeSearchScope.labsPharmacy),
+      (l10n.dashboardBloodBanks, RouteNames.bloodBanks, 'blood', HomeSearchScope.labsPharmacy),
+      ('By symptom', RouteNames.symptomSearch, null, HomeSearchScope.all),
+      ('Pharmacy', RouteNames.pharmacy, null, HomeSearchScope.labsPharmacy),
+      ('Medicines', RouteNames.medicine, null, HomeSearchScope.labsPharmacy),
+      ('Emergency', RouteNames.emergency, null, HomeSearchScope.all),
     ];
-    for (final s in services) {
-      if (s.$1.toLowerCase().contains(q)) {
-        out.add(HomeSearchResultItem.service(s.$1, s.$2, tab: s.$3));
+    if (scope.allowsServices) {
+      for (final s in services) {
+        final matchesScope =
+            scope == HomeSearchScope.all || s.$4 == scope;
+        if (!matchesScope) continue;
+        if (s.$1.toLowerCase().contains(q)) {
+          out.add(HomeSearchResultItem.service(s.$1, s.$2, tab: s.$3));
+        }
       }
     }
 
-    for (final sp in homeSpecialities) {
-      if (sp.name.toLowerCase().contains(q) ||
-          sp.filterKey.contains(q) ||
-          matchesSpeciality(sp.name, q)) {
-        out.add(HomeSearchResultItem.speciality(sp.name, sp.filterKey));
+    if (scope.allowsSpecialities) {
+      for (final sp in homeSpecialities) {
+        if (sp.name.toLowerCase().contains(q) ||
+            sp.filterKey.contains(q) ||
+            matchesSpeciality(sp.name, q)) {
+          out.add(HomeSearchResultItem.speciality(sp.name, sp.filterKey));
+        }
       }
     }
 
-    for (final d in doctors) {
-      if (d.name.toLowerCase().contains(q) ||
-          d.specialization.toLowerCase().contains(q) ||
-          matchesSpeciality(d.specialization, q)) {
-        out.add(HomeSearchResultItem.doctor(d));
+    if (scope.allowsDoctors) {
+      for (final d in doctors) {
+        if (d.name.toLowerCase().contains(q) ||
+            d.specialization.toLowerCase().contains(q) ||
+            matchesSpeciality(d.specialization, q)) {
+          out.add(HomeSearchResultItem.doctor(d));
+        }
       }
     }
 
@@ -107,6 +121,16 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         })
         .take(12)
         .toList();
+  }
+
+  Future<void> _openSearchScopeSheet() async {
+    final selected = await showHomeSearchScopeSheet(
+      context,
+      current: _searchScope,
+    );
+    if (selected != null && mounted) {
+      setState(() => _searchScope = selected);
+    }
   }
 
   @override
@@ -142,11 +166,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           child: ListView(
             children: [
               _header(context),
-              // Greeting → hero → emergency → quick access → search → specialities
+              // Greeting → carousel → quick access → search → specialities
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
                 child: Text(
-                  '${l10n.dashboardGreeting}${displayName.isNotEmpty ? ', $displayName' : ''} 👋',
+                  '${l10n.dashboardGreeting}${displayName.isNotEmpty ? ', $displayName' : ''} · $greeting 👋',
                   style: GoogleFonts.poppins(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
@@ -160,6 +184,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   child: HomeSearchBar(
                     controller: _searchController,
                     onChanged: _onSearchChanged,
+                    onFilterTap: _openSearchScopeSheet,
+                    filterActive: _searchScope != HomeSearchScope.all,
                   ),
                 ),
                 HomeSearchResults(
@@ -172,18 +198,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 ),
               ],
               if (!hasQuery) ...[
-                _heroBanner(context, greeting: greeting).dashboardStagger(0),
-                // No stagger on emergency — soft-tour measures this key.
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                  child: KeyedSubtree(
-                    key: OnboardingTourKeys.emergency,
-                    child: const EmergencyHelpButton(
-                      showIcon: false,
-                      margin: EdgeInsets.zero,
-                    ),
-                  ),
-                ),
+                const HomePromoCarousel().dashboardStagger(0),
                 _quickAccessGrid(),
                 // Search sits directly above specialities (requested home layout).
                 KeyedSubtree(
@@ -191,6 +206,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   child: HomeSearchBar(
                     controller: _searchController,
                     onChanged: _onSearchChanged,
+                    onFilterTap: _openSearchScopeSheet,
+                    filterActive: _searchScope != HomeSearchScope.all,
                   ),
                 ),
                 _sectionTitle(l10n.dashboardSpecialities).dashboardStagger(2),
@@ -238,6 +255,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             ],
           ),
           const Spacer(),
+          KeyedSubtree(
+            key: OnboardingTourKeys.emergency,
+            child: const BlinkingEmergencyIconButton(),
+          ),
           IconButton(
             tooltip: 'MedClues AI Assistant',
             onPressed: () => context.push(RouteNames.aiAssistant),
@@ -261,83 +282,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             },
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _heroBanner(BuildContext context, {required String greeting}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: GestureDetector(
-        onTap: () => context.push(RouteNames.hospitals),
-        child: Container(
-          margin: const EdgeInsets.only(bottom: 16),
-          height: 168,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: AppShadows.card,
-            gradient: const LinearGradient(
-              begin: Alignment.centerLeft,
-              end: Alignment.centerRight,
-              colors: AppColors.heroGradient,
-            ),
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                flex: 65,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 8, 16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        greeting,
-                        style: GoogleFonts.poppins(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Discover trusted care near you',
-                        style: GoogleFonts.poppins(
-                          fontSize: 13,
-                          color: Colors.white.withValues(alpha: 0.9),
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 8),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.white, width: 1.5),
-                          borderRadius: BorderRadius.circular(999),
-                          color: Colors.white.withValues(alpha: 0.15),
-                        ),
-                        child: Text(
-                          'Explore Now →',
-                          style: GoogleFonts.poppins(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const Expanded(
-                flex: 35,
-                child: HeroBannerIllustration(),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }

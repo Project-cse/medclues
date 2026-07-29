@@ -9,10 +9,14 @@ class HomeSearchBar extends StatelessWidget {
     super.key,
     required this.controller,
     this.onChanged,
+    this.onFilterTap,
+    this.filterActive = false,
   });
 
   final TextEditingController controller;
   final ValueChanged<String>? onChanged;
+  final VoidCallback? onFilterTap;
+  final bool filterActive;
 
   @override
   Widget build(BuildContext context) {
@@ -56,13 +60,23 @@ class HomeSearchBar extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(width: 12),
-            Padding(
-              padding: const EdgeInsets.only(left: 4),
-              child: Icon(
-                Icons.tune_rounded,
-                size: 22,
-                color: AppColors.specCircleFill,
+            const SizedBox(width: 8),
+            IconButton(
+              tooltip: 'Search filters',
+              onPressed: onFilterTap,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+              icon: Badge(
+                isLabelVisible: filterActive,
+                smallSize: 8,
+                backgroundColor: AppColors.specCircleFill,
+                child: Icon(
+                  Icons.tune_rounded,
+                  size: 22,
+                  color: filterActive
+                      ? AppColors.specCircleFill
+                      : AppColors.specCircleFill.withValues(alpha: 0.85),
+                ),
               ),
             ),
           ],

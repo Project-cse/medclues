@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../constants/app_colors.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/patient_provider.dart';
+import '../../providers/theme_provider.dart';
 import '../../routes/route_names.dart';
 import '../common/avatar_image.dart';
 
@@ -50,11 +51,39 @@ class PatientDrawer extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+              padding: const EdgeInsets.fromLTRB(20, 16, 12, 16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  AvatarImage(uri: avatar, size: 64),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      AvatarImage(uri: avatar, size: 64),
+                      const Spacer(),
+                      Builder(
+                        builder: (context) {
+                          final pref = ref.watch(themePreferenceProvider);
+                          final isDark = pref == AppThemePreference.dark ||
+                              (pref == AppThemePreference.system &&
+                                  Theme.of(context).brightness ==
+                                      Brightness.dark);
+                          return IconButton(
+                            tooltip: isDark ? 'Light mode' : 'Dark mode',
+                            onPressed: () => ref
+                                .read(themePreferenceProvider.notifier)
+                                .toggle(),
+                            icon: Icon(
+                              isDark
+                                  ? Icons.light_mode_outlined
+                                  : Icons.dark_mode_outlined,
+                              size: 24,
+                              color: cs.onSurfaceVariant,
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 12),
                   Text(
                     name,
@@ -68,7 +97,10 @@ class PatientDrawer extends ConsumerWidget {
                     const SizedBox(height: 4),
                     Text(
                       email,
-                      style: GoogleFonts.poppins(fontSize: 13, color: cs.onSurfaceVariant),
+                      style: GoogleFonts.poppins(
+                        fontSize: 13,
+                        color: cs.onSurfaceVariant,
+                      ),
                     ),
                   ],
                 ],

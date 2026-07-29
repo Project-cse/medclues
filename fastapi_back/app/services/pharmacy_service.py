@@ -1079,44 +1079,77 @@ async def _notify_patient_status(order: dict | None) -> None:
         log.warning("pharmacy FCM failed: %s", exc)
 
 
+def _first_str(*candidates: Any) -> str | None:
+    for c in candidates:
+        if c is None:
+            continue
+        if isinstance(c, list):
+            if not c:
+                continue
+            c = c[0]
+        s = str(c).strip()
+        if s:
+            return s
+    return None
+
+
 async def search_medicine_catalog(query: str) -> dict[str, Any]:
     """Patient pharmacy search via FastAPI medicine module (no Express :5001 required)."""
     q = (query or "").strip()
     if len(q) < 2:
-        q = "paracetamol"
+        q = "acetaminophen"
     try:
         from app.services import medicine_service
 
-        result = await medicine_service.search_medicines(
-            q, user_id=None, page=1, limit=20, record_history=False
-        )
-        raw = result.get("results") or result.get("data") or []
-        if not isinstance(raw, list):
-            raw = []
+        async def _run(search_q: str) -> list:
+            result = await medicine_service.search_medicines(
+                search_q, user_id=None, page=1, limit=20, record_history=False
+            )
+            raw = result.get("results") or result.get("data") or []
+            return raw if isinstance(raw, list) else []
+
+        raw = await _run(q)
+        # Indian common name → OpenFDA synonym when first pass is empty
+        if not raw and q.lower() == "paracetamol":
+            q = "acetaminophen"
+            raw = await _run(q)
+
         data = []
         for i, item in enumerate(raw):
             if not isinstance(item, dict):
                 continue
             openfda = item.get("openfda") if isinstance(item.get("openfda"), dict) else {}
-            brand = item.get("brand_name") or item.get("name")
-            if not brand and openfda:
-                bn = openfda.get("brand_name")
-                brand = bn[0] if isinstance(bn, list) and bn else bn
-            generic = item.get("generic_name") or item.get("substance_name") or item.get("salt")
-            if not generic and openfda:
-                gn = openfda.get("generic_name") or openfda.get("substance_name")
-                generic = gn[0] if isinstance(gn, list) and gn else gn
-            if isinstance(brand, list):
-                brand = brand[0] if brand else "Medicine"
-            if isinstance(generic, list):
-                generic = generic[0] if generic else None
-            labeler = item.get("labeler_name") or item.get("brand")
-            if not labeler and openfda:
-                lb = openfda.get("manufacturer_name") or openfda.get("labeler_name")
-                labeler = lb[0] if isinstance(lb, list) and lb else lb
+            brand = _first_str(
+                item.get("medicineName"),
+                item.get("brandName"),
+                item.get("brand_name"),
+                item.get("name"),
+                openfda.get("brand_name") if openfda else None,
+            )
+            generic = _first_str(
+                item.get("genericName"),
+                item.get("generic_name"),
+                item.get("substance_name"),
+                item.get("salt"),
+                openfda.get("generic_name") if openfda else None,
+                openfda.get("substance_name") if openfda else None,
+            )
+            labeler = _first_str(
+                item.get("manufacturer"),
+                item.get("labeler_name"),
+                item.get("brand"),
+                openfda.get("manufacturer_name") if openfda else None,
+                openfda.get("labeler_name") if openfda else None,
+            )
+            med_id = _first_str(
+                item.get("setId"),
+                item.get("set_id"),
+                item.get("id"),
+                item.get("_id"),
+            ) or f"med_{i}"
             data.append({
-                "id": item.get("id") or item.get("set_id") or f"med_{i}",
-                "_id": item.get("id") or item.get("set_id"),
+                "id": med_id,
+                "_id": med_id,
                 "name": brand or "Medicine",
                 "brand": labeler or "Pharma",
                 "salt": generic or item.get("composition") or "Generic",

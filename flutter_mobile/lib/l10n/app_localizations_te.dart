@@ -405,6 +405,27 @@ class AppLocalizationsTe extends AppLocalizations {
   String get dashboardSearchHint => 'డాక్టర్లు, ఆసుపత్రులు వెతకండి…';
 
   @override
+  String get homeSearchScopeTitle => 'ఇందులో వెతకండి';
+
+  @override
+  String get homeSearchScopeSubtitle => 'ఫలితాలను ఒక వర్గానికి పరిమితం చేయండి';
+
+  @override
+  String get homeSearchScopeAll => 'అన్నీ';
+
+  @override
+  String get homeSearchScopeDoctors => 'డాక్టర్లు';
+
+  @override
+  String get homeSearchScopeHospitals => 'ఆసుపత్రులు';
+
+  @override
+  String get homeSearchScopeSpecialities => 'స్పెషాలిటీలు';
+
+  @override
+  String get homeSearchScopeLabsPharmacy => 'ల్యాబ్ & ఫార్మసీ';
+
+  @override
   String get dashboardTopDoctors => 'టాప్ డాక్టర్లు';
 
   @override

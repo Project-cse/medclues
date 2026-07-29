@@ -874,6 +874,48 @@ abstract class AppLocalizations {
   /// **'Search doctors, hospitals…'**
   String get dashboardSearchHint;
 
+  /// No description provided for @homeSearchScopeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Search in'**
+  String get homeSearchScopeTitle;
+
+  /// No description provided for @homeSearchScopeSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Limit results to one category'**
+  String get homeSearchScopeSubtitle;
+
+  /// No description provided for @homeSearchScopeAll.
+  ///
+  /// In en, this message translates to:
+  /// **'All'**
+  String get homeSearchScopeAll;
+
+  /// No description provided for @homeSearchScopeDoctors.
+  ///
+  /// In en, this message translates to:
+  /// **'Doctors'**
+  String get homeSearchScopeDoctors;
+
+  /// No description provided for @homeSearchScopeHospitals.
+  ///
+  /// In en, this message translates to:
+  /// **'Hospitals'**
+  String get homeSearchScopeHospitals;
+
+  /// No description provided for @homeSearchScopeSpecialities.
+  ///
+  /// In en, this message translates to:
+  /// **'Specialities'**
+  String get homeSearchScopeSpecialities;
+
+  /// No description provided for @homeSearchScopeLabsPharmacy.
+  ///
+  /// In en, this message translates to:
+  /// **'Labs & Pharmacy'**
+  String get homeSearchScopeLabsPharmacy;
+
   /// No description provided for @dashboardTopDoctors.
   ///
   /// In en, this message translates to:

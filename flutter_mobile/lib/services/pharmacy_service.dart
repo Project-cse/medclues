@@ -61,7 +61,7 @@ class PharmacyService {
   Future<List<Map<String, dynamic>>> searchMedicines([String query = '']) async {
     final res = await _api.get(
       '/api/user/pharmacy/search',
-      queryParameters: {'query': query.isEmpty ? 'paracetamol' : query},
+      queryParameters: {'query': query.isEmpty ? 'acetaminophen' : query},
     );
     final data = res.data;
     if (data is Map && data['success'] == true) {

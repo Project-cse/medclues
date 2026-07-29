@@ -60,6 +60,54 @@ async def ensure_doctor_slots_schema():
     )
     await db.execute(
         """
+        ALTER TABLE doctors
+        ADD COLUMN IF NOT EXISTS op_start_afternoon VARCHAR(10)
+        """
+    )
+    await db.execute(
+        """
+        ALTER TABLE doctors
+        ADD COLUMN IF NOT EXISTS op_end_afternoon VARCHAR(10)
+        """
+    )
+    await db.execute(
+        """
+        ALTER TABLE doctors
+        ADD COLUMN IF NOT EXISTS max_appointments_morning INTEGER
+        """
+    )
+    await db.execute(
+        """
+        ALTER TABLE doctors
+        ADD COLUMN IF NOT EXISTS max_appointments_afternoon INTEGER
+        """
+    )
+    await db.execute(
+        """
+        ALTER TABLE hospital_tieup_doctors
+        ADD COLUMN IF NOT EXISTS op_start_afternoon VARCHAR(10)
+        """
+    )
+    await db.execute(
+        """
+        ALTER TABLE hospital_tieup_doctors
+        ADD COLUMN IF NOT EXISTS op_end_afternoon VARCHAR(10)
+        """
+    )
+    await db.execute(
+        """
+        ALTER TABLE hospital_tieup_doctors
+        ADD COLUMN IF NOT EXISTS max_appointments_morning INTEGER
+        """
+    )
+    await db.execute(
+        """
+        ALTER TABLE hospital_tieup_doctors
+        ADD COLUMN IF NOT EXISTS max_appointments_afternoon INTEGER
+        """
+    )
+    await db.execute(
+        """
         UPDATE doctors SET fees = 600 WHERE fees IS NULL OR fees = 0
         """
     )

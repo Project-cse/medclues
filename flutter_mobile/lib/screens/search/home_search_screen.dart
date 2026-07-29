@@ -4,9 +4,12 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../constants/app_colors.dart';
+import '../../constants/home_specialities.dart';
 import '../../models/doctor_model.dart';
 import '../../providers/doctor_provider.dart';
 import '../../routes/route_names.dart';
+import '../../utils/speciality_match.dart';
+import '../../widgets/home/home_search_scope.dart';
 
 /// Matches mobile useHomeSearch + HomeSearchResults.
 class HomeSearchScreen extends ConsumerStatefulWidget {
@@ -19,11 +22,19 @@ class HomeSearchScreen extends ConsumerStatefulWidget {
 class _HomeSearchScreenState extends ConsumerState<HomeSearchScreen> {
   final _controller = TextEditingController();
   String _query = '';
+  HomeSearchScope _scope = HomeSearchScope.all;
 
   @override
   void dispose() {
     _controller.dispose();
     super.dispose();
+  }
+
+  Future<void> _openScopeSheet() async {
+    final selected = await showHomeSearchScopeSheet(context, current: _scope);
+    if (selected != null && mounted) {
+      setState(() => _scope = selected);
+    }
   }
 
   @override
@@ -42,6 +53,17 @@ class _HomeSearchScreenState extends ConsumerState<HomeSearchScreen> {
           ),
           onChanged: (v) => setState(() => _query = v),
         ),
+        actions: [
+          IconButton(
+            tooltip: 'Search filters',
+            onPressed: _openScopeSheet,
+            icon: Badge(
+              isLabelVisible: _scope != HomeSearchScope.all,
+              smallSize: 8,
+              child: const Icon(Icons.tune_rounded),
+            ),
+          ),
+        ],
       ),
       body: q.isEmpty
           ? Center(
@@ -84,27 +106,49 @@ class _HomeSearchScreenState extends ConsumerState<HomeSearchScreen> {
   List<_SearchResult> _buildResults(String q, List<DoctorModel> doctors) {
     final lower = q.toLowerCase();
     final out = <_SearchResult>[];
+    final scope = _scope;
 
-    const services = [
-      ('Hospitals', Icons.business, RouteNames.hospitals, null),
-      ('Doctors', Icons.person, RouteNames.doctors, null),
-      ('Labs', Icons.science, RouteNames.labs, null),
-      ('Blood Banks', Icons.water_drop, RouteNames.bloodBanks, null),
-      ('Emergency', Icons.warning, RouteNames.emergency, null),
+    final services = <(String, IconData, String, HomeSearchScope)>[
+      ('Hospitals', Icons.business, RouteNames.hospitals, HomeSearchScope.hospitals),
+      ('Doctors', Icons.person, RouteNames.doctors, HomeSearchScope.doctors),
+      ('Labs', Icons.science, RouteNames.labs, HomeSearchScope.labsPharmacy),
+      ('Blood Banks', Icons.water_drop, RouteNames.bloodBanks, HomeSearchScope.labsPharmacy),
+      ('Pharmacy', Icons.medical_information, RouteNames.pharmacy, HomeSearchScope.labsPharmacy),
+      ('Emergency', Icons.warning, RouteNames.emergency, HomeSearchScope.all),
     ];
-    for (final s in services) {
-      if (s.$1.toLowerCase().contains(lower)) {
-        out.add(_SearchResult(s.$1, s.$2, route: s.$3, tab: s.$4));
+    if (scope.allowsServices) {
+      for (final s in services) {
+        if (scope != HomeSearchScope.all && s.$4 != scope) continue;
+        if (s.$1.toLowerCase().contains(lower)) {
+          out.add(_SearchResult(s.$1, s.$2, route: s.$3));
+        }
       }
     }
 
-    for (final d in doctors) {
-      out.add(_SearchResult(
-        d.name,
-        Icons.medical_services,
-        subtitle: d.specialization,
-        doctorId: d.id,
-      ));
+    if (scope.allowsSpecialities) {
+      for (final sp in homeSpecialities) {
+        if (sp.name.toLowerCase().contains(lower) ||
+            sp.filterKey.contains(lower) ||
+            matchesSpeciality(sp.name, lower)) {
+          out.add(_SearchResult(
+            sp.name,
+            Icons.category_outlined,
+            route: RouteNames.doctors,
+            filterKey: sp.filterKey,
+          ));
+        }
+      }
+    }
+
+    if (scope.allowsDoctors) {
+      for (final d in doctors) {
+        out.add(_SearchResult(
+          d.name,
+          Icons.medical_services,
+          subtitle: d.specialization,
+          doctorId: d.id,
+        ));
+      }
     }
     return out.take(20).toList();
   }
@@ -112,6 +156,10 @@ class _HomeSearchScreenState extends ConsumerState<HomeSearchScreen> {
   void _onResultTap(BuildContext context, _SearchResult r) {
     if (r.doctorId != null) {
       context.push('/doctors/${r.doctorId}');
+      return;
+    }
+    if (r.filterKey != null) {
+      context.push('${RouteNames.doctors}?speciality=${Uri.encodeComponent(r.filterKey!)}');
       return;
     }
     if (r.tab != null) {
@@ -123,11 +171,20 @@ class _HomeSearchScreenState extends ConsumerState<HomeSearchScreen> {
 }
 
 class _SearchResult {
-  _SearchResult(this.title, this.icon, {this.subtitle, this.route, this.tab, this.doctorId});
+  _SearchResult(
+    this.title,
+    this.icon, {
+    this.subtitle,
+    this.route,
+    this.tab,
+    this.doctorId,
+    this.filterKey,
+  });
   final String title;
   final IconData icon;
   final String? subtitle;
   final String? route;
   final String? tab;
   final String? doctorId;
+  final String? filterKey;
 }
