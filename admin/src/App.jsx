@@ -20,6 +20,7 @@ const ManageUsers = lazy(() => import('./pages/Admin/ManageUsers'))
 const ManageAdmins = lazy(() => import('./pages/Admin/ManageAdmins'))
 const ManagePartners = lazy(() => import('./pages/Admin/ManagePartners'))
 const SystemSettings = lazy(() => import('./pages/Admin/SystemSettings'))
+const HomeBanners = lazy(() => import('./pages/Admin/HomeBanners'))
 const SloDashboard = lazy(() => import('./pages/Admin/SloDashboard'))
 const AllAppointments = lazy(() => import('./pages/Admin/AllAppointments'))
 const DoctorsList = lazy(() => import('./pages/Admin/DoctorsList'))
@@ -169,6 +170,7 @@ const App = () => {
               <Route path='/manage-users' element={<ManageUsers />} />
               <Route path='/manage-admins' element={<ManageAdmins />} />
               <Route path='/system-settings' element={<SystemSettings />} />
+              <Route path='/home-banners' element={<HomeBanners />} />
               <Route path='/slo-health' element={<SloDashboard />} />
               <Route path='/all-appointments' element={<AllAppointments />} />
               <Route path='/doctor-list' element={<DoctorsList />} />

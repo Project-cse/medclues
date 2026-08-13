@@ -57,6 +57,28 @@ async def get_by_id(pharmacy_id: int) -> Optional[dict]:
     return dict(row) if row else None
 
 
+async def list_active_for_catalog(*, prefer_delivery: bool = True, limit: int = 20) -> list:
+    """Active hospital pharmacies usable for retail / home-delivery catalog carts."""
+    order = (
+        "ph.supports_delivery DESC, ph.priority ASC, ph.name ASC"
+        if prefer_delivery
+        else "ph.priority ASC, ph.name ASC"
+    )
+    return await db.query(
+        f"""
+        SELECT ph.*, p.name AS partner_name, p.webhook_url, p.status AS partner_status
+        FROM pharmacies ph
+        JOIN partners p ON p.id = ph.partner_id
+        WHERE ph.is_active = true
+          AND p.status = 'active'
+          AND p.deleted_at IS NULL
+        ORDER BY {order}
+        LIMIT $1
+        """,
+        limit,
+    )
+
+
 async def create(data: dict) -> dict:
     row = await db.fetch_row(
         """

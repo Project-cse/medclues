@@ -822,11 +822,20 @@ async def create_receptionist(data: dict, hospital_id: Optional[int] = None):
     existing = await receptionist_model.get_by_email(email)
     if existing:
         return {"success": False, "message": "A receptionist with this email already exists"}
+    from app.utils.contact_uniqueness import phone_taken_in_table, normalize_phone
+    phone = data.get("phone")
+    if phone and await phone_taken_in_table("receptionists", phone):
+        return {
+            "success": False,
+            "message": "This mobile number is already registered for another receptionist.",
+        }
+    if phone:
+        phone = normalize_phone(phone) or phone
     rec = await receptionist_model.create({
         "name": name,
         "email": email,
         "password": await _hash(password),
-        "phone": data.get("phone"),
+        "phone": phone,
         "hospital_id": int(target_hospital),
     })
     return {"success": True, "message": "Receptionist created", "receptionist": {k: rec[k] for k in ("id", "name", "email", "hospital_id", "is_active")}}

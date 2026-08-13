@@ -33,10 +33,25 @@ const DoctorDashboard = () => {
     opEndAfternoon: '20:00',
     maxAppointmentsMorning: 20,
     maxAppointmentsAfternoon: 20,
+    videoOpStart: '14:00',
+    videoOpEnd: '15:00',
+    maxVideoSlots: 4,
+    videoSlotMinutes: 15,
     days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']
   })
   const [savingStatus, setSavingStatus] = useState(false)
   const [savingSched, setSavingSched] = useState(false)
+  const [savingOverride, setSavingOverride] = useState(false)
+  const [dayOverride, setDayOverride] = useState({
+    date: '',
+    halfDay: 'both',
+    morningStart: '09:00',
+    morningEnd: '13:00',
+    afternoonStart: '16:00',
+    afternoonEnd: '20:00',
+    maxMorning: 20,
+    maxAfternoon: 20,
+  })
   const navigate = useNavigate()
 
   const handleCompleteSubmit = async (consultationData) => {
@@ -64,6 +79,10 @@ const DoctorDashboard = () => {
       opEndAfternoon: profileData.opEndAfternoon || '20:00',
       maxAppointmentsMorning: profileData.maxAppointmentsMorning || 20,
       maxAppointmentsAfternoon: profileData.maxAppointmentsAfternoon || 20,
+      videoOpStart: profileData.videoOpStart || '14:00',
+      videoOpEnd: profileData.videoOpEnd || '15:00',
+      maxVideoSlots: profileData.maxVideoSlots ?? 4,
+      videoSlotMinutes: profileData.videoSlotMinutes || 15,
       days: Array.isArray(profileData.availableDays) && profileData.availableDays.length
         ? profileData.availableDays
         : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
@@ -90,6 +109,10 @@ const DoctorDashboard = () => {
       if (overrides.opEndAfternoon !== undefined) fd.append('opEndAfternoon', overrides.opEndAfternoon)
       if (overrides.maxAppointmentsMorning !== undefined) fd.append('maxAppointmentsMorning', String(overrides.maxAppointmentsMorning))
       if (overrides.maxAppointmentsAfternoon !== undefined) fd.append('maxAppointmentsAfternoon', String(overrides.maxAppointmentsAfternoon))
+      if (overrides.videoOpStart !== undefined) fd.append('videoOpStart', overrides.videoOpStart)
+      if (overrides.videoOpEnd !== undefined) fd.append('videoOpEnd', overrides.videoOpEnd)
+      if (overrides.maxVideoSlots !== undefined) fd.append('maxVideoSlots', String(overrides.maxVideoSlots))
+      if (overrides.videoSlotMinutes !== undefined) fd.append('videoSlotMinutes', String(overrides.videoSlotMinutes))
       if (overrides.availableDays !== undefined) fd.append('availableDays', JSON.stringify(overrides.availableDays))
       const { data } = await axios.post(backendUrl + '/api/doctor/update-profile', fd, { headers: { dToken } })
       if (data.success) {
@@ -125,6 +148,14 @@ const DoctorDashboard = () => {
       toast.error('Please set both morning and afternoon OP timings')
       return
     }
+    if (!sched.videoOpStart || !sched.videoOpEnd) {
+      toast.error('Please set video consult timings')
+      return
+    }
+    if (!sched.maxVideoSlots && sched.maxVideoSlots !== 0) {
+      toast.error('Set how many video slots per day')
+      return
+    }
     if (sched.days.length === 0) {
       toast.error('Select at least one available day')
       return
@@ -138,11 +169,49 @@ const DoctorDashboard = () => {
         opEndAfternoon: sched.opEndAfternoon,
         maxAppointmentsMorning: sched.maxAppointmentsMorning,
         maxAppointmentsAfternoon: sched.maxAppointmentsAfternoon,
+        videoOpStart: sched.videoOpStart,
+        videoOpEnd: sched.videoOpEnd,
+        maxVideoSlots: sched.maxVideoSlots,
+        videoSlotMinutes: sched.videoSlotMinutes,
         availableDays: sched.days 
       },
       'Schedule updated'
     )
     setSavingSched(false)
+  }
+
+  const handleDayOverrideSave = async () => {
+    if (savingOverride) return
+    if (!dayOverride.date) {
+      toast.error('Pick a date for the day override')
+      return
+    }
+    setSavingOverride(true)
+    try {
+      const payload = {
+        date: dayOverride.date,
+        halfDay: dayOverride.halfDay,
+        morningStart: dayOverride.morningStart,
+        morningEnd: dayOverride.morningEnd,
+        afternoonStart: dayOverride.afternoonStart,
+        afternoonEnd: dayOverride.afternoonEnd,
+        maxAppointmentsMorning: dayOverride.maxMorning,
+        maxAppointmentsAfternoon: dayOverride.maxAfternoon,
+      }
+      const { data } = await axios.post(
+        `${backendUrl}/api/doctor/schedule/overrides`,
+        payload,
+        { headers: { dToken } },
+      )
+      if (data.success) {
+        toast.success('Day override saved — only this date is affected')
+      } else {
+        toast.error(data.message || 'Could not save day override')
+      }
+    } catch (e) {
+      toast.error(e.response?.data?.message || e.message || 'Could not save day override')
+    }
+    setSavingOverride(false)
   }
 
   const currentStatus = profileData?.status || (profileData?.available === false ? 'offline' : 'available')
@@ -321,6 +390,54 @@ const DoctorDashboard = () => {
               </div>
             </div>
 
+            {/* Video consult session */}
+            <div className="pt-2 border-t border-slate-100">
+              <div className="flex justify-between items-center mb-1">
+                <label className="block text-xs font-semibold text-mc-text uppercase tracking-wider text-violet-600">Video Consult Session</label>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Slots / Day</span>
+              </div>
+              <div className="flex items-center gap-3 mb-2">
+                <div className="flex-1 flex items-center gap-2">
+                  <input
+                    type="time"
+                    value={sched.videoOpStart}
+                    onChange={(e) => setSched((p) => ({ ...p, videoOpStart: e.target.value }))}
+                    className="flex-1 px-3 py-2 border border-mc-border rounded-lg text-sm bg-white outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-400"
+                  />
+                  <span className="text-xs text-mc-text-muted">to</span>
+                  <input
+                    type="time"
+                    value={sched.videoOpEnd}
+                    onChange={(e) => setSched((p) => ({ ...p, videoOpEnd: e.target.value }))}
+                    className="flex-1 px-3 py-2 border border-mc-border rounded-lg text-sm bg-white outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-400"
+                  />
+                </div>
+                <div className="w-24 shrink-0">
+                  <input
+                    type="number"
+                    min="0"
+                    max="48"
+                    value={sched.maxVideoSlots}
+                    onChange={(e) => setSched((p) => ({ ...p, maxVideoSlots: parseInt(e.target.value) || 0 }))}
+                    className="w-full px-3 py-2 border border-mc-border rounded-lg text-sm bg-white outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-400 text-center font-bold text-slate-700"
+                  />
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider shrink-0">Minutes / call</span>
+                <select
+                  value={sched.videoSlotMinutes}
+                  onChange={(e) => setSched((p) => ({ ...p, videoSlotMinutes: parseInt(e.target.value) || 15 }))}
+                  className="px-3 py-2 border border-mc-border rounded-lg text-sm bg-white outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-400"
+                >
+                  {[10, 15, 20, 30, 45, 60].map((m) => (
+                    <option key={m} value={m}>{m} min</option>
+                  ))}
+                </select>
+                <span className="text-[11px] text-slate-400">Patients book one call per slot</span>
+              </div>
+            </div>
+
             <div>
               <label className="block text-xs font-semibold text-mc-text mb-1.5">Available Days *</label>
               <div className="flex flex-wrap gap-2">
@@ -351,6 +468,65 @@ const DoctorDashboard = () => {
             >
               {savingSched ? 'Saving…' : 'Save Schedule'}
             </button>
+
+            <div className="pt-4 mt-4 border-t border-mc-border space-y-3">
+              <div>
+                <h4 className="text-sm font-bold text-mc-text">Edit this day only</h4>
+                <p className="text-xs text-mc-text-muted mt-0.5">
+                  Change timings or capacity for a single date without affecting your default schedule.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-mc-text mb-1">Date</label>
+                  <input
+                    type="date"
+                    value={dayOverride.date}
+                    onChange={(e) => setDayOverride((p) => ({ ...p, date: e.target.value }))}
+                    className="w-full px-3 py-2 border border-mc-border rounded-lg text-sm bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-mc-text mb-1">Session</label>
+                  <select
+                    value={dayOverride.halfDay}
+                    onChange={(e) => setDayOverride((p) => ({ ...p, halfDay: e.target.value }))}
+                    className="w-full px-3 py-2 border border-mc-border rounded-lg text-sm bg-white"
+                  >
+                    <option value="both">Full day (custom)</option>
+                    <option value="morning">Morning only (half day)</option>
+                    <option value="afternoon">Afternoon only (half day)</option>
+                    <option value="cancel">Day off (cancel bookings seats)</option>
+                  </select>
+                </div>
+              </div>
+              {dayOverride.halfDay !== 'cancel' && (
+                <div className="grid grid-cols-2 gap-3">
+                  {(dayOverride.halfDay === 'both' || dayOverride.halfDay === 'morning') && (
+                    <>
+                      <input type="time" value={dayOverride.morningStart} onChange={(e) => setDayOverride((p) => ({ ...p, morningStart: e.target.value }))} className="px-3 py-2 border border-mc-border rounded-lg text-sm" />
+                      <input type="time" value={dayOverride.morningEnd} onChange={(e) => setDayOverride((p) => ({ ...p, morningEnd: e.target.value }))} className="px-3 py-2 border border-mc-border rounded-lg text-sm" />
+                      <input type="number" min="0" max="100" value={dayOverride.maxMorning} onChange={(e) => setDayOverride((p) => ({ ...p, maxMorning: parseInt(e.target.value) || 0 }))} className="px-3 py-2 border border-mc-border rounded-lg text-sm" placeholder="Morning seats" />
+                    </>
+                  )}
+                  {(dayOverride.halfDay === 'both' || dayOverride.halfDay === 'afternoon') && (
+                    <>
+                      <input type="time" value={dayOverride.afternoonStart} onChange={(e) => setDayOverride((p) => ({ ...p, afternoonStart: e.target.value }))} className="px-3 py-2 border border-mc-border rounded-lg text-sm" />
+                      <input type="time" value={dayOverride.afternoonEnd} onChange={(e) => setDayOverride((p) => ({ ...p, afternoonEnd: e.target.value }))} className="px-3 py-2 border border-mc-border rounded-lg text-sm" />
+                      <input type="number" min="0" max="100" value={dayOverride.maxAfternoon} onChange={(e) => setDayOverride((p) => ({ ...p, maxAfternoon: parseInt(e.target.value) || 0 }))} className="px-3 py-2 border border-mc-border rounded-lg text-sm" placeholder="Afternoon seats" />
+                    </>
+                  )}
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={handleDayOverrideSave}
+                disabled={savingOverride}
+                className="mc-btn mc-btn--secondary w-full sm:w-auto disabled:opacity-60"
+              >
+                {savingOverride ? 'Saving…' : 'Save day override'}
+              </button>
+            </div>
           </div>
         </McCard>
       </div>

@@ -215,6 +215,16 @@ async def add_hospital_doctor(hospital_id: int, data: dict):
         if existing:
             return {"success": False, "message": "A doctor with this email already exists"}
 
+        from app.utils.contact_uniqueness import phone_taken_in_table, normalize_phone
+        phone = data.get("phone")
+        if phone and await phone_taken_in_table("doctors", phone):
+            return {
+                "success": False,
+                "message": "This mobile number is already registered for another doctor.",
+            }
+        if phone:
+            phone = normalize_phone(phone) or phone
+
         # Auto-generate password if not provided
         if not password:
             import secrets
@@ -287,6 +297,8 @@ async def add_hospital_doctor(hospital_id: int, data: dict):
             "address": {"line1": hospital_addr, "line2": cabin},
             "documents": documents,
         }
+        if phone:
+            doctor_data["phone"] = phone
 
         # Create doctor
         new_doctor = await doctor_model.create_doctor(doctor_data)

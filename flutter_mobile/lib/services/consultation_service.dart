@@ -1,6 +1,7 @@
 import '../config/api_config.dart';
 import '../models/consultation_list_item.dart';
 import '../utils/json_parser.dart';
+import '../utils/vc_slot_window.dart';
 import 'api_service.dart';
 
 class AgoraJoinCredentials {
@@ -53,6 +54,7 @@ class CallSessionStatus {
     this.patientName,
     this.tokenNumber,
     this.queuePosition,
+    this.slotWindow,
   });
 
   final String status;
@@ -62,10 +64,11 @@ class CallSessionStatus {
   final String? patientName;
   final int? tokenNumber;
   final int? queuePosition;
+  final VcSlotWindow? slotWindow;
 
   factory CallSessionStatus.fromJson(Map<String, dynamic> json) {
     int? parseInt(dynamic v) => v is num ? v.toInt() : int.tryParse('$v');
-
+    final rawWindow = json['slotWindow'] ?? json['slot_window'];
     return CallSessionStatus(
       status: '${json['status'] ?? 'none'}',
       sessionId: parseInt(json['sessionId'] ?? json['session_id']),
@@ -74,6 +77,9 @@ class CallSessionStatus {
       patientName: json['patientName']?.toString(),
       tokenNumber: parseInt(json['tokenNumber']),
       queuePosition: parseInt(json['queuePosition']),
+      slotWindow: rawWindow is Map
+          ? VcSlotWindow.fromJson(Map<String, dynamic>.from(rawWindow))
+          : null,
     );
   }
 }

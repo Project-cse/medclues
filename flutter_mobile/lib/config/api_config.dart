@@ -53,6 +53,20 @@ class ApiConfig {
         lower.contains('10.0.2.2');
   }
 
+  /// Live pharmacy master catalog (Express inventory service).
+  /// Used only for All Medicines browse/search — not for Rx/orders/payments.
+  static String get pharmacyCatalogBaseUrl {
+    const fromDefine = String.fromEnvironment('PHARMACY_CATALOG_BASE_URL');
+    if (fromDefine.isNotEmpty) return fromDefine.replaceAll(RegExp(r'/$'), '');
+    final fromEnv = _env('PHARMACY_CATALOG_BASE_URL')?.trim();
+    if (fromEnv != null && fromEnv.isNotEmpty) {
+      return fromEnv.replaceAll(RegExp(r'/$'), '');
+    }
+    return 'https://medclues-pharmacy-backend.onrender.com';
+  }
+
+  static const String pharmacyInventory = '/api/inventory';
+
   static const Duration connectTimeout = Duration(seconds: 30);
   static const Duration receiveTimeout = Duration(seconds: 30);
 
@@ -193,6 +207,9 @@ class ApiConfig {
   static const String aiAssistantTools = '/api/ai/assistant/tools';
   static String doctorScheduleSlots(String doctorId, {String mode = 'offline'}) =>
       '/api/doctor/$doctorId/slots?mode=$mode';
+
+  /// Flutter home promo carousel (no auth).
+  static const String homeBanners = '/api/public/home-banners';
 
   // Hospitals
   static const String hospitalList = '/api/hospital-tieup/list';

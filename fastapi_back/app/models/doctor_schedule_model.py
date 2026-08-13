@@ -129,8 +129,11 @@ async def create_override(data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return await db.fetch_row(
         """
         INSERT INTO doctor_schedule_overrides
-            (doctor_id, override_date, start_time, end_time, mode, slot_duration, buffer_time, max_capacity, is_cancelled)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            (doctor_id, override_date, start_time, end_time, mode, slot_duration, buffer_time,
+             max_capacity, is_cancelled,
+             morning_start, morning_end, afternoon_start, afternoon_end,
+             max_appointments_morning, max_appointments_afternoon)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
         ON CONFLICT DO NOTHING
         RETURNING *
         """,
@@ -143,6 +146,46 @@ async def create_override(data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         data.get("buffer_time"),
         data.get("max_capacity"),
         bool(data.get("is_cancelled", False)),
+        data.get("morning_start"),
+        data.get("morning_end"),
+        data.get("afternoon_start"),
+        data.get("afternoon_end"),
+        data.get("max_appointments_morning"),
+        data.get("max_appointments_afternoon"),
+    )
+
+
+async def upsert_day_override(data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Create or replace a per-day OP override (half-day / cancel day)."""
+    doctor_id = int(data["doctor_id"])
+    override_date = data["override_date"]
+    existing = await get_override_for_date(doctor_id, override_date)
+    if existing:
+        await delete_override(int(existing["id"]))
+    return await create_override(data)
+
+
+async def list_overrides_for_doctor(
+    doctor_id: int, *, from_date: Optional[date] = None, to_date: Optional[date] = None
+) -> List[Dict[str, Any]]:
+    if from_date and to_date:
+        return await db.query(
+            """
+            SELECT * FROM doctor_schedule_overrides
+            WHERE doctor_id = $1 AND override_date BETWEEN $2 AND $3
+            ORDER BY override_date ASC
+            """,
+            int(doctor_id),
+            from_date,
+            to_date,
+        )
+    return await db.query(
+        """
+        SELECT * FROM doctor_schedule_overrides
+        WHERE doctor_id = $1 AND override_date >= CURRENT_DATE
+        ORDER BY override_date ASC
+        """,
+        int(doctor_id),
     )
 
 

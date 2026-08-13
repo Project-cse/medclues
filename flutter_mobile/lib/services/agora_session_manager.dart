@@ -42,6 +42,7 @@ class AgoraSessionManager {
           channelProfile: ChannelProfileType.channelProfileCommunication,
         ),
       );
+      await applyConsultMediaProfile(engine);
     } catch (e) {
       try {
         await engine.release();
@@ -52,6 +53,45 @@ class AgoraSessionManager {
     _engine = engine;
     log('Agora engine initialized');
     return engine;
+  }
+
+  /// Low-latency speech + moderate HD suitable for Indian mobile networks.
+  static Future<void> applyConsultMediaProfile(RtcEngine engine) async {
+    try {
+      await engine.setAudioProfile(
+        profile: AudioProfileType.audioProfileSpeechStandard,
+        scenario: AudioScenarioType.audioScenarioChatroom,
+      );
+    } catch (e) {
+      log('setAudioProfile failed: $e');
+    }
+    try {
+      await engine.setVideoEncoderConfiguration(
+        const VideoEncoderConfiguration(
+          dimensions: VideoDimensions(width: 640, height: 360),
+          frameRate: 15,
+          bitrate: 800,
+          minBitrate: 400,
+          orientationMode: OrientationMode.orientationModeAdaptive,
+          degradationPreference: DegradationPreference.maintainFramerate,
+        ),
+      );
+    } catch (e) {
+      log('setVideoEncoderConfiguration failed: $e');
+    }
+    try {
+      await engine.enableDualStreamMode(enabled: true);
+    } catch (e) {
+      log('enableDualStreamMode failed: $e');
+    }
+  }
+
+  /// True when Agora quality level is poor enough to show a connection banner.
+  static bool isPoorQuality(QualityType q) {
+    return q == QualityType.qualityPoor ||
+        q == QualityType.qualityBad ||
+        q == QualityType.qualityVbad ||
+        q == QualityType.qualityDown;
   }
 
   static Future<void> release() {

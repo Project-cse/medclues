@@ -20,7 +20,8 @@ VALID_STATUSES = {
 
 # Allowed transitions (from → set of to)
 TRANSITIONS = {
-    "placed": {"accepted", "stock_unavailable", "cancelled"},
+    # Catalog/retail OTC may bill immediately without partner accept step.
+    "placed": {"accepted", "billed", "stock_unavailable", "cancelled"},
     "accepted": {"billed", "stock_unavailable", "cancelled"},
     "stock_unavailable": {"cancelled", "accepted"},
     "billed": {"paid", "cancelled"},
@@ -62,14 +63,17 @@ async def create_order(data: dict, items: list[dict]) -> dict:
         await db.execute(
             """
             INSERT INTO pharmacy_order_items (
-                order_id, prescription_item_id, name, dosage, quantity
-            ) VALUES ($1,$2,$3,$4,$5)
+                order_id, prescription_item_id, name, dosage, quantity,
+                unit_price, line_total
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7)
             """,
             order["id"],
             item.get("prescription_item_id"),
             item["name"],
             item.get("dosage"),
             item.get("quantity"),
+            item.get("unit_price"),
+            item.get("line_total"),
         )
     await db.execute(
         """

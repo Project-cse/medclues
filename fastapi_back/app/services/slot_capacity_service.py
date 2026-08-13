@@ -54,33 +54,16 @@ async def count_active_for_slot(
     return int(row["c"]) if row else 0
 
 
-async def assert_capacity_available(
+async def _doctor_block_capacity(
     doctor_id: int,
-    slot: dict[str, Any],
+    slot_type: str,
     *,
-    slot_date_str: Optional[str] = None,
-) -> Optional[str]:
-    """Enforce seat limits from hospital policy (single source for booking).
-
-    Doctor `max_appointments_morning/afternoon` only affects slot *generation*
-    density in doctor_slot_service — booking capacity always uses hospital policy.
-    """
-    from app.utils.app_logger import get_logger
-
-    log = get_logger(__name__)
-    policy = await hospital_policy_model.get_policy_for_doctor(int(doctor_id))
-    mode = (slot.get("mode") or "offline").lower()
-    slot_type = slot.get("slot_type") or ""
-
-    if mode == "online" or slot_type == "video":
-        capacity = int(policy.get("video_slot_capacity") or 4)
-        msg = "Video slot already booked."
-    else:
-        capacity = int(policy.get("opd_slot_capacity") or 20)
-        msg = "Slot already full."
-
-    # Additive observability: log when doctor max_* differs from hospital policy.
-    try:
+    doctor_ref: Optional[str] = None,
+) -> int:
+    """Doctor max for morning/evening OPD; hospital policy as ceiling only."""
+    row = None
+    ref = str(doctor_ref or "").strip()
+    if ref.startswith("emb_"):
         row = await db.fetch_row(
             """
             SELECT max_appointments_morning, max_appointments_afternoon
@@ -88,26 +71,60 @@ async def assert_capacity_available(
             """,
             int(doctor_id),
         )
+    else:
+        row = await db.fetch_row(
+            """
+            SELECT max_appointments_morning, max_appointments_afternoon
+            FROM doctors WHERE id = $1
+            """,
+            int(doctor_id),
+        )
         if not row:
             row = await db.fetch_row(
                 """
                 SELECT max_appointments_morning, max_appointments_afternoon
-                FROM doctors WHERE id = $1
+                FROM hospital_tieup_doctors WHERE id = $1
                 """,
                 int(doctor_id),
             )
-        if row:
-            doc_cap = row.get("max_appointments_morning") or row.get("max_appointments_afternoon")
-            if doc_cap is not None and int(doc_cap) != capacity:
-                log.info(
-                    "capacity_source=hospital_policy doctor_id=%s policy_cap=%s doctor_max=%s slot_type=%s",
-                    doctor_id,
-                    capacity,
-                    int(doc_cap),
-                    slot_type or mode,
-                )
-    except Exception:
-        pass
+    if slot_type == "morning_opd":
+        doc_cap = int(row["max_appointments_morning"]) if row and row.get("max_appointments_morning") is not None else 20
+    else:
+        doc_cap = int(row["max_appointments_afternoon"]) if row and row.get("max_appointments_afternoon") is not None else 20
+
+    policy = await hospital_policy_model.get_policy_for_doctor(int(doctor_id))
+    policy_cap = int(policy.get("opd_slot_capacity") or 0) if policy else 0
+    if policy_cap > 0:
+        return max(1, min(doc_cap, policy_cap))
+    return max(1, doc_cap)
+
+
+async def assert_capacity_available(
+    doctor_id: int,
+    slot: dict[str, Any],
+    *,
+    slot_date_str: Optional[str] = None,
+) -> Optional[str]:
+    """Enforce seat limits from doctor max (OPD) or hospital video policy."""
+    mode = (slot.get("mode") or "offline").lower()
+    slot_type = slot.get("slot_type") or ""
+    doctor_ref = slot.get("doctor_ref")
+
+    if mode == "online" or slot_type == "video":
+        # One patient per video time slot; doctor max_video_slots controls how
+        # many such slots are generated per day (not concurrent seats on one row).
+        capacity = 1
+        msg = "Video slot already booked."
+    elif slot_type in ("morning_opd", "evening_opd"):
+        capacity = await _doctor_block_capacity(
+            int(doctor_id), slot_type, doctor_ref=doctor_ref
+        )
+        msg = "Slot already full."
+    else:
+        capacity = await _doctor_block_capacity(
+            int(doctor_id), "morning_opd", doctor_ref=doctor_ref
+        )
+        msg = "Slot already full."
 
     slot_date = slot.get("slot_date")
     if isinstance(slot_date, date):
@@ -128,12 +145,13 @@ async def assert_capacity_available(
     )
 
     if slot_type in ("morning_opd", "evening_opd"):
-        block_count = await _count_block_bookings(
+        # Prefer counting booked seat rows in the block (source of truth for UI counts).
+        block_booked = await _count_block_booked_seats(
             slot.get("doctor_ref"),
             slot.get("slot_date"),
             slot_type,
         )
-        if block_count >= capacity:
+        if block_booked >= capacity:
             return msg
         return None
 
@@ -164,5 +182,29 @@ async def _count_block_bookings(
         slot_date,
         slot_type,
         ACTIVE_LIST,
+    )
+    return int(row["c"]) if row else 0
+
+
+async def _count_block_booked_seats(
+    doctor_ref: Optional[str],
+    slot_date: Any,
+    slot_type: str,
+) -> int:
+    """Count doctor_slots rows already booked for this OPD block."""
+    if not doctor_ref or not slot_date:
+        return await _count_block_bookings(doctor_ref, slot_date, slot_type)
+    row = await db.fetch_row(
+        """
+        SELECT COUNT(*)::int AS c
+        FROM doctor_slots
+        WHERE doctor_ref = $1
+          AND slot_date = $2
+          AND slot_type = $3
+          AND status = 'booked'
+        """,
+        str(doctor_ref),
+        slot_date,
+        slot_type,
     )
     return int(row["c"]) if row else 0

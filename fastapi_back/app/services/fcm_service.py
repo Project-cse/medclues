@@ -193,6 +193,32 @@ async def notify_appointment_reminder_24h(
     )
 
 
+async def notify_appointment_reminder_1h(
+    user_id: int,
+    doctor_name: str,
+    slot_date: str,
+    slot_time: str,
+    appointment_id: int,
+    *,
+    is_video: bool = False,
+):
+    if is_video:
+        title = "Video consult in 1 hour"
+        body = f"Your video consult with Dr. {doctor_name} starts in 1 hour ({slot_time})."
+    else:
+        title = "Appointment in 1 hour"
+        body = f"Reminder: Dr. {doctor_name} at {slot_time} today."
+    await send_to_user(
+        user_id,
+        title=title,
+        body=body,
+        data={
+            "type": "appointment_reminder_1h",
+            "appointmentId": str(appointment_id),
+        },
+    )
+
+
 async def notify_appointment_cancelled(user_id: int, doctor_name: str, appointment_id: int):
     await send_to_user(
         user_id,

@@ -63,6 +63,10 @@ async def update_profile(
     opEndAfternoon: Optional[str] = Form(None),
     maxAppointmentsMorning: Optional[str] = Form(None),
     maxAppointmentsAfternoon: Optional[str] = Form(None),
+    videoOpStart: Optional[str] = Form(None),
+    videoOpEnd: Optional[str] = Form(None),
+    maxVideoSlots: Optional[str] = Form(None),
+    videoSlotMinutes: Optional[str] = Form(None),
     availableDays: Optional[str] = Form(None),
     image: Optional[UploadFile] = File(None),
     doc_id: int = Depends(auth_doctor)
@@ -79,9 +83,32 @@ async def update_profile(
         "opEndAfternoon": opEndAfternoon,
         "maxAppointmentsMorning": maxAppointmentsMorning,
         "maxAppointmentsAfternoon": maxAppointmentsAfternoon,
+        "videoOpStart": videoOpStart,
+        "videoOpEnd": videoOpEnd,
+        "maxVideoSlots": maxVideoSlots,
+        "videoSlotMinutes": videoSlotMinutes,
         "availableDays": availableDays,
     }
     return await doctor_controller.update_doctor_profile(doc_id, form_data, image)
+
+
+@router.get("/schedule/overrides")
+async def list_schedule_overrides(doc_id: int = Depends(auth_doctor)):
+    from app.services import schedule_ops_service
+    return await schedule_ops_service.list_day_overrides(doc_id)
+
+
+@router.post("/schedule/overrides")
+async def upsert_schedule_override(req: Request, doc_id: int = Depends(auth_doctor)):
+    from app.services import schedule_ops_service
+    body = await req.json()
+    return await schedule_ops_service.save_day_override(doc_id, body or {})
+
+
+@router.delete("/schedule/overrides/{override_id}")
+async def delete_schedule_override(override_id: int, doc_id: int = Depends(auth_doctor)):
+    from app.services import schedule_ops_service
+    return await schedule_ops_service.delete_day_override(doc_id, override_id)
 
 @router.get("/dashboard")
 async def doctor_dashboard(doc_id: int = Depends(auth_doctor)):

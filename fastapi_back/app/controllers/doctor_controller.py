@@ -352,6 +352,26 @@ async def update_doctor_profile(doc_id: int, form_data: dict, image=None):
             except (ValueError, TypeError):
                 pass
 
+        if form_data.get('videoOpStart') is not None:
+            update_data['video_op_start'] = form_data['videoOpStart']
+
+        if form_data.get('videoOpEnd') is not None:
+            update_data['video_op_end'] = form_data['videoOpEnd']
+
+        if form_data.get('maxVideoSlots') is not None:
+            try:
+                update_data['max_video_slots'] = max(0, min(48, int(form_data['maxVideoSlots'])))
+            except (ValueError, TypeError):
+                pass
+
+        if form_data.get('videoSlotMinutes') is not None:
+            try:
+                mins = int(form_data['videoSlotMinutes'])
+                if mins in (10, 15, 20, 30, 45, 60):
+                    update_data['video_slot_minutes'] = mins
+            except (ValueError, TypeError):
+                pass
+
         if form_data.get('availableDays') is not None:
             import json as _json
             days_val = form_data['availableDays']
@@ -397,12 +417,16 @@ async def update_doctor_profile(doc_id: int, form_data: dict, image=None):
 
         # Check if schedule fields were updated
         schedule_keys = {'op_start', 'op_end', 'op_start_afternoon', 'op_end_afternoon', 
-                         'max_appointments_morning', 'max_appointments_afternoon', 'available_days'}
+                         'max_appointments_morning', 'max_appointments_afternoon', 'available_days',
+                         'video_op_start', 'video_op_end', 'max_video_slots', 'video_slot_minutes'}
         if any(k in update_data for k in schedule_keys):
             try:
-                import asyncio
+                from app.controllers.doctor_slot_controller import invalidate_slots_cache
                 from app.services.doctor_slot_service import regenerate_future_slots
-                asyncio.create_task(regenerate_future_slots(str(doc_id)))
+                # Drop stale booking counts immediately, then regenerate so the
+                # next /slots fetch reflects the capacity the doctor just saved.
+                invalidate_slots_cache(str(doc_id))
+                await regenerate_future_slots(str(doc_id))
             except Exception as slot_err:
                 print(f"[WARNING] doctor slot regeneration failed: {slot_err}")
 

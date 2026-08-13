@@ -259,6 +259,13 @@ async def start_no_show_scheduler(interval_seconds: int = 300) -> None:
                 expired = await process_expired_missed_offers()
                 if expired:
                     log.info("Auto-cancelled %s expired MISSED offers", expired)
+                try:
+                    from app.services.schedule_ops_service import expire_closure_offers
+                    closed_n = await expire_closure_offers()
+                    if closed_n:
+                        log.info("Auto-cancelled %s hospital-closure offers", closed_n)
+                except Exception as clo_err:
+                    log.warning("Closure offer expiry error: %s", clo_err)
                 count = await process_missed_appointments()
                 if count:
                     log.info("Processed %s stale appointments into MISSED", count)

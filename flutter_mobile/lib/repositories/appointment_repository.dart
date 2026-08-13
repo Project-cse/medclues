@@ -23,6 +23,9 @@ class AppointmentRepository {
   Future<Map<String, DaySlotsModel>> doctorSchedule(String doctorId, {String mode = 'offline'}) =>
       _service.fetchDoctorSchedule(doctorId, mode: mode);
 
+  DaySlotsModel? dayOf(Map<String, DaySlotsModel> schedule, String date) =>
+      _service.dayFromSchedule(schedule, date);
+
   Future<DaySlotsModel> slots(String doctorId, String date, {String mode = 'offline'}) =>
       _service.fetchSlots(doctorId, date, mode: mode);
 

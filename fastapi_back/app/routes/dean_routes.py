@@ -86,6 +86,27 @@ async def cancel_appointment(req: Request, dean_info: dict = Depends(auth_dean))
     )
 
 
+@router.post("/hospital/close-day")
+async def mark_hospital_closed_day(req: Request, dean_info: dict = Depends(auth_dean)):
+    """Mark a date closed: notify booked patients, offer reschedule, deadline auto-cancel."""
+    from datetime import date as date_cls
+    from app.services import schedule_ops_service
+    body = await req.json()
+    raw = (body.get("date") or body.get("closedDate") or "").strip()
+    if not raw:
+        return {"success": False, "message": "date is required (YYYY-MM-DD)"}
+    try:
+        closed = date_cls.fromisoformat(raw[:10])
+    except ValueError:
+        return {"success": False, "message": "Invalid date"}
+    return await schedule_ops_service.mark_hospital_closed_day(
+        int(dean_info["hospital_id"]),
+        closed,
+        reason=str(body.get("reason") or "Hospital closed"),
+        deadline_hours=int(body.get("deadlineHours") or 12),
+    )
+
+
 @router.get("/patients")
 async def get_patients(dean_info: dict = Depends(auth_dean)):
     return await dean_controller.get_hospital_patients(dean_info["hospital_id"])

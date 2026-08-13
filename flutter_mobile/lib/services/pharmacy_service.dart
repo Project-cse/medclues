@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 
+import '../config/api_config.dart';
 import '../utils/json_parser.dart';
 import 'api_service.dart';
 
@@ -9,6 +10,19 @@ class PharmacyService {
   PharmacyService(this._api);
 
   final ApiService _api;
+
+  Dio? _catalogDio;
+
+  Dio get _catalogClient {
+    return _catalogDio ??= Dio(
+      BaseOptions(
+        baseUrl: ApiConfig.pharmacyCatalogBaseUrl,
+        connectTimeout: ApiConfig.connectTimeout,
+        receiveTimeout: ApiConfig.receiveTimeout,
+        headers: {'Accept': 'application/json'},
+      ),
+    );
+  }
 
   List<Map<String, dynamic>> _list(dynamic data) {
     if (data is Map && data['success'] == true) {
@@ -31,48 +45,84 @@ class PharmacyService {
     return _list(res.data);
   }
 
+  List<Map<String, dynamic>> _extractInventoryList(dynamic data) {
+    if (data is List) return data.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+    if (data is Map) {
+      for (final key in ['data', 'inventory', 'medicines', 'items', 'products']) {
+        final v = data[key];
+        if (v is List) {
+          return v.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+        }
+      }
+    }
+    return [];
+  }
+
   List<Map<String, dynamic>> _parseMedicineList(dynamic data) {
-    if (data is! List) return [];
-    return data.map((item) {
+    final list = data is List
+        ? data
+        : _extractInventoryList(data);
+    return list.map((item) {
       final m = Map<String, dynamic>.from(item as Map);
       final price = (m['price'] is num)
           ? (m['price'] as num).toDouble()
-          : (m['costPrice'] is num ? (m['costPrice'] as num).toDouble() : 50.0);
-      final mrp = (m['mrp'] is num)
-          ? (m['mrp'] as num).toDouble()
-          : (price * 1.25);
+          : (m['costPrice'] is num ? (m['costPrice'] as num).toDouble() : 0.0);
+      final mrp = (m['mrp'] is num) ? (m['mrp'] as num).toDouble() : price;
+      String discount = '';
+      if (m['discount'] != null && m['discount'].toString().trim().isNotEmpty) {
+        discount = m['discount'].toString();
+      } else if (mrp > 0 && price < mrp) {
+        final pct = (((1 - price / mrp) * 100).round());
+        if (pct > 0) discount = '$pct% OFF';
+      }
+      final stock = m['stock'] is num ? (m['stock'] as num).toInt() : 0;
       return {
         'id': m['_id'] ?? m['id'] ?? 'med_${m['name']}',
         '_id': m['_id'] ?? m['id'],
         'name': m['name'] ?? 'Unnamed Medicine',
-        'brand': m['brand'] ?? m['distributor'] ?? 'Pharma Brand',
+        'brand': m['brand'] ?? m['distributor'] ?? '',
         'category': m['category'] ?? 'General',
-        'salt': m['salt'] ?? m['composition'] ?? 'Generic Composition',
+        'salt': m['salt'] ?? m['composition'] ?? '',
         'price': price,
         'mrp': mrp,
-        'discount': m['discount'] ?? '15% OFF',
+        'discount': discount,
         'requiresRx': m['requiresRx'] ?? false,
         'image': m['image'] != null ? m['image'].toString() : '',
-        'stock': m['stock'] ?? 100,
+        'stock': stock,
       };
+    }).where((m) => (m['stock'] as int) > 0).toList();
+  }
+
+  /// Live master catalog from pharmacy Express inventory service.
+  Future<List<Map<String, dynamic>>> searchMedicines([String query = '']) async {
+    final res = await _catalogClient.get(ApiConfig.pharmacyInventory);
+    final parsed = _parseMedicineList(res.data);
+    final q = query.trim().toLowerCase();
+    if (q.isEmpty) return parsed;
+    return parsed.where((m) {
+      final blob = [
+        m['name'],
+        m['brand'],
+        m['salt'],
+        m['category'],
+      ].map((e) => e?.toString().toLowerCase() ?? '').join(' ');
+      return blob.contains(q);
     }).toList();
   }
 
-  Future<List<Map<String, dynamic>>> searchMedicines([String query = '']) async {
-    final res = await _api.get(
-      '/api/user/pharmacy/search',
-      queryParameters: {'query': query.isEmpty ? 'acetaminophen' : query},
-    );
-    final data = res.data;
-    if (data is Map && data['success'] == true) {
-      final raw = data['data'];
-      if (raw is List) {
-        return _parseMedicineList(raw);
-      }
+  Future<List<String>> getCatalogCategories() async {
+    try {
+      final meds = await searchMedicines();
+      final cats = meds
+          .map((m) => m['category']?.toString().trim() ?? '')
+          .where((c) => c.isNotEmpty)
+          .toSet()
+          .toList()
+        ..sort();
+      return cats;
+    } catch (_) {
+      return [];
     }
-    throw Exception(
-      data is Map ? (data['message'] ?? 'Search failed') : 'Search failed',
-    );
   }
 
   Future<List<Map<String, dynamic>>> getOrders() async {
@@ -113,6 +163,29 @@ class PharmacyService {
       'pharmacyId': pharmacyId,
       'fulfillment': fulfillment,
       if (deliveryAddress != null) 'deliveryAddress': deliveryAddress,
+      if (notes != null) 'notes': notes,
+    });
+    return _map(res.data, 'Could not place order');
+  }
+
+  /// Retail / home-delivery cart — no prescription required.
+  Future<Map<String, dynamic>> placeCatalogOrder({
+    required List<Map<String, dynamic>> items,
+    String fulfillment = 'delivery',
+    String paymentMethod = 'upi',
+    String? deliveryAddress,
+    int? pharmacyId,
+    double? deliveryFee,
+    String? notes,
+  }) async {
+    final res = await _api.post('/api/user/pharmacy/catalog-orders', data: {
+      'items': items,
+      'fulfillment': fulfillment,
+      'paymentMethod': paymentMethod,
+      if (deliveryAddress != null && deliveryAddress.trim().isNotEmpty)
+        'deliveryAddress': deliveryAddress.trim(),
+      if (pharmacyId != null) 'pharmacyId': pharmacyId,
+      if (deliveryFee != null) 'deliveryFee': deliveryFee,
       if (notes != null) 'notes': notes,
     });
     return _map(res.data, 'Could not place order');

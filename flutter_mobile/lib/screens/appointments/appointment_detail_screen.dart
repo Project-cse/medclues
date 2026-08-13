@@ -14,6 +14,7 @@ import '../../utils/calendar_helper.dart';
 import '../../utils/currency_formatter.dart';
 import '../../utils/date_formatter.dart';
 import '../../utils/appointment_status_utils.dart';
+import '../../utils/vc_slot_window.dart';
 import '../../widgets/common/app_button.dart';
 import '../../widgets/common/appointment_action_buttons.dart';
 import '../../widgets/common/app_loader.dart';
@@ -162,20 +163,46 @@ class AppointmentDetailScreen extends ConsumerWidget {
                       ],
                       if (a.isOnlineVisit && isUpcoming) ...[
                         const SizedBox(height: 20),
-                        AppButton(
-                          label: l10n.doctorVideoConsult,
-                          onPressed: () async {
-                            try {
-                              await AppPermissionsService.requireVideoConsult();
-                            } on VideoConsultPermissionException catch (e) {
-                              if (!context.mounted) return;
-                              AppSnackbar.show(context, e.toString());
-                              return;
-                            }
-                            if (!context.mounted) return;
-                            context.push('/video-waiting/${a.id}');
-                          },
-                        ),
+                        Builder(builder: (context) {
+                          final window = VcSlotWindow.fromSlot(
+                            slotDate: a.slotDate,
+                            slotTime: a.slotTime,
+                          );
+                          final canJoin = window.canJoinWindow && !window.forceEnd;
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              if (window.windowMessage != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 8),
+                                  child: Text(
+                                    window.windowMessage!,
+                                    textAlign: TextAlign.center,
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 13,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                ),
+                              AppButton(
+                                label: window.joinButtonLabel,
+                                onPressed: !canJoin
+                                    ? null
+                                    : () async {
+                                        try {
+                                          await AppPermissionsService.requireVideoConsult();
+                                        } on VideoConsultPermissionException catch (e) {
+                                          if (!context.mounted) return;
+                                          AppSnackbar.show(context, e.toString());
+                                          return;
+                                        }
+                                        if (!context.mounted) return;
+                                        context.push('/video-waiting/${a.id}');
+                                      },
+                              ),
+                            ],
+                          );
+                        }),
                         const SizedBox(height: 12),
                       ],
                       if (isUpcoming) ...[

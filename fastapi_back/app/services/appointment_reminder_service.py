@@ -1,4 +1,4 @@
-"""24-hour appointment reminders via FCM + Telegram (background scheduler)."""
+"""24h + 1h appointment reminders via FCM + Telegram (background scheduler)."""
 import asyncio
 import json
 import re
@@ -10,9 +10,11 @@ from app.utils.app_logger import get_logger
 
 log = get_logger(__name__)
 
-_POLL_SECONDS = 30 * 60  # every 30 minutes
-_REMINDER_HOURS = 24
-_WINDOW_HOURS = 1  # 23h–25h before appointment
+_POLL_SECONDS = 15 * 60  # every 15 minutes (catches 1h window reliably)
+_REMINDER_24H_HOURS = 24
+_WINDOW_24H_HOURS = 1  # 23h–25h before appointment
+_REMINDER_1H_MINUTES = 60
+_WINDOW_1H_MINUTES = 20  # 50–70 min before
 
 
 def _parse_slot_start(slot_date: str, slot_time: str) -> Optional[datetime]:
@@ -29,6 +31,7 @@ def _parse_slot_start(slot_date: str, slot_time: str) -> Optional[datetime]:
         return None
 
     time_part = str(slot_time).split("-")[0].strip()
+    time_part = re.split(r"[–—]", time_part)[0].strip()
     for fmt in ("%I:%M %p", "%H:%M", "%I %p"):
         try:
             t = datetime.strptime(time_part.upper(), fmt).time()
@@ -59,22 +62,37 @@ def _doctor_name(doctor_data) -> str:
     return "your doctor"
 
 
-def _in_reminder_window(start: datetime, now: datetime) -> bool:
+def _in_24h_window(start: datetime, now: datetime) -> bool:
     delta = start - now
-    low = timedelta(hours=_REMINDER_HOURS - _WINDOW_HOURS / 2)
-    high = timedelta(hours=_REMINDER_HOURS + _WINDOW_HOURS / 2)
+    low = timedelta(hours=_REMINDER_24H_HOURS - _WINDOW_24H_HOURS / 2)
+    high = timedelta(hours=_REMINDER_24H_HOURS + _WINDOW_24H_HOURS / 2)
+    return low <= delta <= high
+
+
+def _in_1h_window(start: datetime, now: datetime) -> bool:
+    delta = start - now
+    half = _WINDOW_1H_MINUTES / 2
+    low = timedelta(minutes=_REMINDER_1H_MINUTES - half)
+    high = timedelta(minutes=_REMINDER_1H_MINUTES + half)
     return low <= delta <= high
 
 
 async def process_due_reminders() -> int:
     await appointment_reminder_model.ensure_reminder_schema()
-    rows = await appointment_reminder_model.get_upcoming_for_24h_reminder()
     now = datetime.now()
+    sent = 0
+    sent += await _process_24h(now)
+    sent += await _process_1h(now)
+    return sent
+
+
+async def _process_24h(now: datetime) -> int:
+    rows = await appointment_reminder_model.get_upcoming_for_24h_reminder()
     sent = 0
 
     for row in rows:
         start = _parse_slot_start(row.get("slot_date"), row.get("slot_time"))
-        if not start or not _in_reminder_window(start, now):
+        if not start or not _in_24h_window(start, now):
             continue
 
         user_id = int(row["user_id"])
@@ -110,6 +128,58 @@ async def process_due_reminders() -> int:
 
     if sent:
         log.info("Sent %s appointment 24h reminder(s)", sent)
+    return sent
+
+
+async def _process_1h(now: datetime) -> int:
+    rows = await appointment_reminder_model.get_upcoming_for_1h_reminder()
+    sent = 0
+
+    for row in rows:
+        start = _parse_slot_start(row.get("slot_date"), row.get("slot_time"))
+        if not start or not _in_1h_window(start, now):
+            continue
+
+        user_id = int(row["user_id"])
+        apt_id = int(row["id"])
+        doc_name = _doctor_name(row.get("doctor_data"))
+        slot_date = str(row.get("slot_date", "")).replace("_", "/")
+        slot_time = row.get("slot_time", "")
+        patient = row.get("patient_name") or "Patient"
+        mode = (row.get("mode") or "").lower()
+        is_video = mode in ("online", "video") or "video" in mode
+
+        try:
+            from app.services import fcm_service
+            await fcm_service.notify_appointment_reminder_1h(
+                user_id,
+                doc_name,
+                slot_date,
+                slot_time,
+                apt_id,
+                is_video=is_video,
+            )
+        except Exception as e:
+            log.warning("FCM 1h reminder failed apt=%s: %s", apt_id, e)
+
+        try:
+            from app.services import telegram_notify_service
+            await telegram_notify_service.notify_appointment_reminder(
+                user_id,
+                patient_name=patient,
+                doctor_name=doc_name,
+                slot_time=slot_time,
+                hospital_name="MEDCLUES Partner Hospital",
+                minutes=60,
+            )
+        except Exception as e:
+            log.warning("Telegram 1h reminder failed apt=%s: %s", apt_id, e)
+
+        await appointment_reminder_model.mark_1h_reminder_sent(apt_id)
+        sent += 1
+
+    if sent:
+        log.info("Sent %s appointment 1h reminder(s)", sent)
     return sent
 
 

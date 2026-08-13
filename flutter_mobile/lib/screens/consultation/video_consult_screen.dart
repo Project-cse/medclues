@@ -13,6 +13,7 @@ import '../../routes/route_names.dart';
 import '../../services/agora_session_manager.dart';
 import '../../services/app_permissions_service.dart';
 import '../../services/consultation_service.dart';
+import '../../utils/vc_slot_window.dart';
 import '../../widgets/animations/connecting_doctor_overlay.dart';
 
 /// Agora RTC video room for an online appointment.
@@ -51,6 +52,13 @@ class _VideoConsultScreenState extends ConsumerState<VideoConsultScreen> {
   Timer? _callTimer;
   Timer? _statusPollTimer;
   Timer? _chatPollTimer;
+  VcSlotWindow? _slotWindow;
+  bool _softWarnDismissed = false;
+  bool _graceBannerDismissed = false;
+  String? _slotBannerText;
+  bool _poorConnection = false;
+  int _poorQualityStreak = 0;
+  int? _remoteUidForStream;
 
   bool _chatOpen = false;
   bool _chatUnread = false;
@@ -96,11 +104,16 @@ class _VideoConsultScreenState extends ConsumerState<VideoConsultScreen> {
       if (_callEnding || !mounted) return;
       try {
         final status = await ref.read(consultationServiceProvider).fetchVideoCallStatus(widget.appointmentId);
+        _applySlotWindowFromStatus(status);
         // Ignore stale ended from a prior attempt until we have joined the channel.
         // While the patient has temporarily left (rejoin screen), still react to a
         // doctor-ended call so they aren't stuck on the rejoin overlay.
-        if (status['ended'] == true && _joined) {
-          await _handleCallEnded('The doctor ended the consultation.');
+        if ((status['ended'] == true || status['forceEnd'] == true) && _joined) {
+          final force = status['forceEnd'] == true;
+          await _handleCallEnded(
+            force ? 'Slot time ended.' : 'The doctor ended the consultation.',
+            notifyServer: force,
+          );
           return;
         }
         if (_callStartedAtMs == null && _hadRemote) {
@@ -108,6 +121,74 @@ class _VideoConsultScreenState extends ConsumerState<VideoConsultScreen> {
         }
       } catch (_) {}
     });
+  }
+
+  void _applySlotWindowFromStatus(Map<String, dynamic> status) {
+    final raw = status['slotWindow'] ?? status['slot_window'];
+    VcSlotWindow? window;
+    if (raw is Map) {
+      window = VcSlotWindow.fromJson(Map<String, dynamic>.from(raw));
+    } else {
+      window = VcSlotWindow(
+        softWarn: status['softWarn'] == true,
+        inGrace: status['inGrace'] == true,
+        forceEnd: status['forceEnd'] == true,
+        windowMessage: status['windowMessage']?.toString(),
+      );
+    }
+    _slotWindow = window;
+
+    String? banner;
+    if (window.forceEnd) {
+      banner = 'Slot time ended.';
+    } else if (window.inGrace && !_graceBannerDismissed) {
+      banner = window.windowMessage ?? 'Slot ended. Grace period — finish or leave soon.';
+    } else if (window.softWarn && !_softWarnDismissed) {
+      banner = window.windowMessage ?? 'Consultation ends in 2 minutes.';
+    }
+    if (mounted && banner != _slotBannerText) {
+      setState(() => _slotBannerText = banner);
+    }
+  }
+
+  void _onNetworkQuality(QualityType tx, QualityType rx) {
+    final poor = AgoraSessionManager.isPoorQuality(tx) || AgoraSessionManager.isPoorQuality(rx);
+    if (poor) {
+      _poorQualityStreak++;
+    } else {
+      _poorQualityStreak = 0;
+      if (_poorConnection && mounted) {
+        setState(() => _poorConnection = false);
+        _preferHighStream();
+      }
+      return;
+    }
+    if (_poorQualityStreak >= 3 && !_poorConnection && mounted) {
+      setState(() => _poorConnection = true);
+      _preferLowStream();
+    }
+  }
+
+  Future<void> _preferLowStream() async {
+    final uid = _remoteUid ?? _remoteUidForStream;
+    if (uid == null || _engine == null) return;
+    try {
+      await _engine!.setRemoteVideoStreamType(
+        uid: uid,
+        streamType: VideoStreamType.videoStreamLow,
+      );
+    } catch (_) {}
+  }
+
+  Future<void> _preferHighStream() async {
+    final uid = _remoteUid ?? _remoteUidForStream;
+    if (uid == null || _engine == null) return;
+    try {
+      await _engine!.setRemoteVideoStreamType(
+        uid: uid,
+        streamType: VideoStreamType.videoStreamHigh,
+      );
+    } catch (_) {}
   }
 
   void _startChatPolling() {
@@ -264,6 +345,7 @@ class _VideoConsultScreenState extends ConsumerState<VideoConsultScreen> {
             if (mounted) {
               _hadRemote = true;
               _remoteJoinedAtMs = DateTime.now().millisecondsSinceEpoch;
+              _remoteUidForStream = remoteUid;
               setState(() => _remoteUid = remoteUid);
             }
             _syncCallTimerFromServer();
@@ -272,7 +354,16 @@ class _VideoConsultScreenState extends ConsumerState<VideoConsultScreen> {
             if (mounted &&
                 (state == RemoteVideoState.remoteVideoStateStarting ||
                     state == RemoteVideoState.remoteVideoStateDecoding)) {
+              _remoteUidForStream = remoteUid;
               setState(() => _remoteUid = remoteUid);
+            }
+          },
+          onNetworkQuality: (connection, remoteUid, txQuality, rxQuality) {
+            // remoteUid == 0 → local user quality.
+            if (remoteUid == 0 || remoteUid == connection.localUid) {
+              _onNetworkQuality(txQuality, rxQuality);
+            } else {
+              _onNetworkQuality(txQuality, rxQuality);
             }
           },
           onUserOffline: (connection, remoteUid, reason) {
@@ -393,6 +484,35 @@ class _VideoConsultScreenState extends ConsumerState<VideoConsultScreen> {
   /// Patient exits the room without ending the consultation. The doctor stays
   /// in the room and the patient can rejoin from the appointment card (Join
   /// Video Call) while still within their slot.
+  Future<void> _confirmLeave() async {
+    if (_callEnding || _loading || _error != null) {
+      await _leave();
+      return;
+    }
+    final msg = (_slotWindow ?? const VcSlotWindow()).leaveConfirmMessage();
+    final leave = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Leave call?', style: GoogleFonts.poppins(fontWeight: FontWeight.w700)),
+        content: Text(msg, style: GoogleFonts.poppins(fontSize: 14)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text('Stay', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(
+              'Leave call',
+              style: GoogleFonts.poppins(fontWeight: FontWeight.w700, color: AppColors.error),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (leave == true) await _leave();
+  }
+
   Future<void> _leave() async {
     if (_callEnding) return;
     _callTimer?.cancel();
@@ -437,7 +557,7 @@ class _VideoConsultScreenState extends ConsumerState<VideoConsultScreen> {
       canPop: _loading || _error != null,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop && !_loading && _error == null) {
-          _leave();
+          _confirmLeave();
         }
       },
       child: Scaffold(
@@ -460,7 +580,7 @@ class _VideoConsultScreenState extends ConsumerState<VideoConsultScreen> {
         ),
         leading: IconButton(
           icon: const Icon(Icons.close),
-          onPressed: _leave,
+          onPressed: _confirmLeave,
         ),
       ),
       body: _buildBody(),
@@ -497,9 +617,9 @@ class _VideoConsultScreenState extends ConsumerState<VideoConsultScreen> {
                     _chatControlBtn(),
                     _controlBtn(
                       icon: Icons.call_end,
-                      label: l10n.videoEndConsult,
+                      label: 'Leave call',
                       color: AppColors.error,
-                      onTap: _leave,
+                      onTap: _confirmLeave,
                     ),
                   ],
                 ),
@@ -560,6 +680,62 @@ class _VideoConsultScreenState extends ConsumerState<VideoConsultScreen> {
     return Stack(
       fit: StackFit.expand,
       children: [
+        if (_poorConnection)
+          Positioned(
+            top: 8,
+            left: 8,
+            right: 8,
+            child: Material(
+              color: Colors.orange.shade800.withValues(alpha: 0.95),
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                child: Text(
+                  'Poor connection — move closer to Wi‑Fi or switch network',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.poppins(fontSize: 12, color: Colors.white, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ),
+          ),
+        if (_slotBannerText != null)
+          Positioned(
+            top: _poorConnection ? 56 : 8,
+            left: 8,
+            right: 8,
+            child: Material(
+              color: Colors.amber.shade800.withValues(alpha: 0.95),
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _slotBannerText!,
+                        style: GoogleFonts.poppins(fontSize: 12, color: Colors.white, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(Icons.close, color: Colors.white, size: 18),
+                      onPressed: () {
+                        final w = _slotWindow;
+                        setState(() {
+                          if (w?.inGrace == true) {
+                            _graceBannerDismissed = true;
+                          } else {
+                            _softWarnDismissed = true;
+                          }
+                          _slotBannerText = null;
+                        });
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
         if (kIsWeb && _cameraBlocked)
           Positioned(
             top: 8,

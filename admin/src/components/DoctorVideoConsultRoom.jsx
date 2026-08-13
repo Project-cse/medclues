@@ -17,7 +17,15 @@ async function createLocalTracks(wantCamera) {
     return { tracks: [audioTrack], videoTrack: null, cameraBlocked: false }
   }
   try {
-    const videoTrack = await AgoraRTC.createCameraVideoTrack()
+    const videoTrack = await AgoraRTC.createCameraVideoTrack({
+      encoderConfig: {
+        width: 640,
+        height: 360,
+        frameRate: 15,
+        bitrateMax: 800,
+        bitrateMin: 400,
+      },
+    })
     return { tracks: [audioTrack, videoTrack], videoTrack, cameraBlocked: false }
   } catch (_) {
     return { tracks: [audioTrack], videoTrack: null, cameraBlocked: true }
@@ -86,6 +94,9 @@ const DoctorVideoConsultRoom = ({
       ? 'Receive-only: your camera is off so the patient can use the webcam on this device.'
       : null
   )
+  const [slotBanner, setSlotBanner] = useState(null)
+  const [poorConnection, setPoorConnection] = useState(false)
+  const poorStreakRef = useRef(0)
 
   const clientRef = useRef(null)
   const localTracksRef = useRef([])
@@ -484,7 +495,19 @@ const DoctorVideoConsultRoom = ({
           `${backendUrl}/api/doctor/appointments/${appointmentId}/video-call-status`,
           { headers: { dToken: authToken } }
         )
-        if (data?.ended && callActive) {
+        const window = data?.slotWindow || {}
+        if (data?.forceEnd || window.forceEnd) {
+          handleCallEnded('Slot time ended.', { notifyServer: true })
+          return
+        }
+        if (window.inGrace) {
+          setSlotBanner(window.windowMessage || 'Slot ended. Grace period — finish or leave soon.')
+        } else if (window.softWarn || data?.softWarn) {
+          setSlotBanner(window.windowMessage || data?.windowMessage || 'Consultation ends in 2 minutes.')
+        } else {
+          setSlotBanner(null)
+        }
+        if ((data?.ended && callActive) && !(data?.forceEnd || window.forceEnd)) {
           handleCallEnded('The call was ended.', { notifyServer: true })
           return
         }
@@ -494,7 +517,32 @@ const DoctorVideoConsultRoom = ({
       } catch (_) {}
     }, 2000)
     return () => clearInterval(id)
-  }, [tracksReady, callEndedMessage, appointmentId, authToken, backendUrl, callStartedAtMs, remoteJoined])
+  }, [tracksReady, callEndedMessage, appointmentId, authToken, backendUrl, callStartedAtMs, remoteJoined, callActive])
+
+  useEffect(() => {
+    const client = clientRef.current
+    if (!client || !tracksReady) return undefined
+    const onQuality = (stats) => {
+      // Agora Web: uplinkNetworkQuality / downlinkNetworkQuality 0–6 (4+ = poor)
+      const up = stats?.uplinkNetworkQuality ?? 0
+      const down = stats?.downlinkNetworkQuality ?? 0
+      const poor = up >= 4 || down >= 4
+      if (poor) {
+        poorStreakRef.current += 1
+      } else {
+        poorStreakRef.current = 0
+        setPoorConnection(false)
+        return
+      }
+      if (poorStreakRef.current >= 3) setPoorConnection(true)
+    }
+    client.on('network-quality', onQuality)
+    return () => {
+      try {
+        client.off('network-quality', onQuality)
+      } catch (_) {}
+    }
+  }, [tracksReady])
 
   const toggleMute = async () => {
     const audio = localTracksRef.current[0]
@@ -664,13 +712,26 @@ const DoctorVideoConsultRoom = ({
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white text-sm font-semibold shadow-sm"
           >
             <svg className="w-4 h-4 rotate-[135deg]" fill="currentColor" viewBox="0 0 24 24"><path d="M6.62 10.79a15.05 15.05 0 006.59 6.59l2.2-2.2a1 1 0 011.01-.24 11.36 11.36 0 003.56.57 1 1 0 011 1V20a1 1 0 01-1 1A17 17 0 013 4a1 1 0 011-1h3.5a1 1 0 011 1c0 1.25.2 2.45.57 3.57a1 1 0 01-.25 1L6.62 10.79z" /></svg>
-            End Call
+            End consultation
           </button>
         </div>
       </div>
 
       {cameraHint && (
         <div className="px-5 py-2 bg-amber-50 border-b border-amber-100 text-amber-800 text-xs">{cameraHint}</div>
+      )}
+      {poorConnection && (
+        <div className="px-5 py-2 bg-orange-600 text-white text-xs font-semibold text-center">
+          Poor connection — move closer to Wi‑Fi or switch network
+        </div>
+      )}
+      {slotBanner && (
+        <div className="px-5 py-2 bg-amber-600 text-white text-xs font-semibold text-center flex items-center justify-center gap-3">
+          <span>{slotBanner}</span>
+          <button type="button" className="underline opacity-90" onClick={() => setSlotBanner(null)}>
+            Dismiss
+          </button>
+        </div>
       )}
 
       <div className="flex flex-1 flex-col lg:flex-row min-h-0 gap-4 p-4 overflow-y-auto lg:overflow-hidden">

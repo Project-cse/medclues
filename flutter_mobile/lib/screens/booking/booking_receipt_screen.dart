@@ -157,7 +157,15 @@ class _BookingReceiptScreenState extends ConsumerState<BookingReceiptScreen> {
       appointmentTime: appt?.slotTime?.isNotEmpty == true ? appt!.slotTime : (draft?.time ?? ''),
       visitType: draft?.visitType ?? appt?.visitType ?? context.l10n.bookingInClinic,
       status: appt != null ? _statusFromAppointment(appt) : context.l10n.receiptStatusConfirmed,
-      amount: appt?.amount ?? draft?.doctor.consultationFee,
+      amount: appt?.amount ??
+          (() {
+            final vt = (draft?.visitType ?? appt?.visitType ?? '').toLowerCase();
+            final isOnline = vt.contains('online') || vt.contains('video');
+            if (draft?.doctor != null) {
+              return isOnline ? draft!.doctor.videoConsultationFee : draft!.doctor.consultationFee;
+            }
+            return null;
+          })(),
     );
   }
 

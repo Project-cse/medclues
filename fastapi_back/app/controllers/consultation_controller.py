@@ -161,6 +161,8 @@ async def get_agora_token_for_appointment(user_id: int, appointment_id: int):
         }
 
     from app.controllers import call_session_controller
+    from app.utils.vc_slot_window import slot_window_payload
+
     gate = await call_session_controller.assert_can_issue_patient_token(user_id, appointment_id)
     if gate:
         return {'success': False, 'message': gate}
@@ -178,6 +180,9 @@ async def get_agora_token_for_appointment(user_id: int, appointment_id: int):
     if token_err:
         return {'success': False, 'message': token_err}
     payload['role'] = 'patient'
+    appointment = await appointment_model.get_appointment_by_id(int(appointment_id))
+    if appointment:
+        payload['slotWindow'] = slot_window_payload(appointment)
     return payload
 
 
@@ -187,6 +192,14 @@ async def get_agora_token_for_doctor_appointment(doctor_id: int, appointment_id:
             'success': False,
             'message': 'Agora is not configured on the server (AGORA_APP_ID / AGORA_APP_CERTIFICATE)',
         }
+
+    from app.utils.vc_slot_window import assert_within_join_window, slot_window_payload
+
+    appointment = await appointment_model.get_appointment_by_id(int(appointment_id))
+    if appointment:
+        window_err = assert_within_join_window(appointment)
+        if window_err:
+            return {'success': False, 'message': window_err, 'slotWindow': slot_window_payload(appointment)}
 
     consultation, err = await ensure_consultation_for_doctor(doctor_id, appointment_id)
     if err:
@@ -198,7 +211,7 @@ async def get_agora_token_for_doctor_appointment(doctor_id: int, appointment_id:
     if existing_session and existing_session['status'] in ('requested', 'ringing'):
         await call_session_controller.accept_call(doctor_id, int(appointment_id))
     elif not existing_session:
-        appointment = await appointment_model.get_appointment_by_id(int(appointment_id))
+        appointment = appointment or await appointment_model.get_appointment_by_id(int(appointment_id))
         if appointment:
             channel = consultation.get('meeting_id') or agora_service.channel_for_appointment(int(appointment_id))
             await call_session_model.create_session({
@@ -231,11 +244,13 @@ async def get_agora_token_for_doctor_appointment(doctor_id: int, appointment_id:
     if token_err:
         return {'success': False, 'message': token_err}
     payload['role'] = 'doctor'
+    if appointment:
+        payload['slotWindow'] = slot_window_payload(appointment)
 
     # Attach fresh clinical context (symptoms / reports / patient) so the room
     # never depends on a possibly-stale cached appointment list.
     try:
-        appt_row = await appointment_model.get_appointment_by_id(int(appointment_id))
+        appt_row = appointment or await appointment_model.get_appointment_by_id(int(appointment_id))
         if appt_row:
             from app.utils.formatters import format_appointment_for_frontend
             formatted = format_appointment_for_frontend(appt_row)
@@ -364,9 +379,11 @@ async def start_consultation(consultation_id: int):
     except Exception as e:
         return {"success": False, "message": str(e)}
 
-def _video_call_status_payload(consultation: dict):
+def _video_call_status_payload(consultation: dict, appointment: dict | None = None):
+    from app.utils.vc_slot_window import slot_window_payload
+
     status = consultation.get('status') or 'scheduled'
-    return {
+    payload = {
         'success': True,
         'status': status,
         'ended': status in ('completed', 'ended', 'cancelled'),
@@ -374,21 +391,60 @@ def _video_call_status_payload(consultation: dict):
         'connected': consultation.get('started_at') is not None,
         'consultationId': consultation['id'],
     }
+    if appointment is not None:
+        window = slot_window_payload(appointment)
+        payload['slotWindow'] = window
+        payload['forceEnd'] = bool(window.get('forceEnd'))
+        payload['softWarn'] = bool(window.get('softWarn'))
+        payload['inGrace'] = bool(window.get('inGrace'))
+        payload['windowMessage'] = window.get('windowMessage')
+        if window.get('forceEnd'):
+            payload['ended'] = True
+    return payload
+
+
+async def _maybe_force_end_after_grace(appointment_id: int, appointment: dict, session: dict | None):
+    """Server-authoritative end once slot_end + grace has passed."""
+    from app.utils.vc_slot_window import slot_window_payload
+
+    window = slot_window_payload(appointment)
+    if not window.get('forceEnd'):
+        return False
+    if session and session.get('status') in ('requested', 'ringing', 'accepted', 'ongoing'):
+        await end_video_call_for_appointment(int(appointment_id), {'notes': 'Auto-ended: slot grace period expired'})
+        return True
+    consultation = await consultation_model.get_consultation_by_appointment_id(int(appointment_id))
+    if consultation and (consultation.get('status') or '').lower() in ('scheduled', 'ongoing'):
+        await end_video_call_for_appointment(int(appointment_id), {'notes': 'Auto-ended: slot grace period expired'})
+        return True
+    return False
 
 
 async def get_video_call_status_for_appointment(appointment_id: int):
     from app.models import call_session_model
 
+    appointment = await appointment_model.get_appointment_by_id(int(appointment_id))
     consultation = await consultation_model.get_consultation_by_appointment_id(int(appointment_id))
     if not consultation:
         return {'success': False, 'message': 'Consultation not found'}
-    consultation = await _refresh_consultation(consultation)
-    payload = _video_call_status_payload(consultation)
-    # Active call session overrides stale consultation.completed from a prior attempt.
+
     session = await call_session_model.get_by_appointment(int(appointment_id))
+    if appointment:
+        try:
+            await _maybe_force_end_after_grace(int(appointment_id), appointment, session)
+            consultation = await consultation_model.get_consultation_by_appointment_id(int(appointment_id))
+            session = await call_session_model.get_by_appointment(int(appointment_id))
+        except Exception as e:
+            print(f"[WARNING] VC force-end check failed: {e}")
+
+    consultation = await _refresh_consultation(consultation)
+    payload = _video_call_status_payload(consultation, appointment)
+    # Active call session overrides stale consultation.completed from a prior attempt.
     if session and session.get('status') in ('requested', 'ringing', 'accepted', 'ongoing'):
-        payload['ended'] = False
-        payload['status'] = session['status']
+        window = payload.get('slotWindow') or {}
+        if not window.get('forceEnd'):
+            payload['ended'] = False
+            payload['status'] = session['status']
     return payload
 
 
@@ -407,7 +463,8 @@ async def sync_call_timer_for_appointment(appointment_id: int):
         )
 
     consultation = await _refresh_consultation(consultation)
-    return _video_call_status_payload(consultation)
+    appointment = await appointment_model.get_appointment_by_id(int(appointment_id))
+    return _video_call_status_payload(consultation, appointment)
 
 
 async def end_video_call_for_appointment(appointment_id: int, req_body: dict | None = None):

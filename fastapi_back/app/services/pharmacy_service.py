@@ -223,6 +223,252 @@ async def place_order(user_id: int, body: dict) -> dict:
     return {"success": True, "data": _serialize_order(enriched, full_items)}
 
 
+async def place_catalog_order(user_id: int, body: dict) -> dict:
+    """Retail / MedPlus-style cart order — no consultation/prescription required.
+
+    paymentMethod: upi | cod
+    fulfillment: delivery (default) | pickup
+    items: [{ name, quantity, unitPrice | price, medicineId?, requiresRx? }]
+    """
+    fulfillment = (body.get("fulfillment") or "delivery").lower()
+    if fulfillment not in ("pickup", "delivery"):
+        return {"success": False, "message": "fulfillment must be pickup or delivery"}
+
+    payment_method = (body.get("paymentMethod") or body.get("payment_method") or "upi").lower()
+    if payment_method not in ("upi", "cod", "razorpay"):
+        return {"success": False, "message": "paymentMethod must be upi or cod"}
+    if payment_method == "razorpay":
+        payment_method = "upi"
+
+    raw_items = body.get("items") or []
+    if not isinstance(raw_items, list) or not raw_items:
+        return {"success": False, "message": "Cart items are required"}
+
+    order_items: list[dict] = []
+    subtotal = 0.0
+    for raw in raw_items:
+        if not isinstance(raw, dict):
+            continue
+        name = (raw.get("name") or "").strip()
+        if not name:
+            continue
+        if raw.get("requiresRx") is True or str(raw.get("requires_rx") or "").lower() in ("1", "true", "yes"):
+            return {
+                "success": False,
+                "message": f"{name} requires a doctor prescription. Order it from the Prescriptions tab after your consultation.",
+            }
+        try:
+            qty = float(raw.get("quantity") or raw.get("qty") or 1)
+        except (TypeError, ValueError):
+            qty = 1.0
+        if qty <= 0:
+            return {"success": False, "message": f"Invalid quantity for {name}"}
+        try:
+            unit = float(raw.get("unitPrice") or raw.get("unit_price") or raw.get("price") or 0)
+        except (TypeError, ValueError):
+            unit = 0.0
+        if unit < 0:
+            return {"success": False, "message": f"Invalid price for {name}"}
+        line = round(unit * qty, 2)
+        subtotal += line
+        order_items.append(
+            {
+                "prescription_item_id": None,
+                "name": name[:255],
+                "dosage": (raw.get("dosage") or raw.get("salt") or None),
+                "quantity": qty,
+                "unit_price": unit,
+                "line_total": line,
+            }
+        )
+
+    if not order_items:
+        return {"success": False, "message": "No valid medicines in cart"}
+
+    delivery_fee = 0.0
+    if fulfillment == "delivery" and subtotal > 0 and subtotal < 500:
+        try:
+            delivery_fee = float(body.get("deliveryFee") or body.get("delivery_fee") or 29)
+        except (TypeError, ValueError):
+            delivery_fee = 29.0
+    amount_total = round(subtotal + delivery_fee, 2)
+    if amount_total <= 0:
+        return {"success": False, "message": "Order total must be greater than zero"}
+
+    delivery_address = (body.get("deliveryAddress") or body.get("delivery_address") or "").strip()
+    if fulfillment == "delivery" and len(delivery_address) < 8:
+        return {"success": False, "message": "Please enter a delivery address"}
+
+    pharmacy_id = int(body.get("pharmacyId") or body.get("pharmacy_id") or 0)
+    pharmacy = None
+    if pharmacy_id:
+        pharmacy = await pharmacy_model.get_by_id(pharmacy_id)
+    if not pharmacy or not pharmacy.get("is_active"):
+        candidates = await pharmacy_model.list_active_for_catalog(
+            prefer_delivery=(fulfillment == "delivery"),
+        )
+        pharmacy = candidates[0] if candidates else None
+    if not pharmacy:
+        return {
+            "success": False,
+            "message": "No pharmacy is available for retail orders yet. Please try again later.",
+        }
+    if pharmacy.get("partner_status") != "active":
+        return {"success": False, "message": "Pharmacy partner is not active"}
+    if fulfillment == "delivery" and not pharmacy.get("supports_delivery"):
+        # Still allow catalog delivery against primary pharmacy for MVP retail UX.
+        pass
+    if fulfillment == "pickup" and not pharmacy.get("supports_pickup", True):
+        return {"success": False, "message": "Pickup not supported by this pharmacy"}
+
+    public_id = await new_pharmacy_order_public_id()
+    is_sandbox = not await pharmacy_order_model.partner_has_production_key(int(pharmacy["partner_id"]))
+    notes = (body.get("notes") or "").strip() or None
+    note_bits = [notes] if notes else []
+    note_bits.append(f"catalog_order payment={payment_method}")
+    if delivery_fee:
+        note_bits.append(f"delivery_fee={delivery_fee}")
+
+    order = await pharmacy_order_model.create_order(
+        {
+            "public_id": public_id,
+            "patient_id": user_id,
+            "hospital_id": int(pharmacy["hospital_id"]),
+            "pharmacy_id": int(pharmacy["id"]),
+            "partner_id": int(pharmacy["partner_id"]),
+            "consultation_id": None,
+            "fulfillment": fulfillment,
+            "delivery_address": delivery_address or None,
+            "notes": " · ".join(note_bits),
+            "actor_role": "patient",
+            "is_sandbox": is_sandbox,
+        },
+        order_items,
+    )
+
+    bill = {
+        "amount_subtotal": round(subtotal, 2),
+        "amount_tax": 0,
+        "amount_total": amount_total,
+        "payment_method": payment_method,
+        "delivery_fee": delivery_fee,
+        "source": "catalog_cart",
+        "items": [
+            {
+                "order_item_id": None,
+                "name": i["name"],
+                "quantity": i["quantity"],
+                "unit_price": i["unit_price"],
+                "line_total": i["line_total"],
+            }
+            for i in order_items
+        ],
+    }
+    try:
+        billed = await pharmacy_order_model.apply_bill(int(order["id"]), bill)
+        if billed:
+            order = billed
+    except ValueError as exc:
+        log.warning("catalog auto-bill failed: %s", exc)
+        return {"success": False, "message": str(exc)}
+
+    # COD: confirm order paid at placement (collect cash/UPI at door).
+    if payment_method == "cod":
+        try:
+            order = await pharmacy_order_model.update_status(
+                int(order["id"]),
+                "paid",
+                actor_role="patient",
+                notes="Cash on delivery confirmed",
+                extra={"bill_payload": {**(order.get("bill_payload") or {}), **bill, "cod": True}},
+            ) or order
+        except ValueError as exc:
+            return {"success": False, "message": str(exc)}
+
+    try:
+        await pws.emit_pharmacy_event(
+            int(pharmacy["partner_id"]),
+            "order.placed",
+            {
+                "order_id": order["id"],
+                "order_public_id": order.get("public_id") or public_id,
+                "hospital_id": int(pharmacy["hospital_id"]),
+                "pharmacy_id": int(pharmacy["id"]),
+                "fulfillment": fulfillment,
+                "payment_method": payment_method,
+                "amount_total": amount_total,
+                "items": [
+                    {"name": i["name"], "quantity": i["quantity"], "unit_price": i["unit_price"]}
+                    for i in order_items
+                ],
+            },
+            webhook_url=pharmacy.get("webhook_url"),
+        )
+    except Exception as exc:
+        log.warning("catalog order.placed webhook failed: %s", exc)
+
+    full_items = await pharmacy_order_model.list_items(order["id"])
+    enriched = {
+        **order,
+        "pharmacy_name": pharmacy.get("name"),
+        "partner_name": pharmacy.get("partner_name"),
+    }
+    serialized = _serialize_order(enriched, full_items)
+    serialized["paymentMethod"] = payment_method
+    serialized["requiresPayment"] = payment_method == "upi" and serialized.get("status") == "billed"
+    return {"success": True, "data": serialized}
+
+
+async def mark_order_paid_from_transaction(
+    user_id: int,
+    pharmacy_order_id: int,
+    razorpay_order_id: str,
+    razorpay_payment_id: str,
+) -> dict:
+    """Mark pharmacy order paid after hosted/native Razorpay success (signature already verified)."""
+    from app.models import payment_transaction_model as pt_model
+
+    order = await pharmacy_order_model.get_for_patient(pharmacy_order_id, user_id)
+    if not order:
+        return {"success": False, "message": "Order not found"}
+    if order.get("status") == "paid":
+        items = await pharmacy_order_model.list_items(pharmacy_order_id)
+        return {"success": True, "data": _serialize_order(order, items), "message": "Already paid"}
+    if order.get("status") != "billed":
+        return {"success": False, "message": "Order is not payable"}
+
+    paid_row = await pt_model.mark_paid(razorpay_order_id, razorpay_payment_id)
+    payment_id = (paid_row or {}).get("id")
+    try:
+        updated = await pharmacy_order_model.update_status(
+            pharmacy_order_id,
+            "paid",
+            actor_role="patient",
+            notes="Paid via Razorpay",
+            extra={"payment_transaction_id": payment_id} if payment_id else None,
+        )
+    except ValueError as e:
+        return {"success": False, "message": str(e)}
+
+    try:
+        await pws.emit_pharmacy_event(
+            int(order["partner_id"]),
+            "order.paid",
+            {
+                "order_id": pharmacy_order_id,
+                "order_public_id": order.get("public_id"),
+                "amount_total": float(order["amount_total"]) if order.get("amount_total") is not None else None,
+                "razorpay_payment_id": razorpay_payment_id,
+            },
+            webhook_url=None,
+        )
+    except Exception as exc:
+        log.warning("order.paid webhook failed: %s", exc)
+
+    items = await pharmacy_order_model.list_items(pharmacy_order_id)
+    return {"success": True, "data": _serialize_order(updated or order, items)}
+
+
 async def list_patient_orders(user_id: int) -> dict:
     rows = await pharmacy_order_model.list_for_patient(user_id)
     data = []
@@ -1093,80 +1339,129 @@ def _first_str(*candidates: Any) -> str | None:
     return None
 
 
-async def search_medicine_catalog(query: str) -> dict[str, Any]:
-    """Patient pharmacy search via FastAPI medicine module (no Express :5001 required)."""
-    q = (query or "").strip()
-    if len(q) < 2:
-        q = "acetaminophen"
+def _map_express_inventory_item(item: dict[str, Any], index: int) -> dict[str, Any] | None:
+    from app.models.pharmacy_master_catalog_model import serialize_catalog_row
+
+    name = _first_str(item.get("name"), item.get("medicineName"))
+    if not name:
+        return None
+    price = item.get("price") if item.get("price") is not None else item.get("costPrice")
+    mrp = item.get("mrp") if item.get("mrp") is not None else price
+    stock = item.get("stock")
+    if stock is not None:
+        try:
+            if int(stock) <= 0:
+                return None
+        except (TypeError, ValueError):
+            pass
+    med_id = _first_str(item.get("_id"), item.get("id")) or f"ext_{index}"
+    return serialize_catalog_row({
+        "id": med_id,
+        "name": name,
+        "brand": _first_str(item.get("brand"), item.get("distributor")) or "",
+        "salt": _first_str(item.get("salt"), item.get("composition")) or "",
+        "category": item.get("category") or "General",
+        "price": price if price is not None else 0,
+        "mrp": mrp if mrp is not None else (price if price is not None else 0),
+        "stock": stock if stock is not None else 0,
+        "requires_rx": bool(item.get("requiresRx") or item.get("requires_rx") or False),
+        "image": item.get("image") or "",
+        "hsn_code": item.get("hsnCode") or item.get("hsn_code") or "",
+    })
+
+
+async def _fetch_express_master_catalog(query: str) -> list[dict[str, Any]] | None:
+    """Live Admin Master Catalog from Express Mongo inventory when PHARMACY_SERVICE_URL is set."""
+    import os
+    import httpx
+
+    pharmacy_url = (os.getenv("PHARMACY_SERVICE_URL") or "").strip().rstrip("/")
+    if not pharmacy_url:
+        return None
     try:
-        from app.services import medicine_service
-
-        async def _run(search_q: str) -> list:
-            result = await medicine_service.search_medicines(
-                search_q, user_id=None, page=1, limit=20, record_history=False
-            )
-            raw = result.get("results") or result.get("data") or []
-            return raw if isinstance(raw, list) else []
-
-        raw = await _run(q)
-        # Indian common name → OpenFDA synonym when first pass is empty
-        if not raw and q.lower() == "paracetamol":
-            q = "acetaminophen"
-            raw = await _run(q)
-
-        data = []
-        for i, item in enumerate(raw):
-            if not isinstance(item, dict):
-                continue
-            openfda = item.get("openfda") if isinstance(item.get("openfda"), dict) else {}
-            brand = _first_str(
-                item.get("medicineName"),
-                item.get("brandName"),
-                item.get("brand_name"),
-                item.get("name"),
-                openfda.get("brand_name") if openfda else None,
-            )
-            generic = _first_str(
-                item.get("genericName"),
-                item.get("generic_name"),
-                item.get("substance_name"),
-                item.get("salt"),
-                openfda.get("generic_name") if openfda else None,
-                openfda.get("substance_name") if openfda else None,
-            )
-            labeler = _first_str(
-                item.get("manufacturer"),
-                item.get("labeler_name"),
-                item.get("brand"),
-                openfda.get("manufacturer_name") if openfda else None,
-                openfda.get("labeler_name") if openfda else None,
-            )
-            med_id = _first_str(
-                item.get("setId"),
-                item.get("set_id"),
-                item.get("id"),
-                item.get("_id"),
-            ) or f"med_{i}"
-            data.append({
-                "id": med_id,
-                "_id": med_id,
-                "name": brand or "Medicine",
-                "brand": labeler or "Pharma",
-                "salt": generic or item.get("composition") or "Generic",
-                "category": item.get("product_type") or item.get("category") or "General",
-                "price": item.get("price") or 50,
-                "mrp": item.get("mrp") or 65,
-                "requiresRx": bool(item.get("requiresRx") or item.get("rx") or False),
-                "stock": item.get("stock") if item.get("stock") is not None else 100,
-                "image": item.get("image") or "",
-            })
-        return {"success": True, "data": data, "query": q}
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            res = await client.get(f"{pharmacy_url}/api/inventory")
+            res.raise_for_status()
+            payload = res.json()
     except Exception as exc:
-        from app.services.openfda_service import OpenFDAError
-        if isinstance(exc, OpenFDAError):
-            log.warning("Pharmacy catalog OpenFDA: %s", exc)
-        else:
-            log.warning("Pharmacy catalog search failed: %s", exc)
+        log.warning("Express master catalog fetch failed: %s", exc)
+        return None
+
+    raw: list = []
+    if isinstance(payload, list):
+        raw = payload
+    elif isinstance(payload, dict):
+        for key in ("data", "inventory", "medicines", "items"):
+            if isinstance(payload.get(key), list):
+                raw = payload[key]
+                break
+
+    q = (query or "").strip().lower()
+    out: list[dict[str, Any]] = []
+    for i, item in enumerate(raw):
+        if not isinstance(item, dict):
+            continue
+        mapped = _map_express_inventory_item(item, i)
+        if not mapped:
+            continue
+        if q:
+            blob = " ".join(
+                str(mapped.get(k) or "").lower()
+                for k in ("name", "brand", "salt", "category")
+            )
+            if q not in blob:
+                continue
+        out.append(mapped)
+    return out
+
+
+async def search_medicine_catalog(query: str) -> dict[str, Any]:
+    """Patient All Medicines: live master catalog only (Express inventory or Postgres). No OpenFDA."""
+    q = (query or "").strip()
+    try:
+        express = await _fetch_express_master_catalog(q)
+        if express is not None:
+            # Prefer Express when configured (even if empty — reflects live master catalog).
+            return {
+                "success": True,
+                "data": express,
+                "query": q,
+                "source": "express_master_catalog",
+            }
+
+        from app.models import pharmacy_master_catalog_model as pmc
+
+        data = await pmc.search_master_catalog(q)
+        categories = await pmc.list_catalog_categories()
+        return {
+            "success": True,
+            "data": data,
+            "query": q,
+            "categories": categories,
+            "source": "pharmacy_master_catalog",
+        }
+    except Exception as exc:
+        log.warning("Pharmacy master catalog search failed: %s", exc)
         return {"success": True, "data": [], "query": q, "message": str(exc)}
+
+
+async def list_medicine_catalog_categories() -> dict[str, Any]:
+    try:
+        express = await _fetch_express_master_catalog("")
+        if express is not None:
+            cats = sorted({
+                str(i.get("category") or "").strip()
+                for i in express
+                if str(i.get("category") or "").strip()
+            })
+            return {"success": True, "data": cats, "source": "express_master_catalog"}
+
+        from app.models import pharmacy_master_catalog_model as pmc
+
+        cats = await pmc.list_catalog_categories()
+        return {"success": True, "data": cats, "source": "pharmacy_master_catalog"}
+    except Exception as exc:
+        log.warning("Pharmacy catalog categories failed: %s", exc)
+        return {"success": True, "data": [], "message": str(exc)}
 
 

@@ -45,6 +45,28 @@ def _calculate_slot_count(start: time, end: time, slot_size_mins: int) -> int:
     return max(1, total_mins // slot_size_mins)
 
 
+def _session_window_minutes(start: time, end: time) -> int:
+    dt_start = datetime.combine(date.today(), start)
+    dt_end = datetime.combine(date.today(), end)
+    if dt_end <= dt_start:
+        dt_end += timedelta(days=1)
+    return max(1, int((dt_end - dt_start).total_seconds() / 60))
+
+
+def _seat_duration_minutes(start: time, end: time, count: int) -> int:
+    """Minutes per seat so exactly `count` seats fit in the OP window.
+
+    Prefer the standard 9-minute OPD seat when it fits; otherwise compress
+    so doctor dashboard capacity is never silently truncated by the clock.
+    """
+    if count <= 0:
+        return OFFLINE_SLOT_MINUTES
+    window = _session_window_minutes(start, end)
+    if count * OFFLINE_SLOT_MINUTES <= window:
+        return OFFLINE_SLOT_MINUTES
+    return max(1, window // count)
+
+
 def _now_ist_time() -> time:
     return datetime.now(IST).time()
 
@@ -153,6 +175,129 @@ async def list_bookable_doctor_refs() -> List[Tuple[str, int]]:
     return refs
 
 
+def _append_opd_seats(
+    rows: List[Dict[str, Any]],
+    *,
+    doctor_ref: str,
+    doctor_numeric_id: int,
+    day: date,
+    date_key: str,
+    start: time,
+    end: time,
+    count: int,
+    slot_type: str,
+    code_prefix: str,
+) -> None:
+    """Append exactly `count` OPD seat rows spanning [start, end).
+
+    Doctor dashboard capacity is authoritative: we always emit `count` seats,
+    spacing them evenly across the OP window (9-min when that fits).
+    """
+    if count <= 0:
+        return
+    window = _session_window_minutes(start, end)
+    seat_mins = _seat_duration_minutes(start, end, count)
+    use_fixed = count * seat_mins <= window and seat_mins == OFFLINE_SLOT_MINUTES
+
+    if use_fixed:
+        cursor = start
+        for i in range(count):
+            seat_end = _add_minutes(cursor, seat_mins)
+            rows.append(
+                {
+                    "slot_code": f"DS-{date_key}-{code_prefix}{i+1:02d}-{doctor_ref}",
+                    "doctor_ref": doctor_ref,
+                    "doctor_numeric_id": doctor_numeric_id,
+                    "slot_date": day,
+                    "start_time": cursor,
+                    "end_time": seat_end,
+                    "mode": "offline",
+                    "slot_type": slot_type,
+                }
+            )
+            cursor = seat_end
+        return
+
+    # Evenly distribute when capacity exceeds standard 9-min packing.
+    for i in range(count):
+        offset_start = (i * window) // count
+        offset_end = ((i + 1) * window) // count
+        if offset_end <= offset_start:
+            offset_end = offset_start + 1
+        seat_start = _add_minutes(start, offset_start)
+        seat_end = _add_minutes(start, offset_end)
+        rows.append(
+            {
+                "slot_code": f"DS-{date_key}-{code_prefix}{i+1:02d}-{doctor_ref}",
+                "doctor_ref": doctor_ref,
+                "doctor_numeric_id": doctor_numeric_id,
+                "slot_date": day,
+                "start_time": seat_start,
+                "end_time": seat_end,
+                "mode": "offline",
+                "slot_type": slot_type,
+            }
+        )
+
+
+def _append_video_seats(
+    rows: List[Dict[str, Any]],
+    *,
+    doctor_ref: str,
+    doctor_numeric_id: int,
+    day: date,
+    date_key: str,
+    start: time,
+    end: time,
+    count: int,
+    slot_minutes: int,
+) -> None:
+    """Append exactly `count` video seats inside [start, end)."""
+    if count <= 0:
+        return
+    mins = max(5, int(slot_minutes or VC_SLOT_MINUTES))
+    window = _session_window_minutes(start, end)
+    # Prefer configured duration when it fits; otherwise pack evenly in the window.
+    if count * mins <= window:
+        cursor = start
+        for i in range(count):
+            seat_end = _add_minutes(cursor, mins)
+            rows.append(
+                {
+                    "slot_code": f"DS-{date_key}-V{i+1:02d}-{doctor_ref}",
+                    "doctor_ref": doctor_ref,
+                    "doctor_numeric_id": doctor_numeric_id,
+                    "slot_date": day,
+                    "start_time": cursor,
+                    "end_time": seat_end,
+                    "mode": "online",
+                    "slot_type": "video",
+                }
+            )
+            cursor = seat_end
+        return
+
+    for i in range(count):
+        offset_start = (i * window) // count
+        offset_end = ((i + 1) * window) // count
+        if offset_end <= offset_start:
+            offset_end = offset_start + 1
+        seat_start = _add_minutes(start, offset_start)
+        seat_end = _add_minutes(start, offset_end)
+        rows.append(
+            {
+                "slot_code": f"DS-{date_key}-V{i+1:02d}-{doctor_ref}",
+                "doctor_ref": doctor_ref,
+                "doctor_numeric_id": doctor_numeric_id,
+                "slot_date": day,
+                "start_time": seat_start,
+                "end_time": seat_end,
+                "mode": "online",
+                "slot_type": "video",
+            }
+        )
+
+
 def _build_day_slot_rows(
     doctor_ref: str,
     doctor_numeric_id: int,
@@ -163,72 +308,60 @@ def _build_day_slot_rows(
     t_afternoon_end: time,
     morning_slots_count: int,
     afternoon_slots_count: int,
+    *,
+    t_video_start: Optional[time] = None,
+    t_video_end: Optional[time] = None,
+    video_slots_count: int = VC_SLOTS_PER_DAY,
+    video_slot_minutes: int = VC_SLOT_MINUTES,
 ) -> List[Dict[str, Any]]:
     date_key = day.strftime("%Y%m%d")
     rows: List[Dict[str, Any]] = []
 
-    cursor = t_morning_start
-    for i in range(morning_slots_count):
-        end = _add_minutes(cursor, OFFLINE_SLOT_MINUTES)
-        if cursor >= t_morning_end:
-            break
-        rows.append(
-            {
-                "slot_code": f"DS-{date_key}-M{i+1:02d}-{doctor_ref}",
-                "doctor_ref": doctor_ref,
-                "doctor_numeric_id": doctor_numeric_id,
-                "slot_date": day,
-                "start_time": cursor,
-                "end_time": end,
-                "mode": "offline",
-                "slot_type": "morning_opd",
-            }
-        )
-        cursor = end
+    _append_opd_seats(
+        rows,
+        doctor_ref=doctor_ref,
+        doctor_numeric_id=doctor_numeric_id,
+        day=day,
+        date_key=date_key,
+        start=t_morning_start,
+        end=t_morning_end,
+        count=morning_slots_count,
+        slot_type="morning_opd",
+        code_prefix="M",
+    )
 
-    cursor = VC_START
-    for i in range(VC_SLOTS_PER_DAY):
-        end = _add_minutes(cursor, VC_SLOT_MINUTES)
-        rows.append(
-            {
-                "slot_code": f"DS-{date_key}-V{i+1:02d}-{doctor_ref}",
-                "doctor_ref": doctor_ref,
-                "doctor_numeric_id": doctor_numeric_id,
-                "slot_date": day,
-                "start_time": cursor,
-                "end_time": end,
-                "mode": "online",
-                "slot_type": "video",
-            }
-        )
-        cursor = end
+    v_start = t_video_start or VC_START
+    v_end = t_video_end or _add_minutes(VC_START, VC_SLOTS_PER_DAY * VC_SLOT_MINUTES)
+    _append_video_seats(
+        rows,
+        doctor_ref=doctor_ref,
+        doctor_numeric_id=doctor_numeric_id,
+        day=day,
+        date_key=date_key,
+        start=v_start,
+        end=v_end,
+        count=video_slots_count,
+        slot_minutes=video_slot_minutes,
+    )
 
-    cursor = t_afternoon_start
-    for i in range(afternoon_slots_count):
-        end = _add_minutes(cursor, OFFLINE_SLOT_MINUTES)
-        if cursor >= t_afternoon_end:
-            break
-        rows.append(
-            {
-                "slot_code": f"DS-{date_key}-E{i+1:02d}-{doctor_ref}",
-                "doctor_ref": doctor_ref,
-                "doctor_numeric_id": doctor_numeric_id,
-                "slot_date": day,
-                "start_time": cursor,
-                "end_time": end,
-                "mode": "offline",
-                "slot_type": "evening_opd",
-            }
-        )
-        cursor = end
+    _append_opd_seats(
+        rows,
+        doctor_ref=doctor_ref,
+        doctor_numeric_id=doctor_numeric_id,
+        day=day,
+        date_key=date_key,
+        start=t_afternoon_start,
+        end=t_afternoon_end,
+        count=afternoon_slots_count,
+        slot_type="evening_opd",
+        code_prefix="E",
+    )
 
     return rows
 
 
 async def generate_day_slots(doctor_ref: str, doctor_numeric_id: int, day: date, force_regenerate: bool = False):
     has_slots = await doctor_slot_model.day_has_slots(doctor_ref, day)
-    if not force_regenerate and has_slots:
-        return
 
     # Fetch doctor timing parameters from DB
     op_start = "10:00"
@@ -237,16 +370,30 @@ async def generate_day_slots(doctor_ref: str, doctor_numeric_id: int, day: date,
     op_end_afternoon = "21:00"
     morning_slots = 20
     afternoon_slots = 20
+    video_op_start = "14:00"
+    video_op_end = "15:00"
+    video_slots = VC_SLOTS_PER_DAY
+    video_mins = VC_SLOT_MINUTES
 
     try:
         if str(doctor_ref).startswith("emb_"):
             row = await db.fetch_row(
-                "SELECT op_start, op_end, op_start_afternoon, op_end_afternoon, max_appointments_morning, max_appointments_afternoon FROM hospital_tieup_doctors WHERE id = $1",
+                """
+                SELECT op_start, op_end, op_start_afternoon, op_end_afternoon,
+                       max_appointments_morning, max_appointments_afternoon,
+                       video_op_start, video_op_end, max_video_slots, video_slot_minutes
+                FROM hospital_tieup_doctors WHERE id = $1
+                """,
                 int(doctor_numeric_id),
             )
         else:
             row = await db.fetch_row(
-                "SELECT op_start, op_end, op_start_afternoon, op_end_afternoon, max_appointments_morning, max_appointments_afternoon FROM doctors WHERE id = $1",
+                """
+                SELECT op_start, op_end, op_start_afternoon, op_end_afternoon,
+                       max_appointments_morning, max_appointments_afternoon,
+                       video_op_start, video_op_end, max_video_slots, video_slot_minutes
+                FROM doctors WHERE id = $1
+                """,
                 int(doctor_numeric_id),
             )
         if row:
@@ -258,40 +405,146 @@ async def generate_day_slots(doctor_ref: str, doctor_numeric_id: int, day: date,
                 morning_slots = int(row["max_appointments_morning"])
             if row.get("max_appointments_afternoon") is not None:
                 afternoon_slots = int(row["max_appointments_afternoon"])
-            # Cap generated slot count by hospital policy (booking capacity source of truth).
+            if row.get("video_op_start"):
+                video_op_start = str(row["video_op_start"])[:5]
+            if row.get("video_op_end"):
+                video_op_end = str(row["video_op_end"])[:5]
+            if row.get("max_video_slots") is not None:
+                video_slots = max(0, int(row["max_video_slots"]))
+            if row.get("video_slot_minutes") is not None:
+                video_mins = max(5, int(row["video_slot_minutes"]))
+            # Hospital policy is a ceiling per session (no half-split).
             try:
                 from app.models import hospital_policy_model
                 policy = await hospital_policy_model.get_policy_for_doctor(int(doctor_numeric_id))
                 policy_cap = int(policy.get("opd_slot_capacity") or 0) if policy else 0
                 if policy_cap > 0:
-                    # Split policy cap roughly across morning/afternoon generation.
-                    half = max(1, policy_cap // 2)
-                    morning_slots = min(morning_slots, half)
-                    afternoon_slots = min(afternoon_slots, policy_cap - half if policy_cap > half else half)
+                    morning_slots = min(morning_slots, policy_cap)
+                    afternoon_slots = min(afternoon_slots, policy_cap)
+                video_cap = int(policy.get("video_slot_capacity") or 0) if policy else 0
+                if video_cap > 0:
+                    video_slots = min(video_slots, video_cap)
             except Exception:
                 pass
+
+            # Per-day override (half-day / custom times) wins over global profile.
+            try:
+                from app.models import doctor_schedule_model as dsm
+                ov = await dsm.get_override_for_date(int(doctor_numeric_id), day)
+                if ov:
+                    if ov.get("is_cancelled"):
+                        await db.execute(
+                            "DELETE FROM doctor_slots WHERE doctor_ref = $1 AND slot_date = $2 AND status = 'available'",
+                            doctor_ref,
+                            day,
+                        )
+                        return
+                    if ov.get("morning_start"):
+                        op_start = str(ov["morning_start"])[:5]
+                    if ov.get("morning_end"):
+                        op_end = str(ov["morning_end"])[:5]
+                    if ov.get("afternoon_start"):
+                        op_start_afternoon = str(ov["afternoon_start"])[:5]
+                    if ov.get("afternoon_end"):
+                        op_end_afternoon = str(ov["afternoon_end"])[:5]
+                    if ov.get("max_appointments_morning") is not None:
+                        morning_slots = int(ov["max_appointments_morning"])
+                    if ov.get("max_appointments_afternoon") is not None:
+                        afternoon_slots = int(ov["max_appointments_afternoon"])
+                    # Half-day: missing session window => zero seats for that session.
+                    if not ov.get("morning_start") and not (
+                        ov.get("start_time") and not ov.get("morning_start")
+                    ):
+                        if ov.get("afternoon_start") or (
+                            ov.get("max_appointments_morning") == 0
+                        ):
+                            if not ov.get("morning_start") and ov.get("afternoon_start"):
+                                morning_slots = 0
+                    if not ov.get("afternoon_start") and not ov.get("start_time"):
+                        if ov.get("morning_start") and ov.get("max_appointments_afternoon") == 0:
+                            afternoon_slots = 0
+                    if ov.get("max_appointments_morning") == 0:
+                        morning_slots = 0
+                    if ov.get("max_appointments_afternoon") == 0:
+                        afternoon_slots = 0
+                    # Legacy single-window override → morning only, no afternoon seats.
+                    if ov.get("start_time") and not ov.get("morning_start"):
+                        op_start = str(ov["start_time"])[:5]
+                        if ov.get("end_time"):
+                            op_end = str(ov["end_time"])[:5]
+                        afternoon_slots = 0
+                        if ov.get("max_capacity") is not None:
+                            morning_slots = int(ov["max_capacity"])
+            except Exception as ov_err:
+                print(f"[WARNING] schedule override apply: {ov_err}")
     except Exception as e:
         print(f"[WARNING] generate_day_slots db fetch error: {e}")
+
+    # Skip rebuild when existing seat totals already meet configured capacity.
+    # (>= allows historically over-booked days to stop regenerating in a loop.)
+    if not force_regenerate and has_slots:
+        try:
+            summaries = await doctor_slot_model.get_offline_block_summary(doctor_ref, day, day)
+            by_type = {r["slot_type"]: int(r["total_count"]) for r in summaries}
+            morning_ok = by_type.get("morning_opd", 0) >= int(morning_slots)
+            evening_ok = by_type.get("evening_opd", 0) >= int(afternoon_slots)
+            video_row = await db.fetch_row(
+                """
+                SELECT COUNT(*)::int AS c FROM doctor_slots
+                WHERE doctor_ref = $1 AND slot_date = $2 AND slot_type = 'video'
+                """,
+                doctor_ref,
+                day,
+            )
+            video_ok = int(video_row["c"] if video_row else 0) >= int(video_slots)
+            if morning_ok and evening_ok and video_ok:
+                return
+        except Exception:
+            pass
 
     t_morning_start = _parse_time_str(op_start, time(10, 0))
     t_morning_end = _parse_time_str(op_end, time(13, 0))
     t_afternoon_start = _parse_time_str(op_start_afternoon, time(18, 0))
     t_afternoon_end = _parse_time_str(op_end_afternoon, time(21, 0))
+    t_video_start = _parse_time_str(video_op_start, VC_START)
+    t_video_end = _parse_time_str(
+        video_op_end, _add_minutes(VC_START, VC_SLOTS_PER_DAY * VC_SLOT_MINUTES)
+    )
 
     # Fetch booked/completed slots for this day to avoid overlaps
     booked_slots = []
+    booked_morning = 0
+    booked_evening = 0
+    booked_video = 0
     if has_slots:
         booked_slots = await db.query(
-            "SELECT start_time, end_time FROM doctor_slots WHERE doctor_ref = $1 AND slot_date = $2 AND status != 'available'",
+            """
+            SELECT start_time, end_time, slot_type
+            FROM doctor_slots
+            WHERE doctor_ref = $1 AND slot_date = $2 AND status != 'available'
+            """,
             doctor_ref,
             day
         )
+        for b in booked_slots:
+            st = b.get("slot_type")
+            if st == "morning_opd":
+                booked_morning += 1
+            elif st == "evening_opd":
+                booked_evening += 1
+            elif st == "video":
+                booked_video += 1
         # Delete only available slots
         await db.execute(
             "DELETE FROM doctor_slots WHERE doctor_ref = $1 AND slot_date = $2 AND status = 'available'",
             doctor_ref,
             day
         )
+
+    # Create only the remaining seats so booked rows + new rows == doctor capacity.
+    morning_to_create = max(0, int(morning_slots) - booked_morning)
+    afternoon_to_create = max(0, int(afternoon_slots) - booked_evening)
+    video_to_create = max(0, int(video_slots) - booked_video)
 
     # Build potential new slots
     potential_rows = _build_day_slot_rows(
@@ -302,8 +555,12 @@ async def generate_day_slots(doctor_ref: str, doctor_numeric_id: int, day: date,
         t_morning_end,
         t_afternoon_start,
         t_afternoon_end,
-        morning_slots,
-        afternoon_slots,
+        morning_to_create,
+        afternoon_to_create,
+        t_video_start=t_video_start,
+        t_video_end=t_video_end,
+        video_slots_count=video_to_create,
+        video_slot_minutes=video_mins,
     )
 
     # Filter out slots that overlap with booked slots
@@ -453,7 +710,8 @@ async def get_public_slots(doctor_ref: str, mode: str) -> Dict[str, Any]:
 
     start = _today_ist()
     end = start + timedelta(days=SCHEDULE_DAYS - 1)
-    await ensure_doctor_slots_for_doctor(doctor_ref)
+    # Only prepare the days we return (5). Full-window heal runs on schedule save.
+    await ensure_doctor_slots_for_doctor(doctor_ref, days_limit=SCHEDULE_DAYS)
 
     days_map: Dict[str, Dict[str, Any]] = {}
 
@@ -515,16 +773,14 @@ async def get_public_slots(doctor_ref: str, mode: str) -> Dict[str, Any]:
                 morning_slots = int(row["max_appointments_morning"])
             if row.get("max_appointments_afternoon") is not None:
                 afternoon_slots = int(row["max_appointments_afternoon"])
-            # Cap generated slot count by hospital policy (booking capacity source of truth).
+            # Hospital policy is a ceiling per session (no half-split).
             try:
                 from app.models import hospital_policy_model
                 policy = await hospital_policy_model.get_policy_for_doctor(int(doctor_numeric_id))
                 policy_cap = int(policy.get("opd_slot_capacity") or 0) if policy else 0
                 if policy_cap > 0:
-                    # Split policy cap roughly across morning/afternoon generation.
-                    half = max(1, policy_cap // 2)
-                    morning_slots = min(morning_slots, half)
-                    afternoon_slots = min(afternoon_slots, policy_cap - half if policy_cap > half else half)
+                    morning_slots = min(morning_slots, policy_cap)
+                    afternoon_slots = min(afternoon_slots, policy_cap)
             except Exception:
                 pass
     except Exception as e:
@@ -615,11 +871,23 @@ async def get_public_slots(doctor_ref: str, mode: str) -> Dict[str, Any]:
     return {"success": True, "mode": mode, "days": days_list}
 
 
-async def ensure_doctor_slots_for_doctor(doctor_ref: str):
+async def ensure_doctor_slots_for_doctor(
+    doctor_ref: str,
+    *,
+    days_limit: Optional[int] = None,
+):
+    """Ensure slot rows exist for the doctor.
+
+    ``days_limit`` caps how many days ahead are touched. Public booking reads
+    should pass SCHEDULE_DAYS (5); full booking-window heal belongs on schedule
+    save / background jobs — not on every patient GET.
+    """
     doctor_ref, doctor_numeric_id = normalize_doctor_ref(doctor_ref)
     # Use dynamic booking window if configured, else fall back to default SCHEDULE_DAYS
     window = await _get_doctor_booking_window(doctor_ref)
     effective_days = window if window else SCHEDULE_DAYS
+    if days_limit is not None and days_limit > 0:
+        effective_days = min(effective_days, int(days_limit))
     start = _today_ist()
     end = start + timedelta(days=effective_days - 1)
 
@@ -629,14 +897,76 @@ async def ensure_doctor_slots_for_doctor(doctor_ref: str):
 
     existing = await doctor_slot_model.slot_dates_in_range(doctor_ref, start, end)
 
-    # Open (bookable) days that already have rows — blocked holidays need not have slots.
-    open_dates = [
-        start + timedelta(days=offset)
-        for offset in range(effective_days)
-        if (start + timedelta(days=offset)) not in blocked
-    ]
-    if open_dates and all(d in existing for d in open_dates):
-        return
+    morning_target = 20
+    afternoon_target = 20
+    video_target = VC_SLOTS_PER_DAY
+    try:
+        if str(doctor_ref).startswith("emb_"):
+            prow = await db.fetch_row(
+                """
+                SELECT max_appointments_morning, max_appointments_afternoon,
+                       max_video_slots
+                FROM hospital_tieup_doctors WHERE id = $1
+                """,
+                int(doctor_numeric_id),
+            )
+        else:
+            prow = await db.fetch_row(
+                """
+                SELECT max_appointments_morning, max_appointments_afternoon,
+                       max_video_slots
+                FROM doctors WHERE id = $1
+                """,
+                int(doctor_numeric_id),
+            )
+        if prow:
+            if prow.get("max_appointments_morning") is not None:
+                morning_target = int(prow["max_appointments_morning"])
+            if prow.get("max_appointments_afternoon") is not None:
+                afternoon_target = int(prow["max_appointments_afternoon"])
+            if prow.get("max_video_slots") is not None:
+                video_target = max(0, int(prow["max_video_slots"]))
+        try:
+            from app.models import hospital_policy_model
+            policy = await hospital_policy_model.get_policy_for_doctor(int(doctor_numeric_id))
+            policy_cap = int(policy.get("opd_slot_capacity") or 0) if policy else 0
+            if policy_cap > 0:
+                morning_target = min(morning_target, policy_cap)
+                afternoon_target = min(afternoon_target, policy_cap)
+            video_cap = int(policy.get("video_slot_capacity") or 0) if policy else 0
+            if video_cap > 0:
+                video_target = min(video_target, video_cap)
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+    summary_by_day: Dict[date, Dict[str, int]] = {}
+    try:
+        for row in await doctor_slot_model.get_offline_block_summary(doctor_ref, start, end):
+            d = row["slot_date"]
+            summary_by_day.setdefault(d, {})[row["slot_type"]] = int(row["total_count"])
+    except Exception:
+        summary_by_day = {}
+
+    video_by_day: Dict[date, int] = {}
+    try:
+        vrows = await db.query(
+            """
+            SELECT slot_date, COUNT(*)::int AS c
+            FROM doctor_slots
+            WHERE doctor_ref = $1 AND slot_date >= $2 AND slot_date <= $3
+              AND slot_type = 'video'
+            GROUP BY slot_date
+            """,
+            doctor_ref,
+            start,
+            end,
+        )
+        for vr in vrows:
+            video_by_day[vr["slot_date"]] = int(vr["c"])
+    except Exception:
+        video_by_day = {}
 
     tasks = []
     for offset in range(effective_days):
@@ -653,9 +983,18 @@ async def ensure_doctor_slots_for_doctor(doctor_ref: str):
                     target_date,
                 )
             continue
-        if target_date in existing:
+        if target_date not in existing:
+            tasks.append(generate_day_slots(doctor_ref, doctor_numeric_id, target_date))
             continue
-        tasks.append(generate_day_slots(doctor_ref, doctor_numeric_id, target_date))
+        totals = summary_by_day.get(target_date, {})
+        if (
+            totals.get("morning_opd", 0) < morning_target
+            or totals.get("evening_opd", 0) < afternoon_target
+            or video_by_day.get(target_date, 0) < video_target
+        ):
+            # No force: generate_day_slots applies day overrides, then no-ops
+            # when totals already meet the effective (possibly overridden) capacity.
+            tasks.append(generate_day_slots(doctor_ref, doctor_numeric_id, target_date))
     if tasks:
         await asyncio.gather(*tasks)
 
@@ -755,6 +1094,13 @@ async def release_slot_for_appointment(appointment: dict):
     if not slot_id:
         return
     await doctor_slot_model.release_slot(int(slot_id))
+    try:
+        from app.controllers.doctor_slot_controller import invalidate_slots_cache
+        doc_id = appointment.get("doctor_id")
+        if doc_id is not None:
+            invalidate_slots_cache(str(doc_id))
+    except Exception:
+        pass
 
 
 async def complete_slot_for_appointment(appointment: dict):
@@ -796,3 +1142,9 @@ async def regenerate_future_slots(doctor_ref: str):
 
     tasks = [process_day(offset) for offset in range(effective_days)]
     await asyncio.gather(*tasks)
+    try:
+        from app.controllers.doctor_slot_controller import invalidate_slots_cache
+        invalidate_slots_cache(str(doctor_numeric_id))
+        invalidate_slots_cache(str(doctor_ref))
+    except Exception:
+        pass

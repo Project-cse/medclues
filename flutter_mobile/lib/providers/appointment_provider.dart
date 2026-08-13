@@ -144,11 +144,12 @@ void prefetchDoctorSchedule(WidgetRef ref, String doctorId,
 final slotsProvider = FutureProvider.autoDispose
     .family<DaySlotsModel, ({String doctorId, String date, String mode})>(
         (ref, params) async {
+  final repo = ref.watch(appointmentRepositoryProvider);
   final schedule = await ref.watch(
     doctorScheduleProvider((doctorId: params.doctorId, mode: params.mode))
         .future,
   );
-  return schedule[params.date] ??
+  return repo.dayOf(schedule, params.date) ??
       DaySlotsModel(
           date: params.date, displayDate: params.date, slots: const []);
 });
@@ -179,5 +180,7 @@ Future<void> cancelAppointmentAndRefresh(
     ref.invalidate(cancelledAppointmentsProvider);
     ref.invalidate(todayAppointmentsProvider);
     ref.invalidate(appointmentDetailProvider(appointmentId));
+    // Refresh all warm doctor schedule caches so available_count updates.
+    ref.invalidate(doctorScheduleProvider);
   }
 }

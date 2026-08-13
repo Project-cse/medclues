@@ -35,6 +35,7 @@ export function mapScheduleToDocSlots(apiData, mode) {
       slot_type: b.slot_type,
       mode: 'offline',
       bookingsRemaining: b.available_count,
+      totalCount: b.total_count,
       available: b.bookable !== false,
     }))
   })

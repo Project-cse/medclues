@@ -22,11 +22,21 @@ TTL_PARTNER_CATALOG = 3600
 TTL_OTP = 5 * 60
 TTL_PASSWORD_RESET = 10 * 60
 TTL_SLOT_HOLD = 5 * 60             # temporary slot lock during checkout
+TTL_DOCTOR_SLOTS = 45              # public schedule JSON (Redis + in-process)
+TTL_HOME_BANNERS = 5 * 60          # app home promo carousel
 TTL_SESSION_BLACKLIST = 7 * 24 * 3600  # align with refresh max life
 
 
 def doctor(doc_id: int | str) -> str:
     return f"doctor:{doc_id}"
+
+
+def doctor_slots(doc_id: int | str, mode: str, day_iso: str) -> str:
+    return f"doctor:slots:{doc_id}:{(mode or 'offline').lower()}:{day_iso}"
+
+
+def home_banners() -> str:
+    return "app:home_banners"
 
 
 def doctor_list(hospital_id: int | None, limit: int, offset: int, q: str) -> str:
@@ -119,8 +129,10 @@ def session_blacklist(jti_or_hash: str) -> str:
 
 # Prefixes for bulk invalidation (SCAN)
 PREFIX_DOCTOR = "doctor:"
+PREFIX_DOCTOR_SLOTS = "doctor:slots:"
 PREFIX_HOSPITAL = "hospital:"
 PREFIX_DASHBOARD = "dashboard:"
 PREFIX_COMMUNITY = "community:"
 PREFIX_SEARCH = "search:"
 PREFIX_QUEUE = "queue:"
+PREFIX_HOME_BANNERS = "app:home_banners"

@@ -5,6 +5,7 @@ import '../../constants/app_colors.dart';
 import '../../models/appointment_model.dart';
 import '../../utils/date_formatter.dart';
 import '../../utils/theme_context.dart';
+import '../../utils/vc_slot_window.dart';
 import '../appointments/live_queue_panel.dart';
 import '../common/appointment_status_chip.dart';
 import '../common/appointment_action_buttons.dart';
@@ -35,6 +36,10 @@ class AppointmentCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isUpcoming = appointment.isUpcoming;
 
+    final slotWindow = appointment.isOnlineVisit
+        ? VcSlotWindow.fromSlot(slotDate: appointment.slotDate, slotTime: appointment.slotTime)
+        : const VcSlotWindow();
+    final joinEnabled = slotWindow.canJoinWindow && !slotWindow.forceEnd;
     final showJoin = isUpcoming && appointment.isOnlineVisit && onJoinVideo != null;
     final showActions = isUpcoming && (onAddToCalendar != null || onCancel != null);
 
@@ -141,18 +146,29 @@ class AppointmentCard extends StatelessWidget {
             LiveQueuePanel(appointment: appointment, mode: LiveQueuePanelMode.compact),
           if (showJoin) ...[
             const SizedBox(height: 12),
+            if (!joinEnabled && slotWindow.windowMessage != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
+                  slotWindow.windowMessage!,
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.poppins(fontSize: 12, color: context.secondaryText),
+                ),
+              ),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                onPressed: onJoinVideo,
+                onPressed: joinEnabled ? onJoinVideo : null,
                 icon: const Icon(Icons.videocam_rounded, size: 18),
                 label: Text(
-                  'Join Video Call',
+                  slotWindow.joinButtonLabel,
                   style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600),
                 ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primaryBlue,
                   foregroundColor: Colors.white,
+                  disabledBackgroundColor: Colors.grey.shade300,
+                  disabledForegroundColor: Colors.grey.shade600,
                   elevation: 0,
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),

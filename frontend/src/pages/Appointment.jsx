@@ -219,15 +219,21 @@ const Appointment = () => {
                     // Check if this specific time is booked
                     const isThisSlotBooked = slotsBookedForDate.includes(slotTimeStr)
 
-                    // Check if slot type has reached 25 bookings limit
-                    const isSlotTypeFull = slotTypeBookings.length >= 25
+                    const sessionCap =
+                        slotType.label === '10-1'
+                            ? (Number(docInfo?.maxAppointmentsMorning) || 20)
+                            : (Number(docInfo?.maxAppointmentsAfternoon) || 20)
+
+                    // Check if slot type has reached doctor capacity
+                    const isSlotTypeFull = slotTypeBookings.length >= sessionCap
 
                     if (!isThisSlotBooked && !isSlotTypeFull) {
                         timeSlots.push({
                             datetime: new Date(slotTime),
                             time: formattedTime,
                             slotType: slotType.label,
-                            bookingsRemaining: 25 - slotTypeBookings.length
+                            bookingsRemaining: Math.max(0, sessionCap - slotTypeBookings.length),
+                            totalCount: sessionCap,
                         })
                     }
 
@@ -1036,7 +1042,9 @@ const Appointment = () => {
                                             </div>
                                             <div className='text-right'>
                                                 <div className='font-bold text-lg'>{s.bookingsRemaining ?? '—'}</div>
-                                                <div className='text-xs opacity-75'>available</div>
+                                                <div className='text-xs opacity-75'>
+                                                    {s.totalCount != null ? `of ${s.totalCount} available` : 'available'}
+                                                </div>
                                             </div>
                                         </button>
                                     ))}

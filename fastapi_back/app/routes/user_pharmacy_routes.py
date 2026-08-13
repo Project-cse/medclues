@@ -20,6 +20,11 @@ async def search_medicines(query: str = "", user_id: int = Depends(auth_user)):
     return await pharmacy_service.search_medicine_catalog(query)
 
 
+@router.get("/catalog/categories")
+async def catalog_categories(user_id: int = Depends(auth_user)):
+    return await pharmacy_service.list_medicine_catalog_categories()
+
+
 @router.post("/availability")
 async def probe_availability(req: Request, user_id: int = Depends(auth_user)):
     body = await req.json()
@@ -45,7 +50,17 @@ async def get_order(order_id: int, user_id: int = Depends(auth_user)):
 @router.post("/orders")
 async def place_order(req: Request, user_id: int = Depends(auth_user)):
     body = await req.json()
-    return await pharmacy_service.place_order(int(user_id), body or {})
+    body = body or {}
+    # Catalog / retail cart (no prescription) vs Rx-linked hospital order.
+    if body.get("items") and not (body.get("consultationId") or body.get("consultation_id")):
+        return await pharmacy_service.place_catalog_order(int(user_id), body)
+    return await pharmacy_service.place_order(int(user_id), body)
+
+
+@router.post("/catalog-orders")
+async def place_catalog_order(req: Request, user_id: int = Depends(auth_user)):
+    body = await req.json()
+    return await pharmacy_service.place_catalog_order(int(user_id), body or {})
 
 
 @router.post("/orders/{order_id}/cancel")

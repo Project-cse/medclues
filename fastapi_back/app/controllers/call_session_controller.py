@@ -4,6 +4,7 @@ from app.models import appointment_model, call_session_model, user_model
 from app.services import agora_service, fcm_service
 from app.controllers import consultation_controller
 from app.utils.ownership import load_appointment_for_user
+from app.utils.vc_slot_window import assert_within_join_window, slot_window_payload
 
 
 def _appointment_paid_for_video(appointment: dict) -> bool:
@@ -22,6 +23,9 @@ def _appointment_paid_for_video(appointment: dict) -> bool:
 
 
 def _session_payload(session: dict, appointment: dict | None = None, patient_name: str | None = None):
+    window = slot_window_payload(appointment) if appointment else {}
+    session_ok = session["status"] in ("accepted", "ongoing")
+    can_join = session_ok and bool(window.get("canJoinWindow", True))
     return {
         "success": True,
         "sessionId": session["id"],
@@ -34,7 +38,8 @@ def _session_payload(session: dict, appointment: dict | None = None, patient_nam
         "patientName": patient_name,
         "tokenNumber": appointment.get("token_number") if appointment else None,
         "queuePosition": appointment.get("queue_position") if appointment else None,
-        "canJoin": session["status"] in ("accepted", "ongoing"),
+        "canJoin": can_join,
+        "slotWindow": window,
     }
 
 
@@ -48,6 +53,10 @@ async def request_call(user_id: int, appointment_id: int):
         return {"success": False, "message": "Video call is only available for online consultations"}
     if not _appointment_paid_for_video(appointment):
         return {"success": False, "message": "Please complete payment before starting video consultation"}
+
+    window_err = assert_within_join_window(appointment)
+    if window_err:
+        return {"success": False, "message": window_err, "slotWindow": slot_window_payload(appointment)}
 
     existing = await call_session_model.get_by_appointment(int(appointment_id))
     if existing and existing["status"] in ("accepted", "ongoing"):
@@ -102,7 +111,13 @@ async def get_call_status_for_user(user_id: int, appointment_id: int):
         return err
     session = await call_session_model.get_by_appointment(int(appointment_id))
     if not session:
-        return {"success": True, "status": "none", "canJoin": False}
+        window = slot_window_payload(appointment)
+        return {
+            "success": True,
+            "status": "none",
+            "canJoin": False,
+            "slotWindow": window,
+        }
     patient = await user_model.get_user_by_id(user_id)
     return _session_payload(session, appointment, (patient or {}).get("name"))
 
@@ -219,6 +234,14 @@ async def mark_completed(appointment_id: int):
 
 async def assert_can_issue_patient_token(user_id: int, appointment_id: int) -> str | None:
     """Return error message if patient cannot get Agora token yet."""
+    appointment, err = await load_appointment_for_user(int(appointment_id), user_id)
+    if err:
+        return (err.get("message") if isinstance(err, dict) else None) or "Appointment not found"
+
+    window_err = assert_within_join_window(appointment)
+    if window_err:
+        return window_err
+
     session = await call_session_model.get_by_appointment(int(appointment_id))
     if not session:
         return "Please start consultation and wait for the doctor to accept"
@@ -232,4 +255,6 @@ async def assert_can_issue_patient_token(user_id: int, appointment_id: int) -> s
         return "Doctor is busy — try again shortly"
     if session["status"] == "cancelled":
         return "Call request was cancelled"
+    if session["status"] == "completed":
+        return "This slot has ended"
     return "Video call is not available"

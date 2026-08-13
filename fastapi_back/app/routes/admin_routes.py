@@ -242,3 +242,89 @@ async def pharmacy_counter_update_status(
         order_id, body.get("status") or body.get("nextStatus") or ""
     )
 
+
+@router.get("/home-banners")
+async def admin_list_home_banners(admin_email: str = Depends(auth_admin)):
+    from app.controllers import app_banner_controller
+    return await app_banner_controller.admin_list_banners()
+
+
+@router.post("/home-banners")
+async def admin_create_home_banner(
+    title: str = Form(...),
+    subtitle: Optional[str] = Form(None),
+    ctaLabel: Optional[str] = Form("Explore →"),
+    routeKey: Optional[str] = Form("hospitals"),
+    sortOrder: Optional[str] = Form("0"),
+    isActive: Optional[str] = Form("true"),
+    gradientStart: Optional[str] = Form(None),
+    gradientMid: Optional[str] = Form(None),
+    gradientEnd: Optional[str] = Form(None),
+    iconKey: Optional[str] = Form(None),
+    image: Optional[UploadFile] = File(None),
+    admin_email: str = Depends(auth_admin),
+):
+    from app.controllers import app_banner_controller
+    data = {
+        "title": title,
+        "subtitle": subtitle,
+        "ctaLabel": ctaLabel,
+        "routeKey": routeKey,
+        "sortOrder": int(sortOrder or 0),
+        "isActive": str(isActive or "true").lower() in ("1", "true", "yes"),
+        "gradientStart": gradientStart,
+        "gradientMid": gradientMid,
+        "gradientEnd": gradientEnd,
+        "iconKey": iconKey,
+    }
+    return await app_banner_controller.admin_create_banner(data, image)
+
+
+@router.put("/home-banners/{banner_id}")
+async def admin_update_home_banner(
+    banner_id: int,
+    title: Optional[str] = Form(None),
+    subtitle: Optional[str] = Form(None),
+    ctaLabel: Optional[str] = Form(None),
+    routeKey: Optional[str] = Form(None),
+    sortOrder: Optional[str] = Form(None),
+    isActive: Optional[str] = Form(None),
+    gradientStart: Optional[str] = Form(None),
+    gradientMid: Optional[str] = Form(None),
+    gradientEnd: Optional[str] = Form(None),
+    iconKey: Optional[str] = Form(None),
+    image: Optional[UploadFile] = File(None),
+    admin_email: str = Depends(auth_admin),
+):
+    from app.controllers import app_banner_controller
+    data = {}
+    if title is not None:
+        data["title"] = title
+    if subtitle is not None:
+        data["subtitle"] = subtitle
+    if ctaLabel is not None:
+        data["ctaLabel"] = ctaLabel
+    if routeKey is not None:
+        data["routeKey"] = routeKey
+    if sortOrder is not None and str(sortOrder).strip() != "":
+        data["sortOrder"] = int(sortOrder)
+    if isActive is not None:
+        data["isActive"] = str(isActive).lower() in ("1", "true", "yes")
+    if gradientStart is not None:
+        data["gradientStart"] = gradientStart
+    if gradientMid is not None:
+        data["gradientMid"] = gradientMid
+    if gradientEnd is not None:
+        data["gradientEnd"] = gradientEnd
+    if iconKey is not None:
+        data["iconKey"] = iconKey
+    return await app_banner_controller.admin_update_banner(banner_id, data, image)
+
+
+@router.delete("/home-banners/{banner_id}")
+async def admin_delete_home_banner(
+    banner_id: int, admin_email: str = Depends(auth_admin)
+):
+    from app.controllers import app_banner_controller
+    return await app_banner_controller.admin_delete_banner(banner_id)
+

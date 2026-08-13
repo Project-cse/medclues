@@ -464,6 +464,31 @@ async def _book_after_payment(user_id: int, pending: dict, razorpay_order_id: st
             "payment": record,
         }
 
+    # Pharmacy catalog / billed order checkout (no appointment booking).
+    if pending.get("kind") == "pharmacy_order" or pending.get("pharmacy_order_id"):
+        from app.services import pharmacy_service
+
+        pharmacy_order_id = int(pending.get("pharmacy_order_id") or 0)
+        if not pharmacy_order_id:
+            await pt_model.release_claim(razorpay_order_id)
+            return {"success": False, "message": "Pharmacy order id missing on payment"}
+        result = await pharmacy_service.mark_order_paid_from_transaction(
+            user_id,
+            pharmacy_order_id,
+            razorpay_order_id,
+            razorpay_payment_id,
+        )
+        if not result.get("success"):
+            await pt_model.release_claim(razorpay_order_id)
+            return result
+        return {
+            "success": True,
+            "message": "Pharmacy payment successful",
+            "pharmacy_order_id": pharmacy_order_id,
+            "pharmacyOrderId": pharmacy_order_id,
+            "data": result.get("data"),
+        }
+
     visit = pending.get("visit_type") or "online"
     mode = pending.get("mode") or ("online" if visit == "online" else "offline")
     book_body = {

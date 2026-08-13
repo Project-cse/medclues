@@ -91,3 +91,7 @@ def doctor_documents_folder(
 
 def job_applications_folder() -> str:
     return f"{ROOT}/job-applications"
+
+
+def home_banners_folder() -> str:
+    return f"{ROOT}/branding/home_banners"

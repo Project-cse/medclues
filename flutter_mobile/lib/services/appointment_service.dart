@@ -74,11 +74,48 @@ class AppointmentService {
 
   String? _dayKey(Map<String, dynamic> day) {
     final padded = day['slotDatePadded']?.toString();
-    if (padded != null && padded.isNotEmpty) return padded;
+    if (padded != null && padded.isNotEmpty) return _normalizeSlotDateKey(padded);
     final legacy = day['slotDate']?.toString();
-    if (legacy != null && legacy.isNotEmpty) return legacy;
+    if (legacy != null && legacy.isNotEmpty) return _normalizeSlotDateKey(legacy);
     final iso = day['date']?.toString();
     if (iso != null && iso.isNotEmpty) return iso;
+    return null;
+  }
+
+  /// Normalize DD_M_YYYY / D_MM_YYYY → DD_MM_YYYY so Flutter day chips match API keys.
+  String _normalizeSlotDateKey(String raw) {
+    final parts = raw.split('_');
+    if (parts.length != 3) return raw;
+    final d = int.tryParse(parts[0]);
+    final m = int.tryParse(parts[1]);
+    final y = int.tryParse(parts[2]);
+    if (d == null || m == null || y == null) return raw;
+    return '${d.toString().padLeft(2, '0')}_${m.toString().padLeft(2, '0')}_$y';
+  }
+
+  /// Resolve a day from the schedule map using padded / unpadded / ISO aliases.
+  DaySlotsModel? dayFromSchedule(
+    Map<String, DaySlotsModel> schedule,
+    String selectedDate,
+  ) {
+    final direct = schedule[selectedDate];
+    if (direct != null) return direct;
+    final norm = _normalizeSlotDateKey(selectedDate);
+    if (norm != selectedDate) {
+      final hit = schedule[norm];
+      if (hit != null) return hit;
+    }
+    // Unpadded legacy: 5_8_2026
+    final parts = norm.split('_');
+    if (parts.length == 3) {
+      final unpadded =
+          '${int.parse(parts[0])}_${int.parse(parts[1])}_${parts[2]}';
+      final hit = schedule[unpadded];
+      if (hit != null) return hit;
+      // ISO YYYY-MM-DD
+      final iso = '${parts[2]}-${parts[1]}-${parts[0]}';
+      return schedule[iso];
+    }
     return null;
   }
 
@@ -160,10 +197,21 @@ class AppointmentService {
       final dayMeta = Map<String, dynamic>.from(item);
       final key = _dayKey(dayMeta);
       if (key == null) continue;
-      schedule[key] = _daySlotsFromMeta(dayMeta, key, mode);
+      final dayModel = _daySlotsFromMeta(dayMeta, key, mode);
+      schedule[key] = dayModel;
       final legacy = dayMeta['slotDate']?.toString();
       if (legacy != null && legacy.isNotEmpty && legacy != key) {
-        schedule[legacy] = schedule[key]!;
+        schedule[legacy] = dayModel;
+        final normLegacy = _normalizeSlotDateKey(legacy);
+        if (normLegacy != legacy) schedule[normLegacy] = dayModel;
+      }
+      final iso = dayMeta['date']?.toString();
+      if (iso != null && iso.isNotEmpty) {
+        schedule[iso] = dayModel;
+      }
+      final padded = dayMeta['slotDatePadded']?.toString();
+      if (padded != null && padded.isNotEmpty) {
+        schedule[_normalizeSlotDateKey(padded)] = dayModel;
       }
     }
     return schedule;
@@ -172,7 +220,7 @@ class AppointmentService {
   Future<DaySlotsModel> fetchSlots(String doctorId, String slotDate,
       {String mode = 'offline'}) async {
     final schedule = await fetchDoctorSchedule(doctorId, mode: mode);
-    return schedule[slotDate] ??
+    return dayFromSchedule(schedule, slotDate) ??
         DaySlotsModel(date: slotDate, displayDate: slotDate, slots: const []);
   }
 

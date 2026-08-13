@@ -75,6 +75,15 @@ class _VideoWaitingRoomScreenState extends ConsumerState<VideoWaitingRoomScreen>
         _session = session;
         _requesting = false;
       });
+      final window = session.slotWindow;
+      if (window != null && window.forceEnd) {
+        setState(() => _error = window.windowMessage ?? 'This slot has ended');
+        return;
+      }
+      if (window != null && !window.canJoinWindow) {
+        setState(() => _error = window.windowMessage ?? 'Join opens at slot start');
+        return;
+      }
       if (session.canJoin) {
         _goToVideo();
         return;

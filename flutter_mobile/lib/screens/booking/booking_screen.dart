@@ -122,14 +122,19 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
 
   Widget _buildOpdSlotChip(SlotModel slot) {
     final l10n = context.l10n;
+    final remaining = slot.availableCount;
+    final total = slot.totalCount;
+    final label = remaining == null
+        ? null
+        : (total != null
+            ? '$remaining of $total available'
+            : l10n.bookingAppointmentsLeft(remaining));
     return PremiumOpdSlotChip(
       label: DateFormatter.displayTime(slot.displayTime),
       selected: _selectedSlot?.time == slot.time,
       enabled: slot.available,
-      remainingCount: slot.availableCount,
-      remainingLabel: slot.availableCount != null
-          ? l10n.bookingAppointmentsLeft(slot.availableCount!)
-          : null,
+      remainingCount: remaining,
+      remainingLabel: label,
       fullLabel: l10n.bookingSlotFull,
       onTap: slot.available ? () => setState(() => _selectedSlot = slot) : null,
     );
@@ -912,7 +917,9 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
                     scheduleAsync.when(
                       skipLoadingOnReload: true,
                       data: (schedule) {
-                        final day = schedule[selectedDate];
+                        final day = ref
+                            .read(appointmentRepositoryProvider)
+                            .dayOf(schedule, selectedDate);
                         final slots = day?.slots ?? const <SlotModel>[];
                         final selectedStillValid = _selectedSlot == null ||
                             slots.any(

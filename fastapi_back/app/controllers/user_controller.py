@@ -63,6 +63,15 @@ async def register_user(req_body: dict):
         if existing_user:
             return {"success": False, "message": "User already exists"}
 
+        from app.utils.contact_uniqueness import phone_taken_in_table, normalize_phone
+        if phone and await phone_taken_in_table("users", phone):
+            return {
+                "success": False,
+                "message": "This mobile number is already registered for another patient.",
+            }
+        if phone:
+            phone = normalize_phone(phone) or phone
+
         # --- Phone verification (Firebase phone OTP) ---
         phone_verified = False
         phone_token = extract_phone_id_token_from_body(req_body)
@@ -1013,6 +1022,12 @@ async def book_appointment(user_id: int, req_body: dict, prescription_file: Opti
             raise create_err
 
         try:
+            from app.controllers.doctor_slot_controller import invalidate_slots_cache
+            invalidate_slots_cache(str(db_doc_id))
+        except Exception:
+            pass
+
+        try:
             from app.models import hospital_policy_model
             from app.services import appointment_lifecycle_service
 
@@ -1245,11 +1260,8 @@ async def cancel_appointment(user_id: int, appointment_id: int):
         if not result.get("success"):
             return result
 
-        # The appointment is already marked cancelled by cancel_with_policy.
-        # Slot release, legacy slot-map cleanup, the socket event and all
-        # notifications are not needed for the response, so run them off the
-        # request path to keep cancel fast.
-        asyncio.create_task(_post_cancel_cleanup(user_id, int(appointment_id)))
+        # Release seat before responding so available_count is fresh on next fetch.
+        await _post_cancel_cleanup(user_id, int(appointment_id))
 
         return {
             "success": True,

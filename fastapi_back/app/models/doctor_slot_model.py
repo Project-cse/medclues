@@ -106,6 +106,16 @@ async def ensure_doctor_slots_schema():
         ADD COLUMN IF NOT EXISTS max_appointments_afternoon INTEGER
         """
     )
+    for table in ("doctors", "hospital_tieup_doctors"):
+        for col, typ in (
+            ("video_op_start", "VARCHAR(10)"),
+            ("video_op_end", "VARCHAR(10)"),
+            ("max_video_slots", "INTEGER"),
+            ("video_slot_minutes", "INTEGER"),
+        ):
+            await db.execute(
+                f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {typ}"
+            )
     await db.execute(
         """
         UPDATE doctors SET fees = 600 WHERE fees IS NULL OR fees = 0

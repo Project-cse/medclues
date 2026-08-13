@@ -101,6 +101,8 @@ def row_to_pending(row: dict) -> dict:
         "amount_paise": int(row.get("amount_paise") or 0),
         "appointment_id": row.get("appointment_id") or f"pending_{row.get('razorpay_order_id')}",
         "simple": bool(meta.get("simple")),
+        "kind": meta.get("kind"),
+        "pharmacy_order_id": meta.get("pharmacy_order_id"),
     }
 
 

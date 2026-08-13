@@ -11,8 +11,11 @@ DEFAULT_POLICY: dict[str, Any] = {
     "max_visits": 3,
     "followup_days": 7,
     "followup_visits": 1,
-    "opd_slot_capacity": 20,
-    "video_slot_capacity": 4,
+    # 0 = no ceiling; doctor max_appointments_* from dashboard is authoritative
+    # until a hospital explicitly configures opd_slot_capacity.
+    "opd_slot_capacity": 0,
+    # 0 = no ceiling; doctor max_video_slots is authoritative until hospital sets one.
+    "video_slot_capacity": 0,
     "platform_fee_percent": 5.0,
     "grace_reschedule_enabled": True,
     "no_show_auto_hours": 2,
@@ -27,6 +30,7 @@ async def get_policy(hospital_id: Optional[int]) -> dict[str, Any]:
         int(hospital_id),
     )
     if not row:
+        # No configured policy row → do not invent a 20-seat OPD ceiling.
         return {**DEFAULT_POLICY, "hospital_id": int(hospital_id)}
     return dict(row)
 
@@ -36,6 +40,11 @@ async def get_policy_for_doctor(doctor_id: int) -> dict[str, Any]:
         "SELECT hospital_id FROM doctors WHERE id = $1",
         int(doctor_id),
     )
+    if not row:
+        row = await db.fetch_row(
+            "SELECT hospital_id FROM hospital_tieup_doctors WHERE id = $1",
+            int(doctor_id),
+        )
     hospital_id = row.get("hospital_id") if row else None
     return await get_policy(hospital_id)
 

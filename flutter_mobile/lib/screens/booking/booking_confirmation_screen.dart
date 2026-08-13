@@ -13,7 +13,10 @@ import '../../utils/currency_formatter.dart';
 import '../../utils/date_formatter.dart';
 import '../../widgets/animations/receipt_unroll.dart';
 import '../../widgets/booking/appointment_receipt_card.dart';
+import '../../widgets/booking/video_consult_card.dart';
 import '../../widgets/common/app_snackbar.dart';
+import '../../utils/calendar_helper.dart';
+import '../../models/appointment_model.dart';
 
 /// Post-booking receipt screen (mockup style).
 class BookingConfirmationScreen extends ConsumerStatefulWidget {
@@ -29,6 +32,9 @@ class _BookingConfirmationScreenState extends ConsumerState<BookingConfirmationS
   AppointmentReceiptData? _receiptData(BookingDraft draft) {
     final id = draft.bookingId;
     if (id == null || id.isEmpty) return null;
+    final isOnline = draft.visitType.toLowerCase().contains('online') ||
+        draft.visitType.toLowerCase().contains('video');
+    final fee = isOnline ? draft.doctor.videoConsultationFee : draft.doctor.consultationFee;
     return AppointmentReceiptData(
       bookingId: id,
       tokenNumber: draft.tokenNumber,
@@ -42,7 +48,7 @@ class _BookingConfirmationScreenState extends ConsumerState<BookingConfirmationS
       appointmentTime: draft.time,
       visitType: draft.visitType,
       status: context.l10n.receiptStatusConfirmed,
-      amount: draft.doctor.consultationFee,
+      amount: fee,
     );
   }
 
@@ -57,7 +63,6 @@ class _BookingConfirmationScreenState extends ConsumerState<BookingConfirmationS
     setState(() => _busy = true);
     try {
       await action(receipt);
-      if (mounted) AppSnackbar.show(context, l10n.commonDone, success: true);
     } catch (_) {
       if (mounted) AppSnackbar.show(context, l10n.commonError);
     } finally {
@@ -78,8 +83,10 @@ class _BookingConfirmationScreenState extends ConsumerState<BookingConfirmationS
     }
 
     final hasBookingId = draft.bookingId != null && draft.bookingId!.isNotEmpty;
-    final isOnline = draft.visitType.toLowerCase().contains('online');
+    final isOnline = draft.visitType.toLowerCase().contains('online') ||
+        draft.visitType.toLowerCase().contains('video');
     final apptId = draft.appointmentId ?? '';
+    final fee = isOnline ? draft.doctor.videoConsultationFee : draft.doctor.consultationFee;
 
     return Scaffold(
       appBar: AppBar(
@@ -89,12 +96,12 @@ class _BookingConfirmationScreenState extends ConsumerState<BookingConfirmationS
           onPressed: () => context.go(RouteNames.dashboard),
         ),
         title: Text(
-          l10n.receiptAppointmentReceipt,
+          isOnline ? 'Video consult booked' : l10n.receiptAppointmentReceipt,
           style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 17),
         ),
         centerTitle: true,
         actions: [
-          if (hasBookingId)
+          if (hasBookingId && !isOnline)
             IconButton(
               icon: _busy
                   ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
@@ -111,35 +118,81 @@ class _BookingConfirmationScreenState extends ConsumerState<BookingConfirmationS
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
         child: Column(
           children: [
-            ReceiptUnroll(
-              child: AppointmentReceiptCard(
-              bookingId: draft.bookingId,
-              tokenNumber: draft.tokenNumber,
-              patientName: draft.patient.name,
-              doctorName: draft.doctor.name,
-              specialization: draft.doctor.specialization,
-              hospitalName: draft.hospitalName ?? draft.doctor.hospitalName,
-              location: draft.location,
-              roomNo: draft.roomNo,
-              appointmentDate: DateFormatter.formatSlotDate(draft.date),
-              appointmentTime: draft.time,
-              visitType: draft.visitType,
-              status: l10n.receiptStatusConfirmed,
-              amountLabel: CurrencyFormatter.format(draft.doctor.consultationFee),
-              showConfirmationBanner: true,
-              onWhatsApp: hasBookingId && !_busy
-                  ? () => _runReceiptAction(AppointmentReceiptActions.shareWhatsApp)
-                  : null,
-              onEmail: hasBookingId && !_busy
-                  ? () => _runReceiptAction(AppointmentReceiptActions.shareEmail)
-                  : null,
-              onPrint: hasBookingId && !_busy
-                  ? () => _runReceiptAction(
-                        (r) => AppointmentReceiptActions.printReceipt(r, context.l10n),
-                      )
-                  : null,
-            ),
-            ),
+            if (isOnline) ...[
+              VideoConsultCard(
+                doctorName: draft.doctor.name,
+                specialization: draft.doctor.specialization,
+                appointmentDate: DateFormatter.formatSlotDate(draft.date),
+                appointmentTime: draft.time,
+                bookingId: draft.bookingId,
+                amount: fee,
+                statusLine: VideoConsultCard.joinState(
+                  slotDate: draft.date,
+                  slotTime: draft.time,
+                ).status,
+                canJoin: apptId.isNotEmpty &&
+                    VideoConsultCard.joinState(
+                      slotDate: draft.date,
+                      slotTime: draft.time,
+                    ).canJoin,
+                joinLabel: VideoConsultCard.joinState(
+                  slotDate: draft.date,
+                  slotTime: draft.time,
+                ).label,
+                onJoin: apptId.isEmpty
+                    ? null
+                    : () => context.push('/video-waiting/$apptId'),
+                onAddToCalendar: () async {
+                  final draftAppt = AppointmentModel(
+                    id: apptId.isEmpty ? '0' : apptId,
+                    doctorId: draft.doctor.id,
+                    doctorName: draft.doctor.name,
+                    specialization: draft.doctor.specialization,
+                    slotDate: draft.date,
+                    slotTime: draft.time,
+                    visitType: draft.visitType,
+                    bookingId: draft.bookingId,
+                  );
+                  final ok = await CalendarHelper.addAppointmentToCalendar(draftAppt);
+                  if (!context.mounted) return;
+                  AppSnackbar.show(
+                    context,
+                    ok ? l10n.appointmentsCalendarAdded : l10n.appointmentsCalendarFailed,
+                    success: ok,
+                  );
+                },
+              ),
+            ] else ...[
+              ReceiptUnroll(
+                child: AppointmentReceiptCard(
+                bookingId: draft.bookingId,
+                tokenNumber: draft.tokenNumber,
+                patientName: draft.patient.name,
+                doctorName: draft.doctor.name,
+                specialization: draft.doctor.specialization,
+                hospitalName: draft.hospitalName ?? draft.doctor.hospitalName,
+                location: draft.location,
+                roomNo: draft.roomNo,
+                appointmentDate: DateFormatter.formatSlotDate(draft.date),
+                appointmentTime: draft.time,
+                visitType: draft.visitType,
+                status: l10n.receiptStatusConfirmed,
+                amountLabel: CurrencyFormatter.format(fee),
+                showConfirmationBanner: true,
+                onWhatsApp: hasBookingId && !_busy
+                    ? () => _runReceiptAction(AppointmentReceiptActions.shareWhatsApp)
+                    : null,
+                onEmail: hasBookingId && !_busy
+                    ? () => _runReceiptAction(AppointmentReceiptActions.shareEmail)
+                    : null,
+                onPrint: hasBookingId && !_busy
+                    ? () => _runReceiptAction(
+                          (r) => AppointmentReceiptActions.printReceipt(r, context.l10n),
+                        )
+                    : null,
+              ),
+              ),
+            ],
             if (!hasBookingId)
               Padding(
                 padding: const EdgeInsets.only(top: 12),
@@ -149,23 +202,6 @@ class _BookingConfirmationScreenState extends ConsumerState<BookingConfirmationS
                   style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary),
                 ),
               ),
-            if (isOnline && apptId.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () => context.push('/video-waiting/$apptId'),
-                  icon: const Icon(Icons.videocam),
-                  label: Text(l10n.doctorVideoConsult, style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.specCircleFill,
-                    foregroundColor: AppColors.brandNavy,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  ),
-                ),
-              ),
-            ],
             const SizedBox(height: 20),
             SizedBox(
               width: double.infinity,
