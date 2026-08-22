@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Request, Depends
+from fastapi import APIRouter, Request, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 import httpx
 import json
@@ -6,6 +6,7 @@ from app.controllers import ai_controller
 from app.middleware.auth import auth_user, auth_assistant
 from app.config.config import settings
 from app.utils.app_logger import get_logger
+from app.routes.order_routing_routes import auth_staff_role
 
 router = APIRouter(prefix="/api/ai", tags=["AI Assistant"])
 log = get_logger(__name__)
@@ -219,3 +220,61 @@ async def assistant_feedback(req: Request, actor: dict = Depends(auth_assistant)
         query=str(body.get("query") or "")[:500] or None,
         grounded=body.get("grounded"),
     )
+
+
+@router.get("/patient-journeys")
+async def list_patient_journeys(actor: dict = Depends(auth_staff_role)):
+    from app.services import patient_journey_service as pjs
+
+    journeys = await pjs.list_staff_journeys(actor)
+    return {"success": True, "journeys": journeys}
+
+
+@router.get("/patient-journey/{patient_id}")
+async def get_patient_journey(patient_id: int, actor: dict = Depends(auth_staff_role)):
+    from app.services import patient_journey_service as pjs
+
+    result = await pjs.build_patient_journey(int(patient_id), staff_view=True)
+    if not result.get("success"):
+        raise HTTPException(status_code=404, detail=result.get("message") or "Not found")
+    return result
+
+
+@router.post("/patient-journey/{patient_id}/refresh")
+async def refresh_patient_journey(patient_id: int, actor: dict = Depends(auth_staff_role)):
+    from app.services.order_monitoring_service import run_order_monitoring_cycle
+    from app.services import patient_journey_service as pjs
+
+    await run_order_monitoring_cycle()
+    result = await pjs.build_patient_journey(int(patient_id), staff_view=True)
+    if not result.get("success"):
+        raise HTTPException(status_code=404, detail=result.get("message") or "Not found")
+    return result
+
+
+@router.post("/findings/{finding_id}/review")
+async def review_finding(finding_id: int, req: Request, actor: dict = Depends(auth_staff_role)):
+    from app.services import patient_journey_service as pjs
+
+    body = await req.json()
+    result = await pjs.apply_human_review(
+        finding_id=int(finding_id),
+        actor=actor,
+        decision=str(body.get("decision") or body.get("review_decision") or ""),
+        note=body.get("note") or body.get("resolution_note"),
+        modifications=body.get("modifications") or {},
+    )
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("message") or "Review failed")
+    return result
+
+
+@router.get("/my-care-journey")
+async def my_care_journey(user_id: int = Depends(auth_user)):
+    from app.services import patient_journey_service as pjs
+
+    try:
+        await pjs.verify_and_close_stale_findings(patient_id=int(user_id))
+    except Exception:
+        pass
+    return await pjs.build_patient_journey(int(user_id), staff_view=False)

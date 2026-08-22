@@ -46,6 +46,7 @@ const DoctorConsultation = lazy(() => import('./pages/Doctor/DoctorConsultation'
 const DoctorVideoConsult = lazy(() => import('./pages/Doctor/DoctorVideoConsult'))
 const DoctorVideoCalls = lazy(() => import('./pages/Doctor/DoctorVideoCalls'))
 const PatientsSearch = lazy(() => import('./pages/Doctor/PatientsSearch'))
+const DoctorPatientJourney = lazy(() => import('./pages/Doctor/DoctorPatientJourney'))
 const IncomingVideoCallModal = lazy(() => import('./components/IncomingVideoCallModal'))
 const DoctorStatusListener = lazy(() => import('./components/DoctorStatusListener'))
 const DeanDashboard = lazy(() => import('./pages/Dean/DeanDashboard'))
@@ -70,6 +71,9 @@ const ReceptionNoShows = lazy(() => import('./pages/Reception/NoShows'))
 const ReceptionGraceRequests = lazy(() => import('./pages/Reception/GraceRequests'))
 const ReceptionReports = lazy(() => import('./pages/Reception/Reports'))
 const ReceptionSettings = lazy(() => import('./pages/Reception/Settings'))
+const LabQueue = lazy(() => import('./pages/Reception/LabQueue'))
+const ReferralsQueue = lazy(() => import('./pages/Reception/ReferralsQueue'))
+const FollowupQueue = lazy(() => import('./pages/Reception/FollowupQueue'))
 const Login = lazy(() => import('./pages/Login'))
 const DoctorForgotPassword = lazy(() => import('./pages/DoctorForgotPassword'))
 
@@ -192,6 +196,7 @@ const App = () => {
               <Route path='/queue-management' element={<Navigate to='/doctor-in-queue' replace />} />
               <Route path='/doctor-video/:appointmentId' element={<DoctorVideoConsult />} />
               <Route path='/doctor-patients' element={<PatientsSearch />} />
+              <Route path='/doctor-patient-journey' element={<DoctorPatientJourney />} />
               <Route path='/dean-dashboard' element={<DeanDashboard />} />
               <Route path='/dean-add-doctor' element={<DeanAddDoctor />} />
               <Route path='/dean-doctors' element={<DeanDoctors />} />
@@ -218,6 +223,9 @@ const App = () => {
               <Route path='/reception-grace' element={<ReceptionGraceRequests />} />
               <Route path='/reception-reports' element={<ReceptionReports />} />
               <Route path='/reception-settings' element={<ReceptionSettings />} />
+              <Route path='/reception-lab' element={<LabQueue />} />
+              <Route path='/reception-referrals' element={<ReferralsQueue />} />
+              <Route path='/reception-followup-queue' element={<FollowupQueue />} />
               <Route path='/reception-er-dispatch' element={<ErDispatchTab />} />
               <Route path='*' element={<Navigate to='/' />} />
             </Routes>

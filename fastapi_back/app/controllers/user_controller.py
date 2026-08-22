@@ -1149,7 +1149,13 @@ async def book_appointment(user_id: int, req_body: dict, prescription_file: Opti
 
     except Exception as e:
         print(f"[ERROR] Book Appointment Error: {e}")
-        return {"success": False, "message": str(e)}
+        err = str(e)
+        if "no unique or exclusion constraint" in err.lower():
+            return {
+                "success": False,
+                "message": "Booking is temporarily unavailable while slot indexes are repaired. Please try again in a moment.",
+            }
+        return {"success": False, "message": err}
 
 async def list_appointments(
     user_id: int,
@@ -1360,40 +1366,16 @@ async def payment_razorpay(appointment_id: int):
     from app.controllers import payments_controller
     return await payments_controller.create_order_for_existing_appointment(appointment_id)
 
-async def verify_razorpay(req_body: dict):
+async def verify_razorpay(req_body: dict, user_id: Optional[int] = None):
     try:
-        razorpay_order_id = req_body.get('razorpay_order_id')
-        razorpay_payment_id = req_body.get('razorpay_payment_id')
-        razorpay_signature = req_body.get('razorpay_signature')
-
-        # Verify signature
-        try:
-            params_dict = {
-                'razorpay_order_id': razorpay_order_id,
-                'razorpay_payment_id': razorpay_payment_id,
-                'razorpay_signature': razorpay_signature
-            }
-            razorpay_client.utility.verify_payment_signature(params_dict)
-        except:
-            return {"success": False, "message": "Payment verification failed: Invalid signature"}
-
-        # Get appointment ID from order
-        order = razorpay_client.order.fetch(razorpay_order_id)
-        appointment_id = int(order.get('receipt'))
-        
-        # Update appointment
-        await appointment_model.update_appointment(appointment_id, {
-            "payment": True,
-            "paymentMethod": 'Online (Razorpay)',
-            "transactionId": razorpay_payment_id,
-            "status": 'confirmed'
-        })
-
-        # Trigger Real-time WebSocket update
-        from app.services.websocket_service import manager
-        await manager.notify_payment_success(str(appointment_id))
-
-        return {"success": True, "message": "Payment Successful"}
+        from app.controllers import payments_controller
+        return await payments_controller.verify_appointment_payment(
+            user_id=user_id,
+            razorpay_order_id=req_body.get('razorpay_order_id'),
+            razorpay_payment_id=req_body.get('razorpay_payment_id'),
+            razorpay_signature=req_body.get('razorpay_signature'),
+            appointment_id=req_body.get('appointmentId') or req_body.get('appointment_id'),
+        )
     except Exception as e:
         return {"success": False, "message": str(e)}
 

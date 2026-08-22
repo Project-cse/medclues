@@ -82,7 +82,7 @@ async def appointment_payment_order(req: Request, user_id: int = Depends(auth_us
 async def appointment_payment_verify(req: Request, user_id: int = Depends(auth_user)):
     from app.controllers import user_controller
     body = await req.json()
-    return await user_controller.verify_razorpay(body)
+    return await user_controller.verify_razorpay(body, user_id=user_id)
 
 
 @router.post("/verify")

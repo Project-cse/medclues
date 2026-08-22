@@ -11,18 +11,41 @@ from app.config.db import db
 _HOSP_CODE_STOPWORDS = {"the", "of", "and", "&"}
 
 
-async def _next_sequence(scope: str) -> int:
-    row = await db.fetch_row(
+async def _ensure_public_id_sequence_unique():
+    try:
+        await db.execute(
+            """
+            DELETE FROM public_id_sequences a
+            USING public_id_sequences b
+            WHERE a.ctid > b.ctid AND a.scope = b.scope
+            """
+        )
+    except Exception:
+        pass
+    await db.execute(
         """
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_public_id_sequences_scope
+            ON public_id_sequences (scope)
+        """
+    )
+
+
+async def _next_sequence(scope: str) -> int:
+    sql = """
         INSERT INTO public_id_sequences (scope, last_value, updated_at)
         VALUES ($1, 1, NOW())
         ON CONFLICT (scope) DO UPDATE
         SET last_value = public_id_sequences.last_value + 1,
             updated_at = NOW()
         RETURNING last_value
-        """,
-        scope,
-    )
+        """
+    try:
+        row = await db.fetch_row(sql, scope)
+    except Exception as exc:
+        if "no unique or exclusion constraint" not in str(exc).lower():
+            raise
+        await _ensure_public_id_sequence_unique()
+        row = await db.fetch_row(sql, scope)
     return int(row["last_value"])
 
 

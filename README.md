@@ -1,4 +1,4 @@
-# MEDCLUES Healthcare Platform
+# MEDCLUES Healthcare Platform as AI Healthcare Patient Journey & Follow-Up Coordination Agent
 
 **MEDCLUES** (formerly MediChain+) is a full-stack healthcare management ecosystem connecting **patients**, **doctors**, **hospital receptionists**, **hospital deans**, and **super administrators**. It supports appointment booking, medical records, real-time queue tracking, Razorpay payments, Agora video consultations, AI medical chat, emergency services, labs, blood banks, front-desk reception operations, and multi-portal administration.
 

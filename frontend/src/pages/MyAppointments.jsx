@@ -153,7 +153,8 @@ Thank you for choosing MedClues Healthcare!
                             {
                                 razorpay_order_id: response.razorpay_order_id,
                                 razorpay_payment_id: response.razorpay_payment_id,
-                                razorpay_signature: response.razorpay_signature
+                                razorpay_signature: response.razorpay_signature,
+                                appointment_id: appointmentId.toString()
                             },
                             { headers: { token } }
                         )

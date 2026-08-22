@@ -26,6 +26,77 @@ const DoctorDashboard = () => {
   const [currentTime, setCurrentTime] = useState(new Date())
   const [completeTarget, setCompleteTarget] = useState(null)
   const [completing, setCompleting] = useState(false)
+
+  // AI findings and reports review state
+  const [openFindings, setOpenFindings] = useState([])
+  const [pendingReports, setPendingReports] = useState([])
+  const [loadingOrders, setLoadingOrders] = useState(true)
+
+  const loadOrdersData = async () => {
+    if (!profileData?.id) return
+    try {
+      const resFindings = await axios.get(backendUrl + '/api/findings?doctor_id=' + profileData.id, {
+        headers: { dtoken: dToken }
+      })
+      if (resFindings.data.success) {
+        setOpenFindings(resFindings.data.findings)
+      }
+      const resReports = await axios.get(backendUrl + '/api/lab/queue?status=REPORT_AVAILABLE', {
+        headers: { dtoken: dToken }
+      })
+      if (resReports.data.success) {
+        const filtered = resReports.data.queue.filter(x => Number(x.ordered_by) === Number(profileData.id))
+        setPendingReports(filtered)
+      }
+    } catch (e) {
+      console.error('Error loading order/findings data:', e)
+    } finally {
+      setLoadingOrders(false)
+    }
+  }
+
+  const handleMarkReviewed = async (id) => {
+    try {
+      const { data } = await axios.patch(
+        backendUrl + `/api/investigations/${id}`,
+        { status: 'REVIEWED' },
+        { headers: { dtoken: dToken } }
+      )
+      if (data.success) {
+        toast.success('Investigation marked as reviewed')
+        await loadOrdersData()
+      } else {
+        toast.error(data.message || 'Failed to update')
+      }
+    } catch (e) {
+      toast.error(e.message)
+    }
+  }
+
+  const handleResolveDoctorFinding = async (findingId) => {
+    try {
+      const { data } = await axios.patch(
+        backendUrl + `/api/findings/${findingId}/resolve`,
+        { status: 'RESOLVED' },
+        { headers: { dtoken: dToken } }
+      )
+      if (data.success) {
+        toast.success('Alert resolved')
+        await loadOrdersData()
+      } else {
+        toast.error(data.message || 'Failed to resolve')
+      }
+    } catch (e) {
+      toast.error(e.message)
+    }
+  }
+
+  useEffect(() => {
+    if (dToken && profileData?.id) {
+      loadOrdersData()
+    }
+  }, [dToken, profileData])
+
   const [sched, setSched] = useState({
     opStart: '09:00',
     opEnd: '13:00',
@@ -269,11 +340,12 @@ const DoctorDashboard = () => {
       <div className="rd-card rd-soft bg-rd-surface rounded-[16px] border border-rd-border px-3.5 py-3">
         <div className="flex items-center gap-3 flex-wrap">
           <h2 className="text-sm font-bold text-rd-text shrink-0">Quick Actions</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 flex-1 min-w-0">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 flex-1 min-w-0">
             {[
               { label: 'Queue Manager', to: '/doctor-in-queue', bg: 'bg-indigo-500' },
               { label: 'Video Calls', to: '/doctor-video-calls', bg: 'bg-sky-500' },
               { label: 'Patients', to: '/doctor-patients', bg: 'bg-teal-500' },
+              { label: 'AI Patient Journey', to: '/doctor-patient-journey', bg: 'bg-rose-500' },
               { label: 'Profile', to: '/doctor-profile', bg: 'bg-violet-500' },
             ].map((a) => (
               <button
@@ -287,6 +359,89 @@ const DoctorDashboard = () => {
             ))}
           </div>
         </div>
+      </div>
+
+      {/* AI alert findings and pathology reports for doctor review */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* AI Findings feed */}
+        <McCard title="AI Agent Alerts & Findings">
+          <p className="text-xs text-mc-text-muted mb-3">SLA breaches and process findings flagged by Medclues AI monitoring.</p>
+          {loadingOrders ? (
+            <div className="text-center py-6 text-xs text-mc-text-muted animate-pulse">Loading alerts…</div>
+          ) : openFindings.length === 0 ? (
+            <div className="text-center py-8 border border-dashed border-mc-border rounded-xl bg-mc-canvas/20">
+              <p className="text-xs text-mc-text-muted font-medium">✓ No outstanding AI warnings or SLA alerts</p>
+            </div>
+          ) : (
+            <div className="space-y-2.5 max-h-[280px] overflow-y-auto pr-1">
+              {openFindings.map((f) => {
+                const isHigh = f.priority === 'HIGH'
+                return (
+                  <div key={f.id} className="p-3.5 rounded-xl border border-mc-border bg-mc-canvas/30 flex flex-col gap-2 relative overflow-hidden shadow-sm">
+                    <div className={`absolute left-0 top-0 bottom-0 w-1 ${isHigh ? 'bg-rose-500' : 'bg-amber-400'}`} />
+                    <div className="flex items-center justify-between gap-2">
+                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-black tracking-wide uppercase ${isHigh ? 'bg-rose-50 text-rose-600 border border-rose-100' : 'bg-amber-50 text-amber-600 border border-amber-100'}`}>
+                        {f.priority} SLA WARNING
+                      </span>
+                      <span className="text-[10px] text-mc-text-muted">
+                        {new Date(f.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                    <p className="text-xs font-semibold text-mc-text leading-relaxed">{f.message}</p>
+                    <div className="flex justify-between items-center pt-1 border-t border-mc-border/60">
+                      <span className="text-[10px] text-mc-text-muted font-bold">Patient: {f.patient_name}</span>
+                      <button
+                        onClick={() => handleResolveDoctorFinding(f.id)}
+                        className="px-2.5 py-1 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white text-[10px] font-bold shadow-sm transition-colors"
+                      >
+                        Dismiss Alert
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </McCard>
+
+        {/* Pathology reports needing doctor review */}
+        <McCard title="Unreviewed Lab Reports">
+          <p className="text-xs text-mc-text-muted mb-3">Completed investigations with reports ready for your clinical review.</p>
+          {loadingOrders ? (
+            <div className="text-center py-6 text-xs text-mc-text-muted animate-pulse">Loading reports…</div>
+          ) : pendingReports.length === 0 ? (
+            <div className="text-center py-8 border border-dashed border-mc-border rounded-xl bg-mc-canvas/20">
+              <p className="text-xs text-mc-text-muted font-medium">No pending lab reports for review</p>
+            </div>
+          ) : (
+            <div className="space-y-2.5 max-h-[280px] overflow-y-auto pr-1">
+              {pendingReports.map((item) => (
+                <div key={item.id} className="p-3.5 rounded-xl border border-mc-border bg-mc-canvas/30 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 hover:bg-mc-canvas/50 transition-all shadow-sm">
+                  <div className="min-w-0">
+                    <span className="font-bold text-xs text-mc-text block">{item.patient_name}</span>
+                    <span className="text-[11px] text-mc-text-muted block mt-0.5">{item.test_name}</span>
+                    {item.report_url && (
+                      <a 
+                        href={item.report_url} 
+                        target="_blank" 
+                        rel="noreferrer"
+                        className="text-[10px] text-indigo-500 font-bold hover:underline inline-flex items-center gap-1 mt-1"
+                      >
+                        📄 Open PDF Report →
+                      </a>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => handleMarkReviewed(item.id)}
+                    className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold shadow-sm shrink-0 transition-colors"
+                  >
+                    ✓ Mark Reviewed
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </McCard>
       </div>
 
       {/* Availability status + Scheduling */}

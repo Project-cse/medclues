@@ -38,6 +38,7 @@ async def _run() -> None:
     from app.services.no_show_scheduler import start_no_show_scheduler
     from app.services.notification_outbox_worker import start_notification_outbox_worker
     from app.services.appointment_archive_worker import start_appointment_archive_worker
+    from app.services.order_monitoring_service import start_order_monitoring_worker
 
     await start_webhook_retry_worker()
     await start_community_archive_worker()
@@ -45,6 +46,8 @@ async def _run() -> None:
     await start_no_show_scheduler()
     await start_notification_outbox_worker()
     await start_appointment_archive_worker()
+    # Schedule order monitoring to run in the background (using create_task as it does not return like the other awaitable services that run indefinitely inside tasks)
+    asyncio.create_task(start_order_monitoring_worker())
 
     log.info("All workers scheduled — idle forever")
     while True:

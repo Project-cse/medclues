@@ -36,6 +36,7 @@ from app.routes import (
     search_routes,
     ops_routes,
     public_appointment_routes,
+    order_routing_routes,
 )
 from app.middleware.request_logging import RequestLoggingMiddleware
 from app.middleware.maintenance import MaintenanceModeMiddleware
@@ -190,6 +191,12 @@ async def lifespan(app: FastAPI):
                 log.info("Appointment archive worker scheduled")
             except Exception as _e:
                 log.warning("Appointment archive worker could not start: %s", _e)
+            try:
+                from app.services.order_monitoring_service import start_order_monitoring_worker
+                asyncio.create_task(start_order_monitoring_worker())
+                log.info("Order monitoring worker scheduled")
+            except Exception as _e:
+                log.warning("Order monitoring worker could not start: %s", _e)
         else:
             log.info("Background workers disabled in API (RUN_BACKGROUND_WORKERS_IN_API=false)")
         try:
@@ -359,6 +366,7 @@ app.include_router(dean_community_routes.router)
 app.include_router(search_routes.router)
 app.include_router(ops_routes.router)
 app.include_router(public_appointment_routes.router)
+app.include_router(order_routing_routes.router)
 
 # --- Real-time Socket.IO ---
 from app.services.socket_service import sio_app

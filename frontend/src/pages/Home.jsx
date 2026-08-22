@@ -1,17 +1,31 @@
 import React, { useState } from 'react'
+import { Link } from 'react-router-dom'
 import Header from '../components/Header'
 import SpecialityMenu from '../components/SpecialityMenu'
 import TopDoctors from '../components/TopDoctors'
 import HospitalTieUps from '../components/HospitalTieUps'
 import ContactLocation from '../components/ContactLocation'
 import AIChatbot from '../components/AIChatbot'
+import { useAppContext } from '../context/AppContext'
 
 const Home = () => {
   const [showChatbot, setShowChatbot] = useState(false)
+  const { token } = useAppContext()
 
   return (
     <div>
       <Header />
+      {token && (
+        <div className="my-6 rounded-2xl border border-cyan-100 bg-gradient-to-r from-cyan-50 to-blue-50 px-5 py-4 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-black text-slate-800">My Care Journey</p>
+            <p className="text-xs text-slate-500">See consultation, tests, reports, referrals, and follow-up in one place.</p>
+          </div>
+          <Link to="/my-care-journey" className="shrink-0 px-4 py-2 rounded-xl bg-cyan-600 text-white text-xs font-bold">
+            Open
+          </Link>
+        </div>
+      )}
       <SpecialityMenu />
       <TopDoctors />
       <HospitalTieUps />

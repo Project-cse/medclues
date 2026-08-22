@@ -15,6 +15,7 @@ const About = lazy(() => import('./pages/About'))
 const Contact = lazy(() => import('./pages/Contact'))
 const Appointment = lazy(() => import('./pages/Appointment'))
 const MyAppointments = lazy(() => import('./pages/MyAppointments'))
+const MyCareJourney = lazy(() => import('./pages/MyCareJourney'))
 const MyProfile = lazy(() => import('./pages/MyProfile'))
 const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'))
 const DataSecurity = lazy(() => import('./pages/DataSecurity'))
@@ -73,6 +74,7 @@ const App = () => {
             <Route path='/contact' element={<Contact />} />
             <Route path='/appointment/:docId' element={<Appointment />} />
             <Route path='/my-appointments' element={<MyAppointments />} />
+            <Route path='/my-care-journey' element={<MyCareJourney />} />
             <Route path='/my-profile' element={<MyProfile />} />
             <Route path='/privacy-policy' element={<PrivacyPolicy />} />
             <Route path='/data-security' element={<DataSecurity />} />

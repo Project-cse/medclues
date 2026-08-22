@@ -1014,7 +1014,12 @@ async def resolve_slot_for_booking(
         peek = await doctor_slot_model.get_slot_by_id(int(slot_id))
         if not peek:
             return None, "This slot is no longer available. Please choose another time."
-        if peek["doctor_ref"] != doctor_ref:
+        _, doc_num = normalize_doctor_ref(doctor_ref)
+        peek_doc_ref = str(peek.get("doctor_ref") or "")
+        peek_doc_num = int(peek.get("doctor_numeric_id") or 0)
+        if not peek_doc_num and peek_doc_ref:
+            _, peek_doc_num = normalize_doctor_ref(peek_doc_ref)
+        if peek_doc_ref != str(doctor_ref) and peek_doc_num != doc_num:
             return None, "This slot does not belong to the selected doctor."
         if peek["mode"] != mode:
             return None, "This slot does not match the selected consultation type."

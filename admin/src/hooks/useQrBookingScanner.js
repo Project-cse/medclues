@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import jsQR from 'jsqr'
-import { extractBookingId } from './bookingId'
+import { extractBookingId } from '../utils/bookingId'
 
 const SCAN_DEBOUNCE_MS = 1500
 

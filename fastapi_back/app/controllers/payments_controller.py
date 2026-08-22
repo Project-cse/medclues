@@ -144,17 +144,32 @@ async def create_order_for_existing_appointment(appointment_id: int):
             "notes": {"appointmentId": str(appointment["id"])},
             "payment_capture": 1,
         }
+        checkout_token = uuid.uuid4().hex
         if razorpay_mock_enabled():
+            order_id = f"order_mock_{uuid.uuid4().hex[:12]}"
             order = {
-                "id": f"order_mock_{uuid.uuid4().hex[:12]}",
+                "id": order_id,
                 "amount": amount_paise,
                 "currency": order_data["currency"],
                 "key_id": settings.RAZORPAY_KEY_ID or "rzp_test_mock",
             }
-            return {"success": True, "order": order}
-        order = await asyncio.to_thread(razorpay_client.order.create, data=order_data)
-        order["key_id"] = settings.RAZORPAY_KEY_ID
-        return {"success": True, "order": order}
+        else:
+            order = await asyncio.to_thread(razorpay_client.order.create, data=order_data)
+            order_id = order["id"]
+            order["key_id"] = settings.RAZORPAY_KEY_ID
+
+        await pt_model.create_pending(
+            razorpay_order_id=order_id,
+            amount_paise=amount_paise,
+            checkout_token=checkout_token,
+            currency=order_data["currency"],
+            doctor_name=(appointment.get("docData") or {}).get("name") or "Doctor",
+            appointment_id=str(appointment["id"]),
+            user_id=appointment.get("user_id") or appointment.get("userId"),
+            booking_metadata={"existing_appointment": True, "appointment_id": str(appointment["id"])},
+        )
+
+        return {"success": True, "order": order, "order_id": order_id}
     except Exception as e:
         return {"success": False, "message": str(e)}
 
@@ -586,7 +601,7 @@ async def _book_after_payment(user_id: int, pending: dict, razorpay_order_id: st
 
 
 async def verify_appointment_payment(
-    user_id: int,
+    user_id: int | None,
     razorpay_order_id: str,
     razorpay_payment_id: str,
     razorpay_signature: str,
@@ -602,18 +617,54 @@ async def verify_appointment_payment(
     if existing:
         return {
             "success": True,
-            "appointment_id": existing.get("appointment_id"),
-            "appointmentId": existing.get("appointment_id"),
+            "appointment_id": existing.get("appointment_id") or appointment_id,
+            "appointmentId": existing.get("appointment_id") or appointment_id,
             "message": "Payment already processed",
         }
 
+    target_apt_id = appointment_id
     pending = await _resolve_pending_order(razorpay_order_id)
+    if pending and not target_apt_id:
+        target_apt_id = pending.get("appointment_id")
+
+    if target_apt_id and str(target_apt_id).isdigit():
+        apt_id_int = int(target_apt_id)
+        try:
+            await appointment_model.update_appointment(
+                apt_id_int,
+                {
+                    "payment": True,
+                    "paymentStatus": "paid",
+                    "transactionId": razorpay_payment_id,
+                    "paymentMethod": "razorpay",
+                },
+            )
+            from app.services import appointment_lifecycle_service
+            await appointment_lifecycle_service.mark_paid_confirmed(apt_id_int)
+        except Exception as e:
+            log.warning("Could not mark appointment paid: %s", e)
+
+        paid_row = await pt_model.mark_paid(
+            razorpay_order_id,
+            razorpay_payment_id,
+            str(apt_id_int),
+        )
+        record = pt_model.row_to_payment_record(paid_row or {})
+        return {
+            "success": True,
+            "appointment_id": str(apt_id_int),
+            "appointmentId": apt_id_int,
+            "message": "Payment successful",
+            "payment": record,
+        }
+
     if not pending:
         return {"success": False, "message": "Order not found or already processed"}
-    if pending.get("user_id") != user_id:
+    if user_id is not None and pending.get("user_id") not in (None, user_id):
         return {"success": False, "message": "Unauthorized payment verification"}
 
-    return await _book_after_payment(user_id, pending, razorpay_order_id, razorpay_payment_id)
+    effective_uid = user_id if user_id is not None else (pending.get("user_id") or 0)
+    return await _book_after_payment(effective_uid, pending, razorpay_order_id, razorpay_payment_id)
 
 
 async def get_order_status(user_id: int, order_id: str):

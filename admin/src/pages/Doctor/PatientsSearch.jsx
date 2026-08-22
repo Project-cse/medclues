@@ -17,9 +17,10 @@ const Avatar = ({ name, image }) => {
 
 const inputCls = 'w-full px-3.5 py-2 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-doctor outline-none text-sm transition-colors'
 
-const StatusPill = ({ cancelled, isCompleted }) => {
+const StatusPill = ({ cancelled, isCompleted, lifecycleStatus }) => {
   if (cancelled) return <span className='inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-rose-50 text-rose-600'><span className='w-1 h-1 rounded-full bg-rose-500' />Cancelled</span>
   if (isCompleted) return <span className='inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-600'><span className='w-1 h-1 rounded-full bg-emerald-500' />Completed</span>
+  if ((lifecycleStatus || '').toUpperCase() === 'CONFIRMED') return <span className='inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-teal-50 text-teal-700'><span className='w-1 h-1 rounded-full bg-teal-500' />Confirmed</span>
   return <span className='inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-blue-50 text-blue-600'><span className='w-1 h-1 rounded-full bg-blue-500' />Upcoming</span>
 }
 
@@ -33,7 +34,7 @@ const TypePill = ({ mode }) => {
 }
 
 const PatientsSearch = () => {
-  const { dToken, backendUrl, appointments, getAppointments } = useContext(DoctorContext)
+  const { dToken, backendUrl, appointments, getAppointments, acceptAppointment, cancelAppointment } = useContext(DoctorContext)
   const { slotDateFormat } = useContext(AppContext)
   const navigate = useNavigate()
 
@@ -42,8 +43,52 @@ const PatientsSearch = () => {
   const [searchLoading, setSearchLoading] = useState(false)
   const [isSearching, setIsSearching]     = useState(false)
 
-  // Modal target
+  // History modal target
   const [historyTarget, setHistoryTarget] = useState(null) // { appointmentId?: string, userId?: string, name: string }
+
+  // Reject modal
+  const [rejectTarget, setRejectTarget] = useState(null)  // appointment object
+  const [rejectReason, setRejectReason] = useState('')
+  const [actionLoading, setActionLoading] = useState(null) // appointmentId being actioned
+
+  const handleAccept = async (apt) => {
+    setActionLoading(apt._id)
+    await acceptAppointment(apt._id)
+    setActionLoading(null)
+  }
+
+  const openReject = (apt) => {
+    setRejectTarget(apt)
+    setRejectReason('')
+  }
+
+  const handleRejectConfirm = async () => {
+    if (!rejectTarget) return
+    setActionLoading(rejectTarget._id)
+    try {
+      const { default: axios } = await import('axios')
+      const { data } = await axios.post(
+        `${backendUrl}/api/doctor/reject-appointment`,
+        { appointmentId: rejectTarget._id, reason: rejectReason || 'Doctor unavailable' },
+        { headers: { dtoken: dToken } }
+      )
+      if (data.success) {
+        const { toast } = await import('react-toastify')
+        toast.success('Appointment rejected')
+        getAppointments()
+      } else {
+        const { toast } = await import('react-toastify')
+        toast.error(data.message || 'Failed to reject')
+      }
+    } catch (e) {
+      const { toast } = await import('react-toastify')
+      toast.error(e.message)
+    } finally {
+      setActionLoading(null)
+      setRejectTarget(null)
+      setRejectReason('')
+    }
+  }
 
   // Load doctor's scheduled appointments on mount
   useEffect(() => {
@@ -264,15 +309,38 @@ const PatientsSearch = () => {
                             <p className='text-xs text-slate-400'>{a.slotTime || '—'}</p>
                           </td>
                           <td className='px-5 py-4'><TypePill mode={a.mode} /></td>
-                          <td className='px-5 py-4'><StatusPill cancelled={a.cancelled} isCompleted={a.isCompleted} /></td>
+                          <td className='px-5 py-4'><StatusPill cancelled={a.cancelled} isCompleted={a.isCompleted} lifecycleStatus={a.lifecycleStatus} /></td>
                           <td className='px-5 py-4 text-center'>
-                            <div className='flex items-center justify-center gap-2'>
-                              <button
-                                onClick={() => setHistoryTarget({ appointmentId: a._id, name: pn })}
-                                className='inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-doctor/10 text-doctor hover:bg-doctor hover:text-white text-xs font-bold transition-all shadow-sm'
-                              >
-                                📁 View History
-                              </button>
+                            <div className='flex items-center justify-center gap-2 flex-wrap'>
+                              {!a.cancelled && !a.isCompleted && (a.lifecycleStatus || '').toUpperCase() !== 'CONFIRMED' ? (
+                                <>
+                                  <button
+                                    id={`accept-apt-${a._id}`}
+                                    onClick={() => handleAccept(a)}
+                                    disabled={actionLoading === a._id}
+                                    title='Accept appointment'
+                                    className='inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold transition-all shadow-sm disabled:opacity-60'
+                                  >
+                                    {actionLoading === a._id ? '…' : '✓ Accept'}
+                                  </button>
+                                  <button
+                                    id={`reject-apt-${a._id}`}
+                                    onClick={() => openReject(a)}
+                                    disabled={actionLoading === a._id}
+                                    title='Reject appointment'
+                                    className='inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-rose-500 hover:bg-rose-600 text-white text-xs font-bold transition-all shadow-sm disabled:opacity-60'
+                                  >
+                                    ✕ Reject
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  onClick={() => setHistoryTarget({ appointmentId: a._id, name: pn })}
+                                  className='inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-doctor/10 text-doctor hover:bg-doctor hover:text-white text-xs font-bold transition-all shadow-sm'
+                                >
+                                  📁 View History
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -295,6 +363,50 @@ const PatientsSearch = () => {
           patientName={historyTarget.name}
           onClose={() => setHistoryTarget(null)}
         />
+      )}
+
+      {/* Reject reason modal */}
+      {rejectTarget && (
+        <div className='fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4'>
+          <div className='bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4'>
+            <div className='flex items-center justify-between'>
+              <h3 className='text-base font-bold text-slate-800'>Reject Appointment</h3>
+              <button onClick={() => setRejectTarget(null)} className='text-slate-400 hover:text-slate-600 p-1'>
+                <svg className='w-5 h-5' fill='none' stroke='currentColor' viewBox='0 0 24 24'><path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M6 18L18 6M6 6l12 12' /></svg>
+              </button>
+            </div>
+            <p className='text-sm text-slate-500'>
+              Rejecting appointment for <span className='font-semibold text-slate-700'>{rejectTarget?.userData?.name || rejectTarget?.actualPatient?.name || 'Patient'}</span>.
+              The patient will be notified by email.
+            </p>
+            <div>
+              <label className='block text-xs font-semibold text-slate-600 mb-1.5'>Reason for rejection <span className='font-normal text-slate-400'>(optional)</span></label>
+              <textarea
+                value={rejectReason}
+                onChange={e => setRejectReason(e.target.value)}
+                placeholder='e.g. Doctor unavailable, schedule conflict…'
+                rows={3}
+                className='w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-rose-400 outline-none text-sm resize-none transition-colors'
+              />
+            </div>
+            <div className='flex gap-2 pt-1'>
+              <button
+                onClick={() => setRejectTarget(null)}
+                className='flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition-colors'
+              >
+                Cancel
+              </button>
+              <button
+                id='confirm-reject-btn'
+                onClick={handleRejectConfirm}
+                disabled={actionLoading === rejectTarget._id}
+                className='flex-1 px-4 py-2.5 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-sm font-bold shadow-sm transition-colors disabled:opacity-60'
+              >
+                {actionLoading === rejectTarget._id ? 'Rejecting…' : 'Confirm Reject'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </AdminPageLayout>
   )

@@ -190,14 +190,15 @@ const Appointment = () => {
                 let slotEnd = new Date(currentDate)
                 slotEnd.setHours(slotType.end, 0, 0, 0)
 
-                // Only show slots for today if current time is before slot end
-                if (i === 0 && new Date() >= slotEnd) {
-                    return // Skip past slots for today
-                }
-
                 let slotTime = new Date(slotStart)
 
                 while (slotTime < slotEnd) {
+                    // For today (i === 0), skip individual 30-min slots that have already passed
+                    if (i === 0 && new Date() >= slotTime) {
+                        slotTime.setMinutes(slotTime.getMinutes() + 30);
+                        continue;
+                    }
+
                     let formattedTime = slotTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
                     let day = currentDate.getDate()
                     let month = currentDate.getMonth() + 1
@@ -365,7 +366,8 @@ const Appointment = () => {
                                 const verifyResponse = await axios.post(backendUrl + '/api/payments/appointment-verify', {
                                     razorpay_order_id: response.razorpay_order_id,
                                     razorpay_payment_id: response.razorpay_payment_id,
-                                    razorpay_signature: response.razorpay_signature
+                                    razorpay_signature: response.razorpay_signature,
+                                    appointment_id: appointmentId,
                                 }, {
                                     headers: { token }
                                 })
@@ -377,7 +379,9 @@ const Appointment = () => {
                                     })
                                     
                                     // Navigate to professional Digital Pass page
-                                    const date = docSlots[slotIndex][0].datetime
+                                    const date = (docSlots && docSlots[slotIndex] && docSlots[slotIndex][0]) ? docSlots[slotIndex][0].datetime : new Date()
+                                    const hospName = ticketData?.hospitalName || docInfo?.hospitalName || "MedClues Care Center"
+                                    const hospLoc = ticketData?.location || docInfo?.location || "Clinic"
                                     navigate('/appointment-confirmation', { 
                                         state: { 
                                             appointmentData: {
@@ -387,7 +391,7 @@ const Appointment = () => {
                                                 service: docInfo?.speciality || 'General Consultation',
                                                 date: date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
                                                 time: slotTime || 'N/A',
-                                                location: `${ticketData.hospitalName} - ${ticketData.location}`,
+                                                location: `${hospName} - ${hospLoc}`,
                                                 id: appointmentId
                                             }
                                         } 
@@ -644,13 +648,13 @@ const Appointment = () => {
                         autoClose: 5000 
                     });
                 } else if (paymentMethod === 'onlinePayment') {
-                    const onlineAppointmentId = data.appointmentId || data._id
+                    const onlineAppointmentId = data.appointmentId || data.appointment?._id || data.appointment?.id || data._id
                     if (!onlineAppointmentId) {
                         toast.error('Appointment ID not found. Please try again.')
                         setIsBooking(false)
                         return
                     }
-                    await processPayment(onlineAppointmentId.toString(), selectedPaymentGateway || 'razorpay')
+                    await processPayment(onlineAppointmentId.toString(), selectedPaymentGateway || 'razorpay', ticketData)
                 }
             } else {
                 const errorMessage = data?.message || 'Failed to book appointment. Please try again.'
@@ -660,7 +664,12 @@ const Appointment = () => {
             console.error('Booking error:', error)
             let errorMessage = 'Failed to book appointment. Please try again.'
             if (error.response) {
-                errorMessage = error.response.data?.message || error.response.data?.error || errorMessage
+                if (error.response.status === 401) {
+                    errorMessage = 'Please login to your account to book an appointment.'
+                    navigate('/login')
+                } else {
+                    errorMessage = error.response.data?.message || error.response.data?.error || errorMessage
+                }
             } else if (error.request) {
                 errorMessage = 'Network error. Please check your connection and try again.'
             } else {

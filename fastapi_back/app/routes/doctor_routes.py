@@ -28,6 +28,11 @@ async def appointment_reject(req: Request, doc_id: int = Depends(auth_doctor)):
     body = await req.json()
     return await doctor_controller.appointment_cancel(doc_id, body.get('appointmentId'), body.get('reason'))
 
+@router.post("/accept-appointment")
+async def appointment_accept(req: Request, doc_id: int = Depends(auth_doctor)):
+    body = await req.json()
+    return await doctor_controller.appointment_accept(doc_id, body.get('appointmentId'))
+
 @router.post("/complete-appointment")
 async def appointment_complete(req: Request, doc_id: int = Depends(auth_doctor)):
     body = await req.json()

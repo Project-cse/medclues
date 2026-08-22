@@ -138,6 +138,33 @@ async def ensure_doctor_slots_schema():
         ALTER TABLE appointments ADD COLUMN IF NOT EXISTS slot_id INTEGER
         """
     )
+    await ensure_slot_code_unique_index()
+
+
+async def ensure_slot_code_unique_index():
+    """ON CONFLICT (slot_code) requires a real unique index, not only CREATE TABLE IF NOT EXISTS."""
+    try:
+        await db.execute("ALTER TABLE doctor_slots ALTER COLUMN slot_code TYPE VARCHAR(80)")
+    except Exception:
+        pass
+    try:
+        await db.execute(
+            """
+            DELETE FROM doctor_slots a
+            USING doctor_slots b
+            WHERE a.id > b.id
+              AND a.slot_code IS NOT NULL
+              AND a.slot_code = b.slot_code
+            """
+        )
+    except Exception:
+        pass
+    await db.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_doctor_slots_slot_code_unique
+            ON doctor_slots (slot_code)
+        """
+    )
 
 
 async def ensure_appointment_slot_id_column():
@@ -201,20 +228,36 @@ async def insert_slot(row: Dict[str, Any]):
             slot_code, doctor_ref, doctor_numeric_id, slot_date,
             start_time, end_time, mode, slot_type, status
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'available')
-        ON CONFLICT DO NOTHING
+        ON CONFLICT (slot_code) DO NOTHING
         RETURNING *
     """
-    return await db.fetch_row(
-        sql,
-        row["slot_code"],
-        row["doctor_ref"],
-        row["doctor_numeric_id"],
-        row["slot_date"],
-        row["start_time"],
-        row["end_time"],
-        row["mode"],
-        row["slot_type"],
-    )
+    try:
+        return await db.fetch_row(
+            sql,
+            row["slot_code"],
+            row["doctor_ref"],
+            row["doctor_numeric_id"],
+            row["slot_date"],
+            row["start_time"],
+            row["end_time"],
+            row["mode"],
+            row["slot_type"],
+        )
+    except Exception as exc:
+        if "no unique or exclusion constraint" not in str(exc).lower():
+            raise
+        await ensure_slot_code_unique_index()
+        return await db.fetch_row(
+            sql,
+            row["slot_code"],
+            row["doctor_ref"],
+            row["doctor_numeric_id"],
+            row["slot_date"],
+            row["start_time"],
+            row["end_time"],
+            row["mode"],
+            row["slot_type"],
+        )
 
 
 async def insert_slots_bulk(rows: List[Dict[str, Any]]):
@@ -225,7 +268,7 @@ async def insert_slots_bulk(rows: List[Dict[str, Any]]):
             slot_code, doctor_ref, doctor_numeric_id, slot_date,
             start_time, end_time, mode, slot_type, status
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'available')
-        ON CONFLICT DO NOTHING
+        ON CONFLICT (slot_code) DO NOTHING
     """
     args = [
         (
@@ -240,7 +283,13 @@ async def insert_slots_bulk(rows: List[Dict[str, Any]]):
         )
         for row in rows
     ]
-    await db.executemany(sql, args)
+    try:
+        await db.executemany(sql, args)
+    except Exception as exc:
+        if "no unique or exclusion constraint" not in str(exc).lower():
+            raise
+        await ensure_slot_code_unique_index()
+        await db.executemany(sql, args)
 
 
 async def get_offline_block_summary(

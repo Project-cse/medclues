@@ -191,6 +191,56 @@ async def appointment_cancel(doc_id: int, appointment_id: int, reason: Optional[
     except Exception as e:
         return {"success": False, "message": str(e)}
 
+# API to accept (confirm) appointment
+async def appointment_accept(doc_id: int, appointment_id: int):
+    try:
+        appointment = await appointment_model.get_appointment_by_id(appointment_id)
+        if not appointment:
+            return {"success": False, "message": "Appointment not found"}
+        if appointment['doctor_id'] != doc_id:
+            return {"success": False, "message": "Unauthorized"}
+        if appointment.get('cancelled'):
+            return {"success": False, "message": "Cannot accept a cancelled appointment"}
+        if appointment.get('is_completed'):
+            return {"success": False, "message": "Appointment already completed"}
+
+        # Set lifecycle_status = 'CONFIRMED' — this column has no CHECK constraint.
+        # Do NOT update `status` — it is constrained to a fixed enum that does not
+        # include 'confirmed'. The lifecycle_status column is the correct field for
+        # workflow state (BOOKED → CONFIRMED → IN_QUEUE → …).
+        await db.execute(
+            """
+            UPDATE appointments
+            SET lifecycle_status = 'CONFIRMED',
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = $1
+            """,
+            int(appointment_id),
+        )
+
+        # Send confirmation email (best-effort, never fail the accept action)
+        try:
+            user = await user_model.get_user_by_id(appointment['user_id'])
+            if user:
+                await email_service.send_appointment_confirmation(
+                    user['email'],
+                    {
+                        "patientName": user.get('name', 'Patient'),
+                        "doctorName": appointment.get('doctor_data', {}).get('name', 'Doctor'),
+                        "date": str(appointment.get('slot_date', '')).replace('_', '/'),
+                        "time": appointment.get('slot_time', ''),
+                        "tokenNumber": appointment.get('token_number', 'N/A'),
+                        "publicId": appointment.get("public_id") or None,
+                        "bookingId": appointment.get("booking_id") or None,
+                    },
+                )
+        except Exception as e:
+            print(f"[WARNING] Accept confirmation email failed: {e}")
+
+        return {"success": True, "message": "Appointment confirmed"}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
 # API to mark appointment completed
 async def appointment_complete(doc_id: int, appointment_id: int, body: dict | None = None):
     try:

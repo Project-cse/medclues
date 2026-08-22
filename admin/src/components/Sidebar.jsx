@@ -13,6 +13,10 @@ const RECEPTION_LINKS = [
   { to: '/reception-today', label: "Today's Ops", match: ['/reception-today', '/reception-checkin', '/reception-walkin', '/reception-queue', '/reception-noshows', '/reception-grace'], icon: 'clipboard' },
   { to: '/reception-patients', label: 'Patients', match: ['/reception-patients', '/reception-followups'], icon: 'patients' },
   { to: '/reception-online', label: 'Appointments', match: ['/reception-online'], icon: 'calendar' },
+  { to: '/reception-lab', label: 'Lab Orders', match: ['/reception-lab'], icon: 'reports' },
+  { to: '/reception-referrals', label: 'Referrals', match: ['/reception-referrals'], icon: 'clipboard' },
+  { to: '/reception-followup-queue', label: 'Followup Queue', match: ['/reception-followup-queue'], icon: 'calendar' },
+  { to: '/doctor-patient-journey', label: 'AI Patient Journey', match: ['/doctor-patient-journey'], icon: 'reports' },
   { to: '/reception-er-dispatch', label: 'ER Dispatch', match: ['/reception-er-dispatch'], icon: 'ambulance' },
   { to: '/reception-payments', label: 'Billing', match: ['/reception-payments', '/reception-refunds'], icon: 'billing' },
   { to: '/reception-reports', label: 'Reports', match: ['/reception-reports'], icon: 'reports' },
@@ -233,6 +237,9 @@ const Sidebar = () => {
             </DeskNav>
             <DeskNav to='/doctor-patients' onClick={closeSidebar} active={pathActive('/doctor-patients')}>
               <Icon d='M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' /><p className='text-sm'>Patients</p>
+            </DeskNav>
+            <DeskNav to='/doctor-patient-journey' onClick={closeSidebar} active={pathActive('/doctor-patient-journey')}>
+              <Icon d='M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' /><p className='text-sm'>AI Patient Journey</p>
             </DeskNav>
             <DeskNav to='/doctor-community' onClick={closeSidebar} active={pathActive('/doctor-community')}>
               <Icon d='M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z' /><p className='text-sm'>Health Community</p>
