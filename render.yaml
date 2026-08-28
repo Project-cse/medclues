@@ -1,20 +1,21 @@
+# Render Blueprint — FastAPI backend (matches local: uvicorn main:app --port 5000)
+# Dashboard: connect repo → rootDir fastapi_back, or use this file via Blueprint sync.
+
 services:
   - type: web
-    name: medichain-backend
-    env: node
-    rootDir: backend
-    buildCommand: npm ci --prefer-offline --no-audit
-    startCommand: npm start
+    name: medclues-api
+    runtime: python
+    rootDir: fastapi_back
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
     envVars:
-      - key: NODE_ENV
-        value: production
+      - key: PYTHON_VERSION
+        value: "3.11.9"
       - key: PORT
-        value: 4000
-      # Add your environment variables in Render Dashboard:
-      # MONGODB_URI, JWT_SECRET, ADMIN_JWT_SECRET, DOCTOR_JWT_SECRET
-      # CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET
-      # EMAIL_USER, EMAIL_APP_PASSWORD
-      # RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET
-      # FRONTEND_URL, ADMIN_URL
-      # etc.
-
+        value: 5000
+      - key: DEBUG
+        value: "false"
+      # Set in Render Dashboard (never commit secrets):
+      # DATABASE_URL, JWT_SECRET (32+ chars), CORS_ALLOWED_ORIGINS,
+      # CLOUDINARY_*, RAZORPAY_*, BREVO/SMTP, AGORA_*, TELEGRAM_BOT_*
