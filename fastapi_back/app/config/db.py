@@ -52,17 +52,18 @@ class Database:
         min_size = int(getattr(settings, "DB_POOL_MIN", 1) or 1)
         max_size = int(getattr(settings, "DB_POOL_MAX", 8) or 8)
         if neon:
+            # Neon serverless + pooler: keep small, but allow a few concurrent HTTP reads.
             min_size = 1
-            max_size = max(2, min(max_size, 4))
+            max_size = max(2, min(max_size, 6))
         else:
             min_size = max(1, min_size)
             max_size = max(min_size + 1, max_size)
         return {
             "min_size": min_size,
             "max_size": max_size,
-            "timeout": 8,
+            "timeout": 10,
             "command_timeout": 12,
-            "max_inactive_connection_lifetime": 240,
+            "max_inactive_connection_lifetime": 180 if neon else 240,
             "max_queries": 50000,
             "statement_cache_size": 0 if neon else 100,
         }
@@ -163,7 +164,7 @@ class Database:
                     ok = await self.connect()
                     if not ok or not self.pool:
                         raise ConnectionError("PostgreSQL is unavailable")
-                async with self.pool.acquire(timeout=4) as connection:
+                async with self.pool.acquire(timeout=6) as connection:
                     if op == "fetch":
                         return await connection.fetch(sql, *args)
                     if op == "execute":

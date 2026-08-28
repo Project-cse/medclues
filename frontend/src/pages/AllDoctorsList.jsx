@@ -23,12 +23,10 @@ const AllDoctorsList = () => {
   const [showBookingModal, setShowBookingModal] = useState(false)
   const itemsPerPage = 12
 
-  // Fetch fresh doctors list on mount to guarantee real-time propagation of any changes
+  // Reuse context data; only refetch if stale (handled inside getDoctosData).
   useEffect(() => {
-    if (typeof getDoctosData === 'function') {
-      getDoctosData()
-    }
-  }, [])
+    getDoctosData?.()
+  }, [getDoctosData])
 
   // Handle doctor click for booking
   const handleDoctorClick = (doctor) => {

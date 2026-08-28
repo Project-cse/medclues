@@ -6,8 +6,11 @@ from app.services.patient_journey_service import (
     _investigation_labels,
     _pharmacy_label,
     _referral_labels,
+    _care_tones,
+    _patient_care_display,
     finding_still_valid,
     _journey_status,
+    _pending_severity,
     _dedupe_findings,
 )
 
@@ -38,6 +41,91 @@ def test_referral_appointment_pending_without_date():
     assert spec2 == "SCHEDULED"
 
 
+def test_referral_specialist_appointment_lifecycle():
+    ref = {"status": "APPOINTMENT_BOOKED", "specialist_appointment_id": 99}
+    _, spec = _referral_labels(ref, {"lifecycle_status": "BOOKED", "is_completed": False})
+    assert spec == "AWAITING_CONFIRMATION"
+    _, spec2 = _referral_labels(ref, {"lifecycle_status": "CONFIRMED", "is_completed": False})
+    assert spec2 == "CONFIRMED"
+    _, spec3 = _referral_labels(ref, {"lifecycle_status": "COMPLETED", "is_completed": True})
+    assert spec3 == "COMPLETED"
+    _, spec4 = _referral_labels(ref, {"lifecycle_status": "MISSED", "is_completed": False})
+    assert spec4 == "MISSED"
+
+
+def test_journey_upcoming_when_referral_accepted_booking_pending():
+    journey = {
+        "consultation": "COMPLETED",
+        "investigation": "COMPLETED",
+        "report": "REVIEWED",
+        "doctor_review": "COMPLETED",
+        "referral": "ACCEPTED",
+        "specialist_appointment": "APPOINTMENT_PENDING",
+        "followup": "UPCOMING",
+        "pharmacy": "NONE",
+        "doctor_accepted": "COMPLETED",
+    }
+    assert _pending_severity(journey, []) == "soft"
+    assert _journey_status(journey, []) == "UPCOMING"
+    medium_finding = [{"priority": "MEDIUM", "finding_type": "REFERRAL_APPOINTMENT_PENDING"}]
+    assert _journey_status(journey, medium_finding) == "UPCOMING"
+
+
+def test_care_tones_specialist_appointment_pending_is_warn():
+    journey = {
+        "referral": "ACCEPTED",
+        "specialist_appointment": "APPOINTMENT_PENDING",
+    }
+    care = _patient_care_display(
+        {
+            **journey,
+            "registration": "COMPLETED",
+            "problem": "REPORTED",
+            "doctor_accepted": "COMPLETED",
+            "consultation": "COMPLETED",
+            "investigation": "COMPLETED",
+            "report": "REVIEWED",
+            "doctor_review": "COMPLETED",
+            "pharmacy": "NONE",
+            "followup": "UPCOMING",
+        },
+        None,
+        {"specialist_name": "Dr. Arijit Singh", "status": "ACCEPTED"},
+        None,
+        {},
+        {"name": "Patient"},
+    )
+    tones = _care_tones(care, journey)
+    assert tones["specialist_appointment"] == "warn"
+    assert tones["referral"] == "ok"
+
+
+def test_care_tones_pharmacy_not_ordered_is_upcoming():
+    journey = {"pharmacy": "NONE", "referral": "NONE"}
+    care = _patient_care_display(
+        {
+            **journey,
+            "registration": "COMPLETED",
+            "problem": "REPORTED",
+            "doctor_accepted": "COMPLETED",
+            "consultation": "COMPLETED",
+            "investigation": "COMPLETED",
+            "report": "REVIEWED",
+            "doctor_review": "COMPLETED",
+            "specialist_appointment": "NONE",
+            "followup": "NONE",
+        },
+        None,
+        None,
+        None,
+        {},
+        {"name": "Patient"},
+    )
+    tones = _care_tones(care, journey)
+    assert care["pharmacy"] == "Not yet ordered"
+    assert tones["pharmacy"] == "warn"
+
+
 def test_followup_upcoming_tomorrow():
     tomorrow = date.today() + timedelta(days=1)
     assert _followup_label({"status": "SCHEDULED", "due_date": tomorrow}, today=date.today()) == "UPCOMING"
@@ -63,11 +151,21 @@ def test_journey_attention_when_report_pending():
         "referral": "ACCEPTED",
         "specialist_appointment": "APPOINTMENT_PENDING",
         "followup": "UPCOMING",
+        "doctor_review": "PENDING",
     }
     findings = [{"priority": "HIGH", "message": "report"}]
     assert _journey_status(journey, findings) == "ATTENTION_REQUIRED"
     assert _journey_status(journey, []) == "ATTENTION_REQUIRED"
-    assert _journey_status({**journey, "report": "REVIEWED", "specialist_appointment": "CONFIRMED", "followup": "COMPLETED"}, []) == "ON_TRACK"
+    assert _journey_status(
+        {
+            **journey,
+            "report": "REVIEWED",
+            "doctor_review": "COMPLETED",
+            "specialist_appointment": "CONFIRMED",
+            "followup": "COMPLETED",
+        },
+        [],
+    ) == "ON_TRACK"
 
 
 def test_dedupe_findings_by_type_and_entity():

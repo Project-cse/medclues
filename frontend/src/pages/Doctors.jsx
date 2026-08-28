@@ -38,14 +38,11 @@ const Doctors = () => {
   const { speciality } = useParams();
   const [searchParams] = useSearchParams();
 
-  const { backendUrl, token, getDoctosData } = useContext(AppContext)
+  const { backendUrl, token } = useContext(AppContext)
 
-  // Clear cache and fetch fresh doctors data on mount to guarantee real-time propagation
+  // Clear nearby-hospital cache only — doctors already load via AppContext (5 min stale).
   useEffect(() => {
     sessionStorage.removeItem('nearbyHospitalsDoctorsCache');
-    if (typeof getDoctosData === 'function') {
-      getDoctosData()
-    }
   }, [])
 
   // Helper to generate the same avatar style used in AppContext for any ad‑hoc doctor objects

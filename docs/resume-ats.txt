@@ -1,0 +1,50 @@
+[YOUR FULL NAME]
+[City, State]
+[Phone]
+[Email]
+LinkedIn: [LinkedIn URL]
+GitHub: [GitHub URL]
+
+PROFESSIONAL SUMMARY
+Fresher Full Stack Developer with hands-on experience building healthcare software using React, FastAPI, and PostgreSQL. Built MEDCLUES, an AI Healthcare Patient Journey and Follow-Up Coordination Agent that coordinates appointments, referrals, investigations, and follow-ups using a multi-agent architecture with human review before clinically significant actions. Seeking an entry-level Full Stack, Backend, or AI-assisted product engineering role.
+
+TECHNICAL SKILLS
+Languages: Python, JavaScript, SQL, HTML, CSS
+Frameworks / Libraries: FastAPI, React.js, Vite, Tailwind CSS, Axios
+Databases / Caching: PostgreSQL, Neon, Redis
+Tools / Platforms: Git, GitHub, Uvicorn, REST APIs, JWT Authentication, Socket.IO
+Concepts: Multi-Agent AI, Patient Journey Coordination, Human-in-the-Loop Workflows, Caching, Authentication, Real-time Updates
+
+PROJECTS
+
+MEDCLUES – AI Healthcare Patient Journey & Follow-Up Coordination Agent
+Tech Stack: React.js, Vite, FastAPI, PostgreSQL, Redis, JWT, Socket.IO
+Duration: [Mon YYYY] – Present
+- Designed and developed a healthcare coordination platform that manages authorized administrative information across appointments, referrals, investigations, pharmacy, and follow-ups.
+- Implemented a multi-agent coordination layer (Appointment, Investigation, Referral, Pharmacy, Follow-up) with an orchestrator to detect missing actions and overdue follow-ups from operational data.
+- Built a patient journey timeline for patients and staff with status signals such as On Track, Overdue, and Action Needed.
+- Created grounded staff summaries from database evidence and added human review (approve/reject) before clinically significant coordinated actions.
+- Developed REST APIs with FastAPI and JWT authentication; used PostgreSQL for persistence and Redis for caching and session-related performance.
+- Delivered role-based portals for patient, doctor, and reception workflows including appointment booking, referral tracking, and investigation monitoring.
+
+[Project 2 Title]
+Tech Stack: [Tech1], [Tech2], [Tech3]
+Duration: [Mon YYYY] – [Mon YYYY]
+- [Action verb] [what you built] using [technologies], resulting in [outcome].
+- [Action verb] [feature or problem solved] with [approach].
+- [Action verb] [integration, performance, or UX improvement].
+
+EDUCATION
+[Degree, e.g., B.Tech in Computer Science and Engineering]
+[College / University Name], [City, State]
+Graduation Year: [Graduation Year]
+CGPA: [CGPA if 7.5+ / otherwise remove this line]
+Relevant Coursework: Data Structures, Database Management Systems, Web Technologies, Operating Systems, Software Engineering
+
+CERTIFICATIONS
+- [Certification Name] – [Issuer], [Year]
+- [Certification Name] – [Issuer], [Year]
+
+ACHIEVEMENTS
+- [Achievement, hackathon, open-source, or academic recognition]
+- [Achievement]

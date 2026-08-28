@@ -19,10 +19,31 @@ const Avatar = ({ name, image }) => {
 const inputCls = 'w-full px-3.5 py-2 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-doctor outline-none text-sm transition-colors'
 
 const StatusPill = ({ cancelled, isCompleted, lifecycleStatus }) => {
-  if (cancelled) return <span className='inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-rose-50 text-rose-600'><span className='w-1 h-1 rounded-full bg-rose-500' />Cancelled</span>
-  if (isCompleted) return <span className='inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-600'><span className='w-1 h-1 rounded-full bg-emerald-500' />Completed</span>
-  if ((lifecycleStatus || '').toUpperCase() === 'CONFIRMED') return <span className='inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-teal-50 text-teal-700'><span className='w-1 h-1 rounded-full bg-teal-500' />Confirmed</span>
+  const ls = (lifecycleStatus || '').toUpperCase()
+  if (cancelled || ls === 'CANCELLED') return <span className='inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-rose-50 text-rose-600'><span className='w-1 h-1 rounded-full bg-rose-500' />Cancelled</span>
+  if (isCompleted || ls === 'COMPLETED' || ls === 'CLOSED') return <span className='inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-600'><span className='w-1 h-1 rounded-full bg-emerald-500' />Completed</span>
+  if (ls === 'CONFIRMED') return <span className='inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-teal-50 text-teal-700'><span className='w-1 h-1 rounded-full bg-teal-500' />Confirmed</span>
+  if (ls === 'MISSED' || ls === 'NO_SHOW') return <span className='inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-700'><span className='w-1 h-1 rounded-full bg-amber-500' />Missed</span>
+  if (ls === 'IN_PROGRESS' || ls === 'CHECKED_IN' || ls === 'IN_QUEUE') return <span className='inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-violet-50 text-violet-700'><span className='w-1 h-1 rounded-full bg-violet-500' />In progress</span>
+  if (ls === 'BOOKED') return <span className='inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-blue-50 text-blue-600'><span className='w-1 h-1 rounded-full bg-blue-500' />Awaiting accept</span>
   return <span className='inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-blue-50 text-blue-600'><span className='w-1 h-1 rounded-full bg-blue-500' />Upcoming</span>
+}
+
+const parseSlotDateMs = (slotDate) => {
+  if (!slotDate) return 0
+  const parts = String(slotDate).split('_')
+  if (parts.length === 3) {
+    const [d, m, y] = parts
+    const ts = Date.parse(`${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`)
+    return Number.isNaN(ts) ? 0 : ts
+  }
+  const ts = Date.parse(String(slotDate))
+  return Number.isNaN(ts) ? 0 : ts
+}
+
+const canAcceptReject = (apt) => {
+  const ls = (apt.lifecycleStatus || 'BOOKED').toUpperCase()
+  return !apt.cancelled && !apt.isCompleted && ls === 'BOOKED'
 }
 
 const TypePill = ({ mode }) => {
@@ -35,7 +56,7 @@ const TypePill = ({ mode }) => {
 }
 
 const PatientsSearch = () => {
-  const { dToken, backendUrl, appointments, getAppointments, acceptAppointment, cancelAppointment } = useContext(DoctorContext)
+  const { dToken, backendUrl, appointments, getAppointments, acceptAppointment, rejectAppointment } = useContext(DoctorContext)
   const { slotDateFormat } = useContext(AppContext)
   const navigate = useNavigate()
 
@@ -55,8 +76,9 @@ const PatientsSearch = () => {
 
   const handleAccept = async (apt) => {
     setActionLoading(apt._id)
-    await acceptAppointment(apt._id)
+    const ok = await acceptAppointment(apt._id)
     setActionLoading(null)
+    if (!ok) return
   }
 
   const openReject = (apt) => {
@@ -67,29 +89,11 @@ const PatientsSearch = () => {
   const handleRejectConfirm = async () => {
     if (!rejectTarget) return
     setActionLoading(rejectTarget._id)
-    try {
-      const { default: axios } = await import('axios')
-      const { data } = await axios.post(
-        `${backendUrl}/api/doctor/reject-appointment`,
-        { appointmentId: rejectTarget._id, reason: rejectReason || 'Doctor unavailable' },
-        { headers: { dtoken: dToken } }
-      )
-      if (data.success) {
-        const { toast } = await import('react-toastify')
-        toast.success('Appointment rejected')
-        getAppointments()
-      } else {
-        const { toast } = await import('react-toastify')
-        toast.error(data.message || 'Failed to reject')
-      }
-    } catch (e) {
-      const { toast } = await import('react-toastify')
-      toast.error(e.message)
-    } finally {
-      setActionLoading(null)
-      setRejectTarget(null)
-      setRejectReason('')
-    }
+    const ok = await rejectAppointment(rejectTarget._id, rejectReason || 'Doctor unavailable')
+    setActionLoading(null)
+    setRejectTarget(null)
+    setRejectReason('')
+    if (!ok) return
   }
 
   // Load doctor's scheduled appointments on mount
@@ -136,13 +140,13 @@ const PatientsSearch = () => {
   const patientBookings = useMemo(() => {
     const map = {}
     appointments.forEach(apt => {
-      const pName = apt.userData?.name || apt.actualPatient?.name || 'Patient'
-      const key = apt.user_id || pName
-      if (!map[key] || new Date(apt.slotDate) > new Date(map[key].slotDate)) {
+      const key = apt.userId || apt.userData?.name || apt.actualPatient?.name || apt._id
+      const existing = map[key]
+      if (!existing || parseSlotDateMs(apt.slotDate) > parseSlotDateMs(existing.slotDate)) {
         map[key] = apt
       }
     })
-    return Object.values(map).sort((a, b) => new Date(b.slotDate) - new Date(a.slotDate))
+    return Object.values(map).sort((a, b) => parseSlotDateMs(b.slotDate) - parseSlotDateMs(a.slotDate))
   }, [appointments])
 
   return (
@@ -314,7 +318,7 @@ const PatientsSearch = () => {
                           <td className='px-5 py-4'><StatusPill cancelled={a.cancelled} isCompleted={a.isCompleted} lifecycleStatus={a.lifecycleStatus} /></td>
                           <td className='px-5 py-4 text-center'>
                             <div className='flex items-center justify-center gap-2 flex-wrap'>
-                              {!a.cancelled && !a.isCompleted && (a.lifecycleStatus || '').toUpperCase() !== 'CONFIRMED' ? (
+                              {canAcceptReject(a) ? (
                                 <>
                                   <button
                                     id={`accept-apt-${a._id}`}

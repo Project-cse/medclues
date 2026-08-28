@@ -434,6 +434,17 @@ async def complete_specialist_referral(referral_id: int, doc_id: int = Depends(a
         )
 
     asyncio.create_task(run_order_monitoring_cycle())
+    try:
+        from app.services.patient_journey_service import archive_episode_snapshot, invalidate_patient_journey_cache
+        import asyncio as _asyncio
+
+        pid = int(order["patient_id"])
+        spec_appt_id = order.get("specialist_appointment_id")
+        if spec_appt_id:
+            _asyncio.create_task(archive_episode_snapshot(pid, int(spec_appt_id)))
+        invalidate_patient_journey_cache(pid)
+    except Exception:
+        pass
     return {"success": True, "referral": dict(updated) if updated else None}
 
 

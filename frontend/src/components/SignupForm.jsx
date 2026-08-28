@@ -5,6 +5,7 @@ import { toast } from 'react-toastify'
 import { useNavigate, Link } from 'react-router-dom'
 import { signInWithPopup } from 'firebase/auth'
 import { auth, googleProvider, appleProvider, facebookProvider } from '../firebase'
+import { savePatientSession } from '../utils/patientAuth'
 
 const quotes = [
   {
@@ -137,7 +138,7 @@ export function SignupForm({ className, ...props }) {
         bloodGroup: bloodGroup || undefined
       })
       if (data.success) {
-        localStorage.setItem('token', data.token)
+        savePatientSession(data)
         setToken(data.token)
         toast.success('Account created successfully!')
         navigate('/')
@@ -176,7 +177,7 @@ export function SignupForm({ className, ...props }) {
         })
 
         if (data.success) {
-          localStorage.setItem('token', data.token)
+          savePatientSession(data)
           setToken(data.token)
           toast.success('Signed up with Google successfully!')
           navigate('/')
@@ -240,7 +241,7 @@ export function SignupForm({ className, ...props }) {
         })
 
         if (data.success) {
-          localStorage.setItem('token', data.token)
+          savePatientSession(data)
           setToken(data.token)
           toast.success('Signed up with Apple successfully!')
           navigate('/')
@@ -282,7 +283,7 @@ export function SignupForm({ className, ...props }) {
         })
 
         if (data.success) {
-          localStorage.setItem('token', data.token)
+          savePatientSession(data)
           setToken(data.token)
           toast.success('Signed up with Meta successfully!')
           navigate('/')

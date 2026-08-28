@@ -9,6 +9,7 @@ TTL_DOCTOR_PROFILE = 3600          # 1 hour
 TTL_DOCTOR_LIST = 600              # 10 minutes
 TTL_HOSPITAL_PROFILE = 12 * 3600   # 12 hours
 TTL_HOSPITAL_LIST = 600
+TTL_HOSPITAL_DOCTORS_PUBLIC = 600
 TTL_SPECIALTY_LIST = 24 * 3600     # 24 hours
 TTL_CONFIG = 24 * 3600
 TTL_COMMUNITY_CATEGORIES = 3600
@@ -52,6 +53,11 @@ def hospital(hospital_id: int | str) -> str:
 def hospital_list(limit: int, offset: int, q: str) -> str:
     hq = (q or "").strip().lower()[:64]
     return f"hospital:list:{limit}:{offset}:{hq}"
+
+
+def hospital_doctors_public(limit: int, offset: int, q: str) -> str:
+    hq = (q or "").strip().lower()[:64]
+    return f"hospital:doctors:public:{limit}:{offset}:{hq}"
 
 
 def specialty_list() -> str:

@@ -494,8 +494,18 @@ const Appointment = () => {
             return
         }
 
+        const activeSlot =
+            docSlots[slotIndex].find((s) => s.time === slotTime) ||
+            docSlots[slotIndex].find((s) => s.slot_id && s.slot_id === selectedSlotMeta?.slot_id)
+
+        if (activeSlot?.available === false) {
+            toast.error('This slot time has already passed. Please choose another time.')
+            setIsBooking(false)
+            return
+        }
+
         setIsBooking(true)
-        const selectedSlot = docSlots[slotIndex][0]
+        const selectedSlot = activeSlot || docSlots[slotIndex][0]
 
         if (!selectedSlot || !selectedSlot.datetime) {
             toast.error('Invalid date. Please refresh and try again.')
@@ -557,6 +567,13 @@ const Appointment = () => {
             })
 
             if (data && data.success) {
+                try {
+                    sessionStorage.removeItem('myCareJourneyCache_v3')
+                    sessionStorage.removeItem('myCareJourneyCache_v2')
+                    sessionStorage.removeItem('myCareJourneyCache')
+                } catch {
+                    // ignore
+                }
                 invalidateDoctorSlots(docId)
                 // Refresh doctors data to update slot counts
                 if (typeof getDoctosData === 'function') await getDoctosData()
@@ -1094,7 +1111,9 @@ const Appointment = () => {
                                         <button
                                             key={idx}
                                             type="button"
+                                            disabled={s.available === false}
                                             onClick={() => {
+                                                if (s.available === false) return
                                                 if (slotTime === s.time) {
                                                     setSlotTime('')
                                                     setSelectedSlotMeta(null)
@@ -1108,7 +1127,9 @@ const Appointment = () => {
                                                 }
                                             }}
                                             className={`flex items-center justify-between px-6 py-4 rounded-xl border-2 transition-all duration-200 ${
-                                                slotTime === s.time
+                                                s.available === false
+                                                    ? 'bg-gray-100 border-gray-300 text-gray-400 cursor-not-allowed opacity-60'
+                                                    : slotTime === s.time
                                                     ? 'bg-blue-600 text-white border-blue-600 shadow-lg'
                                                     : 'bg-white border-blue-300 text-blue-700 hover:bg-blue-50'
                                             }`}
@@ -1116,6 +1137,7 @@ const Appointment = () => {
                                             <div className='text-left'>
                                                 <div className='font-bold text-base'>
                                                     {s.slot_type === 'evening_opd' ? 'Evening OPD' : 'Morning OPD'}
+                                                    {s.available === false ? ' (Closed)' : ''}
                                                 </div>
                                                 <div className='text-sm opacity-90'>{s.display || s.time}</div>
                                             </div>

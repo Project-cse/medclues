@@ -1135,6 +1135,12 @@ async def book_appointment(user_id: int, req_body: dict, prescription_file: Opti
         except Exception as push_err:
             print(f"[WARNING] FCM booking push: {push_err}")
 
+        try:
+            from app.services.patient_journey_service import invalidate_patient_journey_cache
+            invalidate_patient_journey_cache(user_id)
+        except Exception as cache_err:
+            print(f"[WARNING] Journey cache invalidation: {cache_err}")
+
         return {
             "success": True,
             "message": "Appointment Booked",

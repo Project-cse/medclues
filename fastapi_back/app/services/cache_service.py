@@ -1,7 +1,12 @@
-"""Cache-aside helpers over optional Redis (graceful no-op when REDIS_URL unset)."""
+"""Cache-aside helpers over optional Redis + in-process TTL fallback.
+
+PostgreSQL remains source of truth. When REDIS_URL is unset or Redis is down,
+an in-process dict keeps public list endpoints fast across requests.
+"""
 from __future__ import annotations
 
 import json
+import time
 from typing import Any, Awaitable, Callable, Optional
 
 from app.services import cache_keys as keys
@@ -13,6 +18,10 @@ log = get_logger(__name__)
 _hits = 0
 _misses = 0
 
+# key -> (expires_at_epoch, value)
+_LOCAL: dict[str, tuple[float, Any]] = {}
+_LOCAL_MAX_KEYS = 256
+
 
 def stats() -> dict:
     total = _hits + _misses
@@ -20,13 +29,49 @@ def stats() -> dict:
         "hits": _hits,
         "misses": _misses,
         "hit_ratio": round(_hits / total, 4) if total else None,
+        "local_keys": len(_LOCAL),
     }
+
+
+def _local_get(key: str) -> Optional[Any]:
+    hit = _LOCAL.get(key)
+    if not hit:
+        return None
+    expires_at, value = hit
+    if time.monotonic() >= expires_at:
+        _LOCAL.pop(key, None)
+        return None
+    return value
+
+
+def _local_set(key: str, value: Any, ttl: int) -> None:
+    if len(_LOCAL) >= _LOCAL_MAX_KEYS:
+        # Drop oldest ~25% by expiry time
+        ordered = sorted(_LOCAL.items(), key=lambda kv: kv[1][0])
+        for k, _ in ordered[: max(1, _LOCAL_MAX_KEYS // 4)]:
+            _LOCAL.pop(k, None)
+    _LOCAL[key] = (time.monotonic() + max(1, int(ttl)), value)
+
+
+def _local_delete_prefix(prefix: str) -> int:
+    if not prefix:
+        return 0
+    doomed = [k for k in _LOCAL if k.startswith(prefix)]
+    for k in doomed:
+        _LOCAL.pop(k, None)
+    return len(doomed)
 
 
 async def get_json(key: str) -> Optional[Any]:
     global _hits, _misses
+    local = _local_get(key)
+    if local is not None:
+        _hits += 1
+        return local
+
     r = await get_redis()
     if not r:
+        _misses += 1
         return None
     try:
         raw = await r.get(key)
@@ -34,40 +79,50 @@ async def get_json(key: str) -> Optional[Any]:
             _misses += 1
             return None
         _hits += 1
-        return json.loads(raw)
+        value = json.loads(raw)
+        # Mirror into process so subsequent hits stay cheap even mid-request storms.
+        _local_set(key, value, 60)
+        return value
     except Exception as exc:
         log.debug("cache get failed %s: %s", key, exc)
+        _misses += 1
         return None
 
 
 async def set_json(key: str, value: Any, ttl: int) -> bool:
+    _local_set(key, value, ttl)
     r = await get_redis()
     if not r:
-        return False
+        return True
     try:
         await r.set(key, json.dumps(value, default=str), ex=max(1, int(ttl)))
         return True
     except Exception as exc:
         log.debug("cache set failed %s: %s", key, exc)
-        return False
+        return True  # local cache still holds
 
 
 async def delete(*cache_key: str) -> int:
+    deleted = 0
+    for k in cache_key:
+        if k in _LOCAL:
+            _LOCAL.pop(k, None)
+            deleted += 1
     r = await get_redis()
     if not r or not cache_key:
-        return 0
+        return deleted
     try:
-        return int(await r.delete(*cache_key))
+        return deleted + int(await r.delete(*cache_key))
     except Exception:
-        return 0
+        return deleted
 
 
 async def delete_prefix(prefix: str, count: int = 200) -> int:
     """Best-effort SCAN + DELETE for key prefixes (invalidation)."""
+    deleted = _local_delete_prefix(prefix)
     r = await get_redis()
     if not r or not prefix:
-        return 0
-    deleted = 0
+        return deleted
     try:
         cursor = 0
         while True:
@@ -89,10 +144,7 @@ async def cache_aside(
     *,
     skip_cache: bool = False,
 ) -> Any:
-    """Cache-aside: read Redis → miss → load Postgres → set Redis.
-
-    Skips caching dict responses where success is explicitly False.
-    """
+    """Cache-aside: local/Redis → miss → load Postgres → set both."""
     if not skip_cache:
         cached = await get_json(key)
         if cached is not None:

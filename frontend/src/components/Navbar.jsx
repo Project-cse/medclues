@@ -1,6 +1,6 @@
 import React, { useContext, useState, useRef, useEffect } from 'react'
 import { assets } from '../assets/assets'
-import { NavLink, useNavigate } from 'react-router-dom'
+import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { AppContext } from '../context/AppContext'
 import BrandLogo from './BrandLogo'
 import {
@@ -9,7 +9,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger
 } from "./ui/dropdown-menu"
-import { useLocation } from 'react-router-dom'
+import { clearPatientSession } from '../utils/patientAuth'
 
 const Navbar = () => {
   const navigate = useNavigate()
@@ -23,8 +23,8 @@ const Navbar = () => {
   const isAboutActive = location.pathname === '/about' || location.pathname === '/contact'
 
   const logout = () => {
-    localStorage.removeItem('token')
-    setToken(false)
+    clearPatientSession()
+    setToken('')
     setShowDropdown(false)
     navigate('/login?mode=login')
   }

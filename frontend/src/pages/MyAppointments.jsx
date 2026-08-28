@@ -12,7 +12,8 @@ import QRCode from 'react-qr-code'
 import PaymentModal from '../components/PaymentModal'
 import { isOnlineVideoAppointment } from '../utils/videoConsult'
 import { labelForAppointment } from '../utils/lifecycleLabels'
-import { checkInQrPayload, appointmentQrPayload } from '../utils/bookingQr'
+import { isPatientAuthFailure } from '../utils/patientAuth'
+import { appointmentQrPayload, checkInQrPayload } from '../utils/bookingQr'
 // Dynamic imports to avoid Vite pre-bundling issues
 
 const MyAppointments = () => {
@@ -689,8 +690,9 @@ Thank you for choosing MedClues Healthcare!
             })
             setAppointments(sortedAppointments)
         } catch (error) {
+            if (isPatientAuthFailure(error)) return
             console.error('Error fetching appointments:', error)
-            const errorMessage = error?.response?.data?.message || error?.message || 'Failed to load appointments'
+            const errorMessage = error?.response?.data?.detail || error?.response?.data?.message || error?.message || 'Failed to load appointments'
             toast.error(errorMessage)
         } finally {
             setIsLoading(false)
@@ -720,9 +722,11 @@ Thank you for choosing MedClues Healthcare!
 
 
     useEffect(() => {
-        if (token) {
-            getUserAppointments()
+        if (!token) {
+            navigate('/login?redirect=/my-appointments', { replace: true })
+            return
         }
+        getUserAppointments()
     }, [token])
 
     useEffect(() => {

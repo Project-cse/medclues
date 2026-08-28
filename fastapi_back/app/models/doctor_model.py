@@ -4,7 +4,10 @@ from typing import Optional, List, Dict, Any, Union
 from app.config.db import db
 
 async def get_all_doctors(limit: int | None = 500, offset: int = 0, q: str | None = None):
-    """List doctors with optional pagination and trigram-friendly search."""
+    """List doctors with optional pagination and trigram-friendly search.
+
+    Excludes heavy JSON columns (slots_booked) — list UIs do not need them.
+    """
     params: list = []
     where = ""
     if q and q.strip():
@@ -16,8 +19,14 @@ async def get_all_doctors(limit: int | None = 500, offset: int = 0, q: str | Non
             OR COALESCE(h.name, '') ILIKE $1
         )
         """
+    # Explicit columns — avoid shipping slots_booked / password on list paths.
+    # Optional schedule columns use COALESCE-safe defaults in format_doctor.
     base = f"""
-        SELECT d.*, h.name as hospital_name, h.contact as hospital_contact
+        SELECT
+            d.id, d.name, d.email, d.image, d.speciality, d.degree, d.experience,
+            d.about, d.available, d.fees, d.address_line1, d.address_line2, d.date,
+            d.hospital_id, d.rating, d.reviews, d.status,
+            h.name as hospital_name, h.contact as hospital_contact
         FROM doctors d
         LEFT JOIN hospital_tieups h ON d.hospital_id = h.id
         {where}

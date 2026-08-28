@@ -184,6 +184,39 @@ async def referral_agent(booking_threshold_hours: int = 0):
             continue
 
         if booked:
+            spec_appt_id = ref.get("specialist_appointment_id")
+            if spec_appt_id:
+                from app.models import appointment_model
+
+                spec_appt = await appointment_model.get_appointment_by_id(int(spec_appt_id))
+                if spec_appt:
+                    life = str(spec_appt.get("lifecycle_status") or spec_appt.get("status") or "").upper()
+                    if life in {"BOOKED", "PENDING", ""} and life not in {
+                        "CONFIRMED",
+                        "CHECKED_IN",
+                        "IN_PROGRESS",
+                        "COMPLETED",
+                    }:
+                        await order_finding_model.create_finding(
+                            entity_type="appointment",
+                            entity_id=int(spec_appt_id),
+                            patient_id=patient_id,
+                            finding_type="APPOINTMENT_AWAITING_CONFIRMATION",
+                            message=(
+                                f"Specialist appointment with {specialist_label} is booked "
+                                "but awaiting doctor confirmation."
+                            ),
+                            priority="MEDIUM",
+                            assigned_role="appointment_coordinator",
+                            recommended_action="Confirm the specialist appointment with the patient.",
+                            evidence={
+                                "appointment_id": int(spec_appt_id),
+                                "referral_id": ref_id,
+                                "patient": (patient or {}).get("name"),
+                                "specialist": specialist_label,
+                                "lifecycle_status": life,
+                            },
+                        )
             continue
 
         updated_at = _parse_db_datetime(ref.get("updated_at"))

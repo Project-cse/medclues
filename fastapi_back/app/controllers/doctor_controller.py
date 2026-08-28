@@ -194,6 +194,8 @@ async def appointment_cancel(doc_id: int, appointment_id: int, reason: Optional[
 # API to accept (confirm) appointment
 async def appointment_accept(doc_id: int, appointment_id: int):
     try:
+        from app.services import appointment_lifecycle_service as life
+
         appointment = await appointment_model.get_appointment_by_id(appointment_id)
         if not appointment:
             return {"success": False, "message": "Appointment not found"}
@@ -204,18 +206,18 @@ async def appointment_accept(doc_id: int, appointment_id: int):
         if appointment.get('is_completed'):
             return {"success": False, "message": "Appointment already completed"}
 
-        # Set lifecycle_status = 'CONFIRMED' — this column has no CHECK constraint.
-        # Do NOT update `status` — it is constrained to a fixed enum that does not
-        # include 'confirmed'. The lifecycle_status column is the correct field for
-        # workflow state (BOOKED → CONFIRMED → IN_QUEUE → …).
-        await db.execute(
-            """
-            UPDATE appointments
-            SET lifecycle_status = 'CONFIRMED',
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id = $1
-            """,
+        current = life._coerce_lifecycle(appointment)
+        if current != "BOOKED":
+            return {
+                "success": False,
+                "message": f"Cannot accept — appointment is already {current.replace('_', ' ').lower()}",
+            }
+
+        await life.transition(
             int(appointment_id),
+            "CONFIRMED",
+            actor_role="doctor",
+            reason="Doctor accepted booking",
         )
 
         # Send confirmation email (best-effort, never fail the accept action)

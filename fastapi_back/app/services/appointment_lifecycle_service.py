@@ -476,13 +476,14 @@ async def mark_paid_confirmed(appointment_id: int) -> None:
                 ELSE lifecycle_status
             END,
             status = CASE
-                WHEN lifecycle_status IN ('BOOKED', 'CONFIRMED') THEN 'confirmed'
+                WHEN lifecycle_status IN ('BOOKED', 'CONFIRMED') THEN $2
                 ELSE status
             END,
             updated_at = CURRENT_TIMESTAMP
         WHERE id = $1
         """,
         int(appointment_id),
+        _legacy_status_for("CONFIRMED"),
     )
 
 

@@ -15,30 +15,34 @@ export function mapScheduleToDocSlots(apiData, mode) {
   return apiData.days.map((day) => {
     const datetime = parseSlotDate(day.slotDate)
     if (mode === 'online') {
-      return (day.slots || []).map((s) => ({
-        datetime,
-        time: s.display,
-        display: s.display,
-        slotDate: day.slotDate,
-        slot_id: s.slot_id,
-        slot_type: 'video',
-        mode: 'online',
-        available: s.available !== false,
-      }))
+      return (day.slots || [])
+        .filter((s) => s.available !== false)
+        .map((s) => ({
+          datetime,
+          time: s.display,
+          display: s.display,
+          slotDate: day.slotDate,
+          slot_id: s.slot_id,
+          slot_type: 'video',
+          mode: 'online',
+          available: s.available !== false,
+        }))
     }
-    return (day.blocks || []).map((b) => ({
-      datetime,
-      time: b.display,
-      display: b.display,
-      slotDate: day.slotDate,
-      slot_id: b.slot_id || b.representative_slot_id,
-      slot_type: b.slot_type,
-      mode: 'offline',
-      bookingsRemaining: b.available_count,
-      totalCount: b.total_count,
-      available: b.bookable !== false,
-    }))
-  })
+    return (day.blocks || [])
+      .filter((b) => b.bookable !== false && (b.available_count ?? 0) > 0)
+      .map((b) => ({
+        datetime,
+        time: b.display,
+        display: b.display,
+        slotDate: day.slotDate,
+        slot_id: b.slot_id || b.representative_slot_id,
+        slot_type: b.slot_type,
+        mode: 'offline',
+        bookingsRemaining: b.available_count,
+        totalCount: b.total_count,
+        available: b.bookable !== false,
+      }))
+  }).filter((daySlots) => daySlots.length > 0)
 }
 
 export function consultationFee(docInfo, mode) {

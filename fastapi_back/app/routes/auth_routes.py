@@ -58,7 +58,8 @@ async def refresh(req: Request):
         request=req,
     )
     if not result.get("success"):
-        raise HTTPException(status_code=401, detail=result.get("message", "Refresh failed"))
+        status = int(result.get("status_code") or 401)
+        raise HTTPException(status_code=status, detail=result.get("message", "Refresh failed"))
     return build_auth_response(result, role, req)
 
 

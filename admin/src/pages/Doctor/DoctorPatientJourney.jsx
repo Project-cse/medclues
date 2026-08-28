@@ -32,7 +32,6 @@ const formatStep = (value) => {
 const toneForLabel = (key, label) => {
   const lv = String(label || '').toLowerCase()
   if (!lv || lv.includes('not required') || lv.includes('not applicable')) return 'muted'
-  if (lv.includes('not yet') || lv.includes('not scheduled') || lv.includes('not booked') || lv.includes('overdue') || lv.includes('declined') || lv.includes('pending review')) return 'danger'
   if (key === 'followup') {
     if (lv.includes('completed')) return 'ok'
     if (lv.includes('overdue')) return 'danger'
@@ -46,17 +45,21 @@ const toneForLabel = (key, label) => {
     return 'danger'
   }
   if (key === 'specialist_appointment') {
-    if (lv.includes('completed') || (/\d/.test(lv) && !lv.includes('not'))) return 'ok'
-    if (lv.includes('awaiting')) return 'danger'
-    return 'danger'
+    if (lv.includes('completed')) return 'ok'
+    if (lv.includes('missed')) return 'danger'
+    if (lv.includes('awaiting') || lv.includes('confirmed') || (/\d/.test(lv) && !lv.includes('not'))) return 'warn'
+    if (lv.includes('not yet') || lv.includes('not scheduled')) return 'warn'
+    return 'muted'
   }
   if (key === 'pharmacy') {
     if (lv.includes('delivered') || lv.includes('completed')) return 'ok'
     if (lv.includes('ready')) return 'warn'
+    if (lv.includes('not yet')) return 'warn'
     if (lv.includes('payment') || lv.includes('pending') || lv.includes('placed')) return 'danger'
-    if (lv.includes('not yet') || lv.includes('not required')) return lv.includes('not required') ? 'muted' : 'danger'
+    if (lv.includes('not required')) return 'muted'
     return 'warn'
   }
+  if (lv.includes('not yet') || lv.includes('not scheduled') || lv.includes('not booked') || lv.includes('overdue') || lv.includes('declined') || lv.includes('pending review')) return 'danger'
   if (key === 'consultation' && lv.includes('scheduled')) return 'warn'
   if (lv.includes('completed') || (key === 'report' && lv.includes('available'))) return 'ok'
   if (lv.includes('pending') || lv.includes('awaiting') || lv.includes('in progress')) return 'warn'
@@ -99,7 +102,7 @@ const Pill = ({ value, tone, stepKey }) => {
 }
 
 const DoctorPatientJourney = () => {
-  const { dToken, backendUrl, profileData, getProfileData } = useContext(DoctorContext)
+  const { dToken, backendUrl, profileData, getProfileData, acceptAppointment } = useContext(DoctorContext)
   const { recToken } = useContext(ReceptionContext)
   const { deanToken } = useContext(DeanContext)
   const token = dToken || recToken || deanToken
@@ -135,6 +138,7 @@ const DoctorPatientJourney = () => {
   const [creatingReferral, setCreatingReferral] = useState(false)
   const [reviewFinding, setReviewFinding] = useState(null)
   const [lastReviewResult, setLastReviewResult] = useState(null)
+  const [referralBusyId, setReferralBusyId] = useState(null)
 
   const doctorAuthHeaders = useMemo(() => {
     if (dToken) return { dtoken: dToken }
@@ -205,6 +209,66 @@ const DoctorPatientJourney = () => {
   const handleSelectSpecialist = (id, doc) => {
     setReferralDoctorId(String(id))
     setReferralToDept(doctorSpec(doc))
+  }
+
+  const handleReferralAction = async (referralId, action) => {
+    if (!dToken) return
+    setReferralBusyId(referralId)
+    try {
+      const { data } = await axios.post(
+        `${backendUrl}/api/doctor/referrals/${referralId}/${action}`,
+        {},
+        { headers: { dtoken: dToken } }
+      )
+      if (data.success) {
+        toast.success(action === 'accept' ? 'Referral accepted — patient can book' : 'Referral declined')
+        await loadDetail(selectedId, { refresh: true })
+        await loadList()
+      } else {
+        toast.error(data.message || 'Action failed')
+      }
+    } catch (e) {
+      toast.error(e.response?.data?.detail || e.response?.data?.message || e.message)
+    } finally {
+      setReferralBusyId(null)
+    }
+  }
+
+  const handleAcceptSpecialistAppointment = async (ref) => {
+    if (!ref?.specialist_appointment_id) return
+    setReferralBusyId(ref.id)
+    try {
+      const ok = await acceptAppointment(ref.specialist_appointment_id)
+      if (ok) {
+        await loadDetail(selectedId, { refresh: true })
+        await loadList()
+      }
+    } finally {
+      setReferralBusyId(null)
+    }
+  }
+
+  const handleCompleteReferral = async (referralId) => {
+    if (!dToken) return
+    setReferralBusyId(referralId)
+    try {
+      const { data } = await axios.post(
+        `${backendUrl}/api/doctor/referrals/${referralId}/complete`,
+        {},
+        { headers: { dtoken: dToken } }
+      )
+      if (data.success) {
+        toast.success('Specialist consultation marked complete')
+        await loadDetail(selectedId, { refresh: true })
+        await loadList()
+      } else {
+        toast.error(data.message || 'Could not complete referral')
+      }
+    } catch (e) {
+      toast.error(e.response?.data?.detail || e.response?.data?.message || e.message)
+    } finally {
+      setReferralBusyId(null)
+    }
   }
 
   const minFollowupDate = useMemo(() => new Date().toISOString().slice(0, 10), [])
@@ -411,7 +475,7 @@ const DoctorPatientJourney = () => {
           {loading ? (
             <p className="text-xs text-slate-400 py-6 text-center">Loading journeys…</p>
           ) : journeys.length === 0 ? (
-            <p className="text-xs text-slate-500 py-6 text-center">No accepted patients yet. Confirm a booking, then open this page.</p>
+            <p className="text-xs text-slate-500 py-6 text-center">No patients yet. Bookings and specialist referrals assigned to you will appear here.</p>
           ) : (
             <div className="space-y-2 max-h-[640px] overflow-y-auto">
               {journeys.map((j) => (
@@ -425,7 +489,10 @@ const DoctorPatientJourney = () => {
                     <span className="text-sm font-bold text-slate-800">{j.patient_name || `Patient #${j.patient_id}`}</span>
                     <Pill value={listBadge(j).label} tone={listBadge(j).tone} />
                   </div>
-                  <p className="text-[11px] text-slate-500 mt-1">{String(j.journey_status || '').replaceAll('_', ' ')}</p>
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    {j.has_referral ? 'Specialist referral · ' : ''}
+                    {String(j.journey_status || '').replaceAll('_', ' ')}
+                  </p>
                 </button>
               ))}
             </div>
@@ -516,11 +583,14 @@ const DoctorPatientJourney = () => {
                   <div className="mt-4 pt-4 border-t border-slate-100">
                     <h3 className="text-xs font-black uppercase tracking-wide text-slate-500 mb-2">Specialist referrals</h3>
                     <div className="space-y-2">
-                      {referrals.map((ref) => (
+                      {referrals.map((ref) => {
+                        const isAssignedSpecialist = profileData?.id && Number(ref.assigned_to || ref.specialist_id) === Number(profileData.id)
+                        const st = String(ref.status || '').toUpperCase()
+                        return (
                         <div key={ref.id} className="p-3 rounded-xl border border-sky-100 bg-sky-50/60 text-xs">
                           <div className="flex justify-between gap-2">
                             <span className="font-bold text-slate-800">{ref.to_dept}</span>
-                            <span className="font-bold text-sky-700">{String(ref.status || '').replaceAll('_', ' ')}</span>
+                            <span className="font-bold text-sky-700">{st.replaceAll('_', ' ')}</span>
                           </div>
                           <p className="text-slate-600 mt-1">
                             {ref.specialist_name ? `Specialist: ${ref.specialist_name}` : 'Specialist not assigned'}
@@ -530,8 +600,52 @@ const DoctorPatientJourney = () => {
                           {ref.appointment_date && (
                             <p className="text-emerald-700 font-semibold mt-1">Appointment: {ref.appointment_date}</p>
                           )}
+                          {isAssignedSpecialist && dToken && (
+                            <div className="flex flex-wrap gap-2 mt-2">
+                              {st === 'PENDING' && (
+                                <>
+                                  <button
+                                    type="button"
+                                    disabled={referralBusyId === ref.id}
+                                    onClick={() => handleReferralAction(ref.id, 'accept')}
+                                    className="px-2.5 py-1 rounded-lg bg-emerald-600 text-white text-[10px] font-bold disabled:opacity-50"
+                                  >
+                                    Accept referral
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={referralBusyId === ref.id}
+                                    onClick={() => handleReferralAction(ref.id, 'reject')}
+                                    className="px-2.5 py-1 rounded-lg bg-slate-200 text-slate-700 text-[10px] font-bold disabled:opacity-50"
+                                  >
+                                    Decline
+                                  </button>
+                                </>
+                              )}
+                              {ref.can_accept_appointment && (
+                                <button
+                                  type="button"
+                                  disabled={referralBusyId === ref.id}
+                                  onClick={() => handleAcceptSpecialistAppointment(ref)}
+                                  className="px-2.5 py-1 rounded-lg bg-indigo-600 text-white text-[10px] font-bold disabled:opacity-50"
+                                >
+                                  Verify &amp; accept appointment
+                                </button>
+                              )}
+                              {st === 'APPOINTMENT_BOOKED' && !ref.can_accept_appointment && (
+                                <button
+                                  type="button"
+                                  disabled={referralBusyId === ref.id}
+                                  onClick={() => handleCompleteReferral(ref.id)}
+                                  className="px-2.5 py-1 rounded-lg bg-emerald-700 text-white text-[10px] font-bold disabled:opacity-50"
+                                >
+                                  Mark consultation complete
+                                </button>
+                              )}
+                            </div>
+                          )}
                         </div>
-                      ))}
+                      )})}
                     </div>
                   </div>
                 )}
@@ -542,7 +656,7 @@ const DoctorPatientJourney = () => {
               <McCard title="AI Agent Activity">
                 <div className="space-y-2">
                   {agentActivity.length === 0 ? (
-                    <p className="text-xs text-slate-400">Run Re-check agents to refresh coordination status.</p>
+                    <p className="text-xs text-slate-400">No coordination alerts for this visit yet.</p>
                   ) : (
                     agentActivity.map((a) => (
                       <div key={a.agent} className="flex items-start gap-2 text-xs">

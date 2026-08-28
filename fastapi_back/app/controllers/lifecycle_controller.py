@@ -733,6 +733,16 @@ async def complete_consultation(
     except Exception:
         pass
 
+    try:
+        from app.services.patient_journey_service import archive_episode_snapshot, invalidate_patient_journey_cache
+        import asyncio
+
+        pid = int(appointment["user_id"])
+        asyncio.create_task(archive_episode_snapshot(pid, int(appointment_id)))
+        invalidate_patient_journey_cache(pid)
+    except Exception as exc:
+        log.warning("Journey snapshot skipped for appointment %s: %s", appointment_id, exc)
+
     return {
         "success": True,
         "message": "Consultation completed",

@@ -476,7 +476,7 @@ async def generate_day_slots(doctor_ref: str, doctor_numeric_id: int, day: date,
                         if ov.get("max_capacity") is not None:
                             morning_slots = int(ov["max_capacity"])
             except Exception as ov_err:
-                print(f"[WARNING] schedule override apply: {ov_err}")
+                print(f"[WARNING] schedule override apply: {type(ov_err).__name__}: {ov_err!r}")
     except Exception as e:
         print(f"[WARNING] generate_day_slots db fetch error: {e}")
 
@@ -583,19 +583,28 @@ async def generate_day_slots(doctor_ref: str, doctor_numeric_id: int, day: date,
 
 
 async def ensure_all_doctors_scheduled(days: int = SCHEDULE_DAYS):
+    """Warm slot rows without starving the Neon pool used by HTTP handlers.
+
+    Neon pool max is small (≈4). Unbounded gather of generate_day_slots was
+    causing acquire timeouts (~4s) on public list/auth endpoints at startup.
+    """
     await doctor_slot_model.ensure_doctor_slots_schema()
     start = _today_ist()
     refs = await list_bookable_doctor_refs()
+    # Keep at most 1 concurrent slot job so API requests can still acquire.
+    sem = asyncio.Semaphore(1)
+
+    async def _one_day(doctor_ref: str, doctor_numeric_id: int, day):
+        async with sem:
+            await generate_day_slots(doctor_ref, doctor_numeric_id, day)
+
     for doctor_ref, doctor_numeric_id in refs:
-        # Respect per-doctor booking_window_days if set
         window = await _get_doctor_booking_window(doctor_ref)
         effective_days = window if window else days
-        await asyncio.gather(
-            *[
-                generate_day_slots(doctor_ref, doctor_numeric_id, start + timedelta(days=offset))
-                for offset in range(effective_days)
-            ]
-        )
+        for offset in range(effective_days):
+            await _one_day(doctor_ref, doctor_numeric_id, start + timedelta(days=offset))
+            # Yield so pending HTTP acquires are not starved.
+            await asyncio.sleep(0)
 
 
 async def _get_doctor_booking_window(doctor_ref: str) -> Optional[int]:

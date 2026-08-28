@@ -5,7 +5,7 @@ import { toast } from 'react-toastify'
 import { useNavigate } from 'react-router-dom'
 import BackButton from '../components/BackButton'
 import BackArrow from '../components/BackArrow'
-import LoadingSpinner, { ButtonSpinner } from '../components/LoadingSpinner'
+import { isPatientAuthFailure, clearPatientSession } from '../utils/patientAuth'
 
 const MyProfile = () => {
 
@@ -47,6 +47,7 @@ const MyProfile = () => {
                 setRecords(normalizedRecords);
             }
         } catch (error) {
+            if (isPatientAuthFailure(error)) return
             console.error('Error loading records:', error)
         } finally {
             setIsRecordsLoading(false)
@@ -134,8 +135,8 @@ const MyProfile = () => {
     }
 
     const handleLogout = () => {
-        localStorage.removeItem('token')
-        setToken(false)
+        clearPatientSession()
+        setToken('')
         toast.success('Logged out successfully!')
         navigate('/login')
     }

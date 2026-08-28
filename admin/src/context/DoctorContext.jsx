@@ -74,6 +74,34 @@ const DoctorContextProvider = (props) => {
         }
     }
 
+    // Function to reject appointment with reason
+    const rejectAppointment = async (appointmentId, reason = 'Doctor unavailable') => {
+        try {
+            const { data } = await axios.post(
+                backendUrl + '/api/doctor/reject-appointment',
+                { appointmentId, reason },
+                { headers: { dToken } }
+            )
+            if (data.success) {
+                setAppointments(prev => prev.map(a =>
+                    String(a._id) === String(appointmentId)
+                        ? { ...a, cancelled: true, lifecycleStatus: 'CANCELLED' }
+                        : a
+                ))
+                toast.success('Appointment rejected')
+                getAppointments()
+                getDashData()
+                return true
+            }
+            toast.error(data.message || 'Failed to reject')
+            return false
+        } catch (error) {
+            toast.error(error.message)
+            console.log(error)
+            return false
+        }
+    }
+
     // Function to cancel doctor appointment using API
     const cancelAppointment = async (appointmentId) => {
 
@@ -83,6 +111,11 @@ const DoctorContextProvider = (props) => {
 
             if (data.success) {
                 toast.success(data.message)
+                setAppointments(prev => prev.map(a =>
+                    String(a._id) === String(appointmentId)
+                        ? { ...a, cancelled: true, lifecycleStatus: 'CANCELLED' }
+                        : a
+                ))
                 getAppointments()
                 // after creating dashboard
                 getDashData()
@@ -102,15 +135,23 @@ const DoctorContextProvider = (props) => {
         try {
             const { data } = await axios.post(backendUrl + '/api/doctor/accept-appointment', { appointmentId }, { headers: { dToken } })
             if (data.success) {
+                setAppointments(prev => prev.map(a =>
+                    String(a._id) === String(appointmentId)
+                        ? { ...a, lifecycleStatus: 'CONFIRMED' }
+                        : a
+                ))
                 toast.success(data.message || 'Appointment confirmed')
                 getAppointments()
                 getDashData()
+                return true
             } else {
                 toast.error(data.message)
+                return false
             }
         } catch (error) {
             toast.error(error.message)
             console.log(error)
+            return false
         }
     }
 
@@ -171,6 +212,7 @@ const DoctorContextProvider = (props) => {
         appointments,
         getAppointments,
         cancelAppointment,
+        rejectAppointment,
         acceptAppointment,
         completeAppointment,
         dashData, getDashData,

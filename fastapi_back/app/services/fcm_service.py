@@ -9,6 +9,16 @@ from app.models import fcm_token_model
 _initialized = False
 
 
+def _doctor_label(name: str) -> str:
+    n = (name or "your doctor").strip()
+    lower = n.lower()
+    if lower.startswith("dr."):
+        return n
+    if lower.startswith("dr "):
+        return f"Dr. {n[3:].strip()}"
+    return f"Dr. {n}"
+
+
 def _credentials_path() -> Optional[Path]:
     raw = os.getenv("FIREBASE_CREDENTIALS_PATH", "").strip()
     if not raw:
@@ -151,7 +161,7 @@ async def notify_appointment_booked(
     await send_to_user(
         user_id,
         title="Appointment confirmed",
-        body=f"With Dr. {doctor_name} on {slot_date} at {slot_time}",
+        body=f"With {_doctor_label(doctor_name)} on {slot_date} at {slot_time}",
         data={
             "type": "appointment",
             "appointmentId": str(appointment_id),

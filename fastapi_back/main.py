@@ -230,6 +230,9 @@ async def lifespan(app: FastAPI):
 
             async def _warm_doctor_slots():
                 try:
+                    # Let HTTP traffic settle before background slot generation
+                    # so Neon pool connections stay available for public lists.
+                    await asyncio.sleep(15)
                     await doctor_slot_service.ensure_all_doctors_scheduled()
                     log.info("Doctor slots schedule ready")
                 except Exception as warm_err:

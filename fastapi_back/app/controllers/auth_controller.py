@@ -1,5 +1,6 @@
 import re
 import time
+import asyncio
 from collections import defaultdict
 from datetime import datetime, timezone
 
@@ -222,7 +223,16 @@ async def refresh_tokens(refresh_token: str | None, role: str, request=None):
         return {"success": False, "message": "Invalid or expired refresh token"}
 
     token_hash = token_service.hash_refresh_token(refresh_token.strip())
-    row = await refresh_token_model.find_by_hash(token_hash)
+    try:
+        row = await refresh_token_model.find_by_hash(token_hash)
+    except (TimeoutError, asyncio.TimeoutError):
+        log.warning("Refresh token lookup timed out (DB pool busy)")
+        return {
+            "success": False,
+            "message": "Server busy, please retry",
+            "retryable": True,
+            "status_code": 503,
+        }
     if not row:
         return {"success": False, "message": "Refresh token revoked or not found"}
 

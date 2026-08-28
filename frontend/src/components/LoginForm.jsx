@@ -5,6 +5,7 @@ import { toast } from 'react-toastify'
 import { useNavigate, Link } from 'react-router-dom'
 import { signInWithPopup } from 'firebase/auth'
 import { auth, googleProvider, appleProvider, facebookProvider } from '../firebase'
+import { savePatientSession } from '../utils/patientAuth'
 
 const quotes = [
   {
@@ -91,7 +92,7 @@ export function LoginForm({ className, ...props }) {
       // Removed debug console.log for cleaner production output
       const { data } = await axios.post(backendUrl + '/api/user/login', { email, password })
       if (data.success) {
-        localStorage.setItem('token', data.token)
+        savePatientSession(data)
         setToken(data.token)
         toast.success('Logged in successfully!')
         navigate('/')
@@ -137,7 +138,7 @@ export function LoginForm({ className, ...props }) {
         })
 
         if (data.success) {
-          localStorage.setItem('token', data.token)
+          savePatientSession(data)
           setToken(data.token)
           toast.success('Logged in with Google successfully!')
           navigate('/')
@@ -201,7 +202,7 @@ export function LoginForm({ className, ...props }) {
         })
 
         if (data.success) {
-          localStorage.setItem('token', data.token)
+          savePatientSession(data)
           setToken(data.token)
           toast.success('Logged in with Apple successfully!')
           navigate('/')
@@ -243,7 +244,7 @@ export function LoginForm({ className, ...props }) {
         })
 
         if (data.success) {
-          localStorage.setItem('token', data.token)
+          savePatientSession(data)
           setToken(data.token)
           toast.success('Logged in with Meta successfully!')
           navigate('/')

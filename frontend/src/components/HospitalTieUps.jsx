@@ -1,14 +1,11 @@
 import React, { useContext, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AppContext } from '../context/AppContext'
-import axios from 'axios'
 import useScrollAnimation from '../utils/useScrollAnimation'
 
 const HospitalTieUps = () => {
-    const { backendUrl } = useContext(AppContext)
+    const { hospitals, isHospitalsLoading, getHospitalsData } = useContext(AppContext)
     const navigate = useNavigate()
-    const [hospitals, setHospitals] = useState([])
-    const [loading, setLoading] = useState(true)
     const [showAll, setShowAll] = useState(false)
     const [initialDisplayCount, setInitialDisplayCount] = useState(4)
     const scrollRef = useScrollAnimation()
@@ -26,22 +23,10 @@ const HospitalTieUps = () => {
     }, [])
 
     useEffect(() => {
-        const fetchHospitals = async () => {
-            try {
-                const { data } = await axios.get(backendUrl + '/api/hospital-tieup/public')
-                if (data.success) {
-                    setHospitals(data.hospitals)
-                }
-            } catch (error) {
-                console.error("Error fetching hospitals:", error)
-            } finally {
-                setLoading(false)
-            }
-        }
-        fetchHospitals()
-    }, [backendUrl])
+        getHospitalsData?.()
+    }, [getHospitalsData])
 
-    if (!loading && hospitals.length === 0) {
+    if (!isHospitalsLoading && hospitals.length === 0) {
         return null
     }
 
@@ -56,7 +41,7 @@ const HospitalTieUps = () => {
             </div>
 
             {/* Loading State */}
-            {loading ? (
+            {isHospitalsLoading ? (
                 <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 max-w-7xl mx-auto'>
                     {[1, 2, 3].map((i) => (
                         <div key={i} className="bg-white rounded-xl p-6 shadow-sm animate-pulse h-48"></div>

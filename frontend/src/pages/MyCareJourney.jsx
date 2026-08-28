@@ -261,6 +261,160 @@ const SpecialistReferralBooking = ({ referral, backendUrl, token, onBooked }) =>
 
 
 
+const CACHE_KEY = 'myCareJourneyCache_v3'
+const CACHE_MS = 2 * 60 * 1000
+
+const formatDoctorName = (name) => {
+  if (!name) return null
+  let s = String(name).trim()
+  if (/^dr\.?\s/i.test(s)) s = s.replace(/^dr\.?\s+/i, '').trim()
+  return s ? `Dr. ${s}` : null
+}
+
+const EpisodeDetails = ({ episode, backendUrl, token, onBooked, showReferralBooking = true }) => {
+  const care = episode?.care || {}
+  const careTones = episode?.care_tones || {}
+  const referrals = episode?.referrals || []
+  const reports = episode?.reports || []
+  const banner = journeyBanner(episode?.journey_status)
+
+  return (
+    <>
+      <div className={`rounded-2xl border px-4 py-3 font-bold ${banner.cls}`}>
+        JOURNEY: {banner.text}
+      </div>
+
+      <div className="mt-6 bg-white rounded-2xl border border-slate-200 divide-y">
+        {STEPS.map(([key, label]) => (
+          <div key={key} className="flex items-center justify-between px-4 py-3">
+            <span className="text-sm font-semibold text-slate-700">{label}</span>
+            <span className="text-sm font-bold text-slate-800 text-right max-w-[60%]">
+              {statusDot(careTones[key])} {care[key] || '— Not yet created'}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {referrals.length > 0 && (
+        <div className="mt-6">
+          <h2 className="text-sm font-black uppercase tracking-wide text-slate-500">Specialist referrals</h2>
+          <ul className="mt-2 space-y-3">
+            {referrals.map((ref) => (
+              <li key={ref.id} className="rounded-xl border border-sky-100 bg-sky-50/50 px-4 py-3">
+                <div className="flex justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-bold text-slate-800">{ref.to_dept}</p>
+                    <p className="text-xs text-slate-600 mt-0.5">
+                      {ref.specialist_name ? `Dr. ${ref.specialist_name}` : 'Specialist pending'}
+                      {ref.referring_doctor_name ? ` · Referred by ${ref.referring_doctor_name}` : ''}
+                    </p>
+                    {ref.reason && <p className="text-xs text-slate-500 mt-1">{ref.reason}</p>}
+                  </div>
+                  <span className="text-xs font-bold text-sky-700 shrink-0">
+                    {String(ref.status || '').replaceAll('_', ' ')}
+                  </span>
+                </div>
+                {showReferralBooking && (
+                  <SpecialistReferralBooking
+                    referral={ref}
+                    backendUrl={backendUrl}
+                    token={token}
+                    onBooked={onBooked}
+                  />
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {reports.length > 0 && (
+        <div className="mt-6">
+          <h2 className="text-sm font-black uppercase tracking-wide text-slate-500">Lab reports</h2>
+          <ul className="mt-2 space-y-2">
+            {reports.map((r) => {
+              const published = ['REPORT_AVAILABLE', 'REVIEWED'].includes(String(r.status || '').toUpperCase())
+              return (
+                <li key={r.id} className="rounded-xl border border-slate-100 bg-white px-3 py-2 flex flex-wrap justify-between gap-2 items-center">
+                  <span className="text-sm font-semibold text-slate-800">{r.test_name}</span>
+                  {published && r.id ? (
+                    <span className="flex gap-2">
+                      <a href={reportUrl(backendUrl, r.id, token)} target="_blank" rel="noopener noreferrer" className="text-xs font-bold text-indigo-600">
+                        View report
+                      </a>
+                      <a href={reportUrl(backendUrl, r.id, token, true)} download={`${r.test_name || 'report'}.pdf`} className="text-xs font-bold text-indigo-600">
+                        Download PDF
+                      </a>
+                    </span>
+                  ) : (
+                    <span className="text-xs text-slate-400">{String(r.status || 'Pending').replaceAll('_', ' ')}</span>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      )}
+    </>
+  )
+}
+
+const PastJourneyPanel = ({ episodes, onClose, backendUrl, token }) => {
+  const [expandedId, setExpandedId] = useState(null)
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end">
+      <button type="button" className="absolute inset-0 bg-slate-900/40" onClick={onClose} aria-label="Close history" />
+      <div className="relative w-full max-w-md bg-white h-full shadow-2xl flex flex-col">
+        <div className="flex items-center justify-between px-4 py-4 border-b border-slate-200">
+          <h2 className="text-lg font-extrabold text-slate-900">Past My Journey</h2>
+          <button type="button" onClick={onClose} className="text-slate-500 hover:text-slate-800 text-sm font-bold px-2 py-1">
+            Close
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          {episodes.length === 0 ? (
+            <p className="text-sm text-slate-400">No past visits yet.</p>
+          ) : (
+            episodes.map((ep) => {
+              const epKey = ep.appointment_id || ep.label
+              const isOpen = expandedId === epKey
+              const epBanner = journeyBanner(ep.journey_status)
+              return (
+                <div key={epKey} className="rounded-xl border border-slate-200 bg-slate-50/50 overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setExpandedId(isOpen ? null : epKey)}
+                    className="w-full text-left px-4 py-3 flex items-start justify-between gap-2 hover:bg-slate-50"
+                  >
+                    <div>
+                      <p className="text-sm font-bold text-slate-800">{ep.label || 'Past visit'}</p>
+                      <p className={`text-xs font-semibold mt-1 ${epBanner.cls} inline-block px-2 py-0.5 rounded-lg border`}>
+                        {epBanner.text.replace('JOURNEY: ', '')}
+                      </p>
+                    </div>
+                    <span className="text-slate-400 text-xs shrink-0 mt-1">{isOpen ? '▲' : '▼'}</span>
+                  </button>
+                  {isOpen && (
+                    <div className="px-4 pb-4 border-t border-slate-100">
+                      <EpisodeDetails
+                        episode={ep}
+                        backendUrl={backendUrl}
+                        token={token}
+                        showReferralBooking={false}
+                      />
+                    </div>
+                  )}
+                </div>
+              )
+            })
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 const MyCareJourney = () => {
 
   const { token, backendUrl } = useContext(AppContext)
@@ -273,88 +427,107 @@ const MyCareJourney = () => {
 
   const [error, setError] = useState(null)
 
+  const [historyOpen, setHistoryOpen] = useState(false)
 
 
-  const load = useCallback(async () => {
 
+  const load = useCallback(async (opts = {}) => {
     if (!token) return
+    const force = Boolean(opts.force)
+    let usedCache = false
+
+    if (!force) {
+      try {
+        const raw = sessionStorage.getItem(CACHE_KEY)
+        if (raw) {
+          const { ts, data: cached } = JSON.parse(raw)
+          if (cached?.active_episode) {
+            setData(cached)
+            setError(null)
+            setLoading(false)
+            usedCache = true
+            if (Date.now() - ts < CACHE_MS) return
+          }
+        }
+      } catch {
+        // ignore bad cache
+      }
+    }
+
+    if (!usedCache) setLoading(true)
 
     try {
-
       const { data: res } = await axios.get(`${backendUrl}/api/ai/my-care-journey`, {
-
         headers: { token },
-
+        timeout: 90000,
       })
 
       if (res.success === false) {
-
         setError(res.message || 'Could not load your care journey')
-
       } else {
-
         setData(res)
-
         setError(null)
-
+        try {
+          sessionStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data: res }))
+        } catch {
+          // ignore quota errors
+        }
       }
-
     } catch (e) {
-
-      setError(e.response?.data?.detail || e.message || 'Could not load your care journey')
-
+      if (!usedCache) {
+        setError(e.response?.data?.detail || e.message || 'Could not load your care journey')
+      }
     } finally {
-
       setLoading(false)
-
     }
-
   }, [token, backendUrl])
 
 
 
   useEffect(() => {
-
     if (!token) {
-
       navigate('/login?mode=login')
-
       return
-
     }
-
     load()
-
-    const onFocus = () => load()
-
-    window.addEventListener('focus', onFocus)
-
-    return () => window.removeEventListener('focus', onFocus)
-
   }, [token, backendUrl, navigate, load])
 
 
 
-  const care = data?.care || {}
-  const careTones = data?.care_tones || {}
-  const banner = journeyBanner(data?.journey_status)
-  const referrals = data?.referrals || []
+  const activeEpisode = data?.active_episode || {}
+  const pastEpisodes = data?.past_episodes || []
+  const hasActiveAppointment = Boolean(data?.has_active_appointment)
 
 
 
   return (
 
-    <div className="py-8 max-w-3xl mx-auto">
+    <div className="py-8 max-w-3xl mx-auto px-4">
 
-      <h1 className="text-2xl font-extrabold text-slate-900">My Care Journey</h1>
-
-      <p className="text-sm text-slate-500 mt-1">A simple view of your hospital visit, tests, referrals, and follow-up.</p>
+      <div className="flex items-start justify-between gap-3">
+        <h1 className="text-2xl font-extrabold text-slate-900">My Care Journey</h1>
+        {!loading && !error && pastEpisodes.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setHistoryOpen(true)}
+            title="Past My Journey"
+            className="shrink-0 w-10 h-10 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-indigo-700 flex items-center justify-center text-lg"
+            aria-label="Past My Journey"
+          >
+            ↩
+          </button>
+        )}
+      </div>
 
 
 
       {loading ? (
 
-        <p className="mt-8 text-sm text-slate-400">Loading your journey…</p>
+        <div className="mt-8 space-y-3 animate-pulse">
+          <div className="h-12 rounded-2xl bg-slate-100" />
+          <div className="h-24 rounded-2xl bg-slate-100" />
+          <div className="h-24 rounded-2xl bg-slate-100" />
+        </div>
 
       ) : error ? (
 
@@ -363,144 +536,23 @@ const MyCareJourney = () => {
       ) : (
 
         <>
-
-          <div className={`mt-6 rounded-2xl border px-4 py-3 font-bold ${banner.cls}`}>
-            JOURNEY: {banner.text}
-          </div>
-
-          <div className="mt-6 bg-white rounded-2xl border border-slate-200 divide-y">
-            {STEPS.map(([key, label]) => (
-              <div key={key} className="flex items-center justify-between px-4 py-3">
-                <span className="text-sm font-semibold text-slate-700">{label}</span>
-                <span className="text-sm font-bold text-slate-800 text-right max-w-[60%]">
-                  {statusDot(careTones[key])} {care[key] || '— Not yet created'}
-                </span>
-              </div>
-            ))}
-          </div>
-
-
-
-          {referrals.length > 0 && (
-
-            <div className="mt-6">
-
-              <h2 className="text-sm font-black uppercase tracking-wide text-slate-500">Specialist referrals</h2>
-
-              <ul className="mt-2 space-y-3">
-
-                {referrals.map((ref) => (
-
-                  <li key={ref.id} className="rounded-xl border border-sky-100 bg-sky-50/50 px-4 py-3">
-
-                    <div className="flex justify-between gap-2">
-
-                      <div>
-
-                        <p className="text-sm font-bold text-slate-800">{ref.to_dept}</p>
-
-                        <p className="text-xs text-slate-600 mt-0.5">
-
-                          {ref.specialist_name ? `Dr. ${ref.specialist_name}` : 'Specialist pending'}
-
-                          {ref.referring_doctor_name ? ` · Referred by ${ref.referring_doctor_name}` : ''}
-
-                        </p>
-
-                        {ref.reason && <p className="text-xs text-slate-500 mt-1">{ref.reason}</p>}
-
-                      </div>
-
-                      <span className="text-xs font-bold text-sky-700 shrink-0">
-
-                        {String(ref.status || '').replaceAll('_', ' ')}
-
-                      </span>
-
-                    </div>
-
-                    <SpecialistReferralBooking
-
-                      referral={ref}
-
-                      backendUrl={backendUrl}
-
-                      token={token}
-
-                      onBooked={load}
-
-                    />
-
-                  </li>
-
-                ))}
-
-              </ul>
-
-            </div>
-
+          {(hasActiveAppointment || activeEpisode.doctor_name) && (
+            <p className="mt-4 text-sm text-slate-600">
+              Current visit: <span className="font-bold text-slate-800">{formatDoctorName(activeEpisode.doctor_name) || activeEpisode.doctor_name || 'Your doctor'}</span>
+              {activeEpisode.slot_date ? ` · ${formatSlotDay(activeEpisode.slot_date)}` : ''}
+            </p>
           )}
-
-
-
-          {(data?.reports || []).length > 0 && (
-
-            <div className="mt-6">
-
-              <h2 className="text-sm font-black uppercase tracking-wide text-slate-500">Lab reports</h2>
-
-              <ul className="mt-2 space-y-2">
-
-                {data.reports.map((r) => {
-
-                  const published = ['REPORT_AVAILABLE', 'REVIEWED'].includes(String(r.status || '').toUpperCase())
-
-                  return (
-
-                    <li key={r.id} className="rounded-xl border border-slate-100 bg-white px-3 py-2 flex flex-wrap justify-between gap-2 items-center">
-
-                      <span className="text-sm font-semibold text-slate-800">{r.test_name}</span>
-
-                      {published && r.id ? (
-
-                        <span className="flex gap-2">
-
-                          <a href={reportUrl(backendUrl, r.id, token)} target="_blank" rel="noopener noreferrer" className="text-xs font-bold text-indigo-600">
-
-                            View report
-
-                          </a>
-
-                          <a href={reportUrl(backendUrl, r.id, token, true)} download={`${r.test_name || 'report'}.pdf`} className="text-xs font-bold text-indigo-600">
-
-                            Download PDF
-
-                          </a>
-
-                        </span>
-
-                      ) : (
-
-                        <span className="text-xs text-slate-400">{String(r.status || 'Pending').replaceAll('_', ' ')}</span>
-
-                      )}
-
-                    </li>
-
-                  )
-
-                })}
-
-              </ul>
-
-            </div>
-
-          )}
-
-
 
           <div className="mt-6">
+            <EpisodeDetails
+              episode={activeEpisode}
+              backendUrl={backendUrl}
+              token={token}
+              onBooked={() => load({ force: true })}
+            />
+          </div>
 
+          <div className="mt-6">
             <h2 className="text-sm font-black uppercase tracking-wide text-slate-500">Notifications</h2>
 
             {(data?.notifications || []).length === 0 ? (
@@ -528,6 +580,15 @@ const MyCareJourney = () => {
             )}
 
           </div>
+
+          {historyOpen && (
+            <PastJourneyPanel
+              episodes={pastEpisodes}
+              onClose={() => setHistoryOpen(false)}
+              backendUrl={backendUrl}
+              token={token}
+            />
+          )}
 
         </>
 

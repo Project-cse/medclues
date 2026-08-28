@@ -1,6 +1,7 @@
 """Optional Redis client for OTP, rate limits, and Socket.IO adapter."""
 from __future__ import annotations
 
+import asyncio
 from typing import Any, Optional
 
 from app.config.config import settings
@@ -32,8 +33,11 @@ async def get_redis():
             encoding="utf-8",
             decode_responses=True,
             protocol=2,
+            socket_connect_timeout=1.5,
+            socket_timeout=1.5,
+            retry_on_timeout=False,
         )
-        await client.ping()
+        await asyncio.wait_for(client.ping(), timeout=2.0)
         _redis = client
         log.info("Redis connected")
         return _redis

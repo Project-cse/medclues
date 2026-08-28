@@ -49,43 +49,21 @@ async def hospital_list(limit: int | None = 100, offset: int = 0, q: str | None 
         cache_key = ck.hospital_list(lim, off, q or "")
 
         async def _load():
-            import asyncio
-            from collections import defaultdict
-
-            hospitals, all_doctors, all_embedded_docs = await asyncio.gather(
-                hospital_model.get_all_hospital_tieups(),
-                doctor_model.get_all_doctors(limit=None),
-                hospital_model.get_all_hospital_tieup_doctors_with_hospitals(),
+            rows, total = await hospital_model.get_hospital_tieups_with_doctor_counts(
+                limit=lim, offset=off, q=q
             )
-
-            doc_count = defaultdict(int)
-            for doc in all_doctors:
-                h_id = doc.get('hospital_id')
-                if h_id is not None:
-                    doc_count[int(h_id)] += 1
-            for d in all_embedded_docs:
-                h_id = d.get('hospital_tieup_id')
-                if h_id is not None:
-                    doc_count[int(h_id)] += 1
-
             formatted = []
-            ql = (q or "").strip().lower()
-            for h in hospitals:
+            for h in rows:
                 entry = format_hospital(h)
                 if not entry:
                     continue
-                if ql and ql not in (entry.get("name") or "").lower() and ql not in (entry.get("address") or "").lower():
-                    continue
-                hospital_id = entry.get('id')
-                if hospital_id is not None:
-                    entry['doctorCount'] = doc_count.get(int(hospital_id), 0)
+                h_dict = dict(h) if not isinstance(h, dict) else h
+                entry["doctorCount"] = int(h_dict.get("doctor_count") or 0)
                 formatted.append(entry)
-            formatted.sort(key=lambda x: (0 if x['hospitalType'] == 'MAIN' else 1, x['name']))
-            page = formatted[off : off + lim]
             return {
                 "success": True,
-                "hospitals": page,
-                "total": len(formatted),
+                "hospitals": formatted,
+                "total": total,
                 "limit": lim,
                 "offset": off,
             }
@@ -290,53 +268,60 @@ async def get_all_hospital_doctors_public(
     limit: int | None = 100, offset: int = 0, q: str | None = None
 ):
     try:
-        # Get all hospital doctors in one go instead of looping
-        docs = await hospital_model.get_all_hospital_tieup_doctors_with_hospitals()
-        all_public_doctors = []
-        ql = (q or "").strip().lower()
-
-        for doc in docs:
-            d_dict = dict(doc)
-            from app.utils.formatters import _parse_doctor_rating
-            emb_rating = _parse_doctor_rating(d_dict)
-            emb_reviews = d_dict.get('reviews') or 0
-            try:
-                emb_reviews = int(emb_reviews)
-            except (TypeError, ValueError):
-                emb_reviews = 10 + (d_dict['id'] % 90)
-            name = d_dict.get('name') or ''
-            spec = d_dict.get('specialization') or ''
-            hname = d_dict.get('hospital_name') or ''
-            if ql and ql not in name.lower() and ql not in spec.lower() and ql not in hname.lower():
-                continue
-            all_public_doctors.append({
-                "_id": f"emb_{d_dict['id']}",
-                "id": f"emb_{d_dict['id']}",
-                "name": d_dict['name'],
-                "specialization": d_dict.get('specialization'),
-                "hospitalName": d_dict.get('hospital_name'),
-                "hospitalId": d_dict['hospital_tieup_id'],
-                "location": d_dict.get('hospital_address'),
-                "qualification": d_dict.get('qualification') or d_dict.get('degree', 'M.B.B.S'),
-                "fees": d_dict.get('fees', 50),
-                "image": d_dict.get('image', ''),
-                "available": d_dict.get('available', True),
-                "rating": emb_rating,
-                "reviews": emb_reviews,
-                "experience": d_dict.get('experience'),
-                "about": d_dict.get('about') or f"Dr. {d_dict['name']} is a specialist at {d_dict.get('hospital_name')}."
-            })
+        from app.services import cache_keys as ck
+        from app.services import cache_service as cache
 
         lim = max(1, min(int(limit or 100), 2000))
         off = max(0, int(offset or 0))
-        page = all_public_doctors[off : off + lim]
-        return {
-            "success": True,
-            "doctors": page,
-            "total": len(all_public_doctors),
-            "limit": lim,
-            "offset": off,
-        }
+        cache_key = ck.hospital_doctors_public(lim, off, q or "")
+
+        async def _load():
+            docs = await hospital_model.get_all_hospital_tieup_doctors_with_hospitals()
+            all_public_doctors = []
+            ql = (q or "").strip().lower()
+
+            for doc in docs:
+                d_dict = dict(doc)
+                from app.utils.formatters import _parse_doctor_rating
+                emb_rating = _parse_doctor_rating(d_dict)
+                emb_reviews = d_dict.get('reviews') or 0
+                try:
+                    emb_reviews = int(emb_reviews)
+                except (TypeError, ValueError):
+                    emb_reviews = 10 + (d_dict['id'] % 90)
+                name = d_dict.get('name') or ''
+                spec = d_dict.get('specialization') or ''
+                hname = d_dict.get('hospital_name') or ''
+                if ql and ql not in name.lower() and ql not in spec.lower() and ql not in hname.lower():
+                    continue
+                all_public_doctors.append({
+                    "_id": f"emb_{d_dict['id']}",
+                    "id": f"emb_{d_dict['id']}",
+                    "name": d_dict['name'],
+                    "specialization": d_dict.get('specialization'),
+                    "hospitalName": d_dict.get('hospital_name'),
+                    "hospitalId": d_dict['hospital_tieup_id'],
+                    "location": d_dict.get('hospital_address'),
+                    "qualification": d_dict.get('qualification') or d_dict.get('degree', 'M.B.B.S'),
+                    "fees": d_dict.get('fees', 50),
+                    "image": d_dict.get('image', ''),
+                    "available": d_dict.get('available', True),
+                    "rating": emb_rating,
+                    "reviews": emb_reviews,
+                    "experience": d_dict.get('experience'),
+                    "about": d_dict.get('about') or f"Dr. {d_dict['name']} is a specialist at {d_dict.get('hospital_name')}."
+                })
+
+            page = all_public_doctors[off : off + lim]
+            return {
+                "success": True,
+                "doctors": page,
+                "total": len(all_public_doctors),
+                "limit": lim,
+                "offset": off,
+            }
+
+        return await cache.cache_aside(cache_key, ck.TTL_HOSPITAL_LIST, _load)
     except Exception as e:
         return {"success": False, "message": str(e)}
 

@@ -1,6 +1,5 @@
 import React, { useContext, useEffect, useState, useRef } from 'react'
 import { AppContext } from '../context/AppContext'
-import axios from 'axios'
 import { useNavigate, useLocation } from 'react-router-dom'
 import Pagination from '../components/Pagination'
 import { getUserLocation, geocodeAddress, calculateDistance, formatDistance, findNearbyHospitals } from '../utils/locationUtils'
@@ -11,7 +10,7 @@ import HospitalBanner from '../components/HospitalBanner'
 import useScrollAnimation from '../utils/useScrollAnimation'
 
 const CollaboratedHospitals = () => {
-    const { backendUrl } = useContext(AppContext)
+    const { backendUrl, hospitals: contextHospitals, isHospitalsLoading, getHospitalsData } = useContext(AppContext)
     const navigate = useNavigate()
     const location = useLocation()
     const scrollRef = useScrollAnimation()
@@ -44,20 +43,25 @@ const CollaboratedHospitals = () => {
     }, [location.search]);
 
     useEffect(() => {
-        const fetchHospitals = async () => {
-            try {
-                const { data } = await axios.get(backendUrl + '/api/hospital-tieup/public')
-                if (data.success) {
-                    setHospitals(data.hospitals)
-                }
-            } catch (error) {
-                console.error("Error fetching hospitals:", error)
-            } finally {
+        let cancelled = false
+        const load = async () => {
+            setLoading(true)
+            const list = await getHospitalsData?.()
+            if (!cancelled) {
+                setHospitals(Array.isArray(list) && list.length ? list : (contextHospitals || []))
                 setLoading(false)
             }
         }
-        fetchHospitals()
-    }, [backendUrl])
+        load()
+        return () => { cancelled = true }
+    }, [getHospitalsData])
+
+    useEffect(() => {
+        if (contextHospitals?.length) {
+            setHospitals(contextHospitals)
+            if (!isHospitalsLoading) setLoading(false)
+        }
+    }, [contextHospitals, isHospitalsLoading])
 
     // Get user location and find REAL nearby hospitals from OpenStreetMap
     useEffect(() => {
@@ -629,3 +633,4 @@ const CollaboratedHospitals = () => {
 }
 
 export default CollaboratedHospitals
+

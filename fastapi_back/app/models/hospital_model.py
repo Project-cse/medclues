@@ -118,6 +118,57 @@ async def get_all_hospital_tieups():
     sql = "SELECT * FROM hospital_tieups ORDER BY id ASC"
     return await db.fetch_all(sql)
 
+
+async def get_hospital_tieups_with_doctor_counts(
+    limit: int = 100,
+    offset: int = 0,
+    q: str | None = None,
+):
+    """Public hospital list with doctor counts in one SQL round-trip."""
+    lim = max(1, min(int(limit or 100), 1000))
+    off = max(0, int(offset or 0))
+    ql = (q or "").strip()
+    params: list = []
+    where = ""
+    if ql:
+        params.append(f"%{ql}%")
+        where = "WHERE (h.name ILIKE $1 OR COALESCE(h.address, '') ILIKE $1)"
+
+    # Count matching rows, then page with aggregated doctor counts.
+    count_sql = f"SELECT COUNT(*)::int AS c FROM hospital_tieups h {where}"
+    if params:
+        total_row = await db.fetch_one(count_sql, *params)
+    else:
+        total_row = await db.fetch_one(count_sql)
+    total = int(total_row["c"] if total_row else 0)
+
+    n = len(params)
+    list_sql = f"""
+        SELECT h.*,
+               COALESCE(reg.c, 0)::int + COALESCE(emb.c, 0)::int AS doctor_count
+        FROM hospital_tieups h
+        LEFT JOIN (
+            SELECT hospital_id, COUNT(*)::int AS c
+            FROM doctors
+            WHERE hospital_id IS NOT NULL
+            GROUP BY hospital_id
+        ) reg ON reg.hospital_id = h.id
+        LEFT JOIN (
+            SELECT hospital_tieup_id, COUNT(*)::int AS c
+            FROM hospital_tieup_doctors
+            GROUP BY hospital_tieup_id
+        ) emb ON emb.hospital_tieup_id = h.id
+        {where}
+        ORDER BY
+            CASE WHEN lower(COALESCE(h.type, '')) = 'main' THEN 0 ELSE 1 END,
+            h.name ASC NULLS LAST,
+            h.id ASC
+        LIMIT ${n + 1} OFFSET ${n + 2}
+    """
+    rows = await db.fetch_all(list_sql, *params, lim, off)
+    return rows, total
+
+
 async def get_public_hospital_tieups():
     sql = "SELECT * FROM hospital_tieups WHERE show_on_home = true ORDER BY id ASC"
     return await db.fetch_all(sql)

@@ -115,7 +115,7 @@ async def mark_appointment_missed(apt: dict) -> bool:
     )
 
     body = (
-        f"Your appointment with Dr. {doctor_name} was missed. "
+        f"Your appointment with {fcm_service._doctor_label(doctor_name)} was missed. "
         f"You can reschedule for tomorrow ({tomorrow.isoformat()}) only. "
         f"Confirm before midnight tonight, or it will be cancelled."
     )

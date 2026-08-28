@@ -350,8 +350,4 @@ async def review_finding(finding_id: int, req: Request, actor: dict = Depends(au
 async def my_care_journey(user_id: int = Depends(auth_user)):
     from app.services import patient_journey_service as pjs
 
-    try:
-        await pjs.verify_and_close_stale_findings(patient_id=int(user_id))
-    except Exception:
-        pass
     return await pjs.build_patient_journey(int(user_id), staff_view=False)
